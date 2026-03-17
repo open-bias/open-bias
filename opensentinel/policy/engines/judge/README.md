@@ -129,17 +129,17 @@ Inside `evaluate_response()`:
     -   Combines verdicts from all run rubrics.
     -   Takes the **most restrictive** action (e.g., if Turn says `PASS` but Conversation says `WARN`, result is `WARN`).
 5.  **Mapping**:
-    -   Converts `VerdictAction` to Open Sentinel `PolicyEvaluationResult`.
+    -   Converts `VerdictAction` to Open Sentinel `EngineResult`.
 
 ### Decision Logic
 
-| Judge Action | Policy Result | Intervention |
-|--------------|---------------|--------------|
+| Judge Action | `Decision` | Intervention |
+|--------------|------------|--------------|
 | `pass` | `ALLOW` | None |
-| `warn` | `WARN` | None (just logged/tagged) |
-| `intervene` | `MODIFY` | Injects system prompt with judge's feedback/reasoning. |
-| `block` | `DENY` | Blocks response, raises `WorkflowViolationError`. |
-| `escalate` | `WARN` | Adds specific metadata for human-in-the-loop escalation. |
+| `warn` | `ALLOW` | None (logged in metadata) |
+| `intervene` | `INTERVENE` | Interceptor injects judge feedback into system prompt. |
+| `block` | `BLOCK` | Interceptor returns `allowed=False`, raises `WorkflowViolationError`. |
+| `escalate` | `INTERVENE` | `metadata["escalate"]=True` for human-in-the-loop handling. |
 
 ## Built-in Rubrics
 

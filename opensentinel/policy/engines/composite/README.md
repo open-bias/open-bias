@@ -123,10 +123,9 @@ When results from multiple engines are collected, the Composite engine merges th
 # Engine 3 (LLM): WARN, 2 violations (drift + constraint)
 
 # Merged result:
-PolicyEvaluationResult(
-    decision=PolicyDecision.DENY,          # Most restrictive
-    violations=[...],                       # All 3 violations
-    intervention_needed=None,               # None requested
+EngineResult(
+    decision=Decision.BLOCK,               # Most restrictive
+    message="...",                         # First BLOCK/INTERVENE message
     metadata={
         "engines": {
             "fsm:customer-support": {...},
@@ -166,12 +165,11 @@ Engine failures are **not propagated**. If a child engine throws an exception:
 
 ```python
 # If NeMo engine fails:
-PolicyViolation(
-    name="nemo_error",
-    severity="warning",
-    message="Connection timeout to NeMo service",
+EngineResult(
+    decision=Decision.ALLOW,
+    metadata={"error": "Connection timeout to NeMo service", "engine": "nemo"},
 )
-# This becomes a WARN, not a DENY — other engines still run
+# Fail-open — other engines still run
 ```
 
 ---

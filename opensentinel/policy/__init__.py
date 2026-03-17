@@ -12,7 +12,7 @@ supporting multiple policy mechanisms including:
 
 Usage:
     ```python
-    from opensentinel.policy import PolicyEngineRegistry, PolicyDecision
+    from opensentinel.policy import PolicyEngineRegistry, Decision
 
     # Create and initialize an FSM engine
     engine = PolicyEngineRegistry.create("fsm")
@@ -24,8 +24,8 @@ Usage:
         request_data={"messages": [...]},
     )
 
-    if result.decision == PolicyDecision.DENY:
-        print("Request blocked:", result.violations)
+    if result.decision == Decision.BLOCK:
+        print("Request blocked:", result.message)
     ```
 
 For composite engines:

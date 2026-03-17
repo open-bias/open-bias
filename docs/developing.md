@@ -172,7 +172,7 @@ Create a package under `opensentinel/policy/engines/`:
 
 ```python
 # opensentinel/policy/engines/my_engine/engine.py
-from opensentinel.policy.protocols import PolicyEngine, PolicyEvaluationResult, PolicyDecision
+from opensentinel.policy.protocols import PolicyEngine, Decision, EngineResult
 from opensentinel.policy.registry import register_engine
 
 @register_engine("my_engine")
@@ -189,10 +189,10 @@ class MyPolicyEngine(PolicyEngine):
         ...
 
     async def evaluate_request(self, session_id, request_data, context=None):
-        return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
+        return EngineResult(decision=Decision.ALLOW)
 
     async def evaluate_response(self, session_id, response_data, request_data, context=None):
-        return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
+        return EngineResult(decision=Decision.ALLOW)
 
     async def get_session_state(self, session_id):
         return None
@@ -212,29 +212,17 @@ The `Interceptor` automatically wraps registered engines as `PolicyEngineChecker
 
 ### Adding a Checker
 
-For checks that don't fit the `PolicyEngine` interface, implement `Checker` directly:
+All checkers are `PolicyEngineChecker` instances wrapping a `PolicyEngine`. Create a new engine (see above) and register it via `PolicyEngineChecker`:
 
 ```python
-from opensentinel.core.interceptor import (
-    Checker, CheckPhase, CheckerMode, CheckResult, CheckDecision, CheckerContext,
+from opensentinel.core.interceptor.adapters import PolicyEngineChecker
+from opensentinel.core.interceptor.types import CheckPhase, CheckerMode
+
+checker = PolicyEngineChecker(
+    engine=my_engine,
+    phase=CheckPhase.POST_CALL,
+    mode=CheckerMode.ASYNC,  # Runs in background, results applied next request
 )
-
-class MyChecker(Checker):
-    @property
-    def name(self) -> str:
-        return "my_checker"
-
-    @property
-    def phase(self) -> CheckPhase:
-        return CheckPhase.POST_CALL
-
-    @property
-    def mode(self) -> CheckerMode:
-        return CheckerMode.ASYNC  # Runs in background, results applied next request
-
-    async def check(self, context: CheckerContext) -> CheckResult:
-        # context.session_id, context.request_data, context.response_data
-        return CheckResult(decision=CheckDecision.PASS, checker_name=self.name)
 ```
 
 Register it in `SentinelCallback._get_interceptor()` in `opensentinel/proxy/hooks.py`.
@@ -248,9 +236,11 @@ Register it in `SentinelCallback._get_interceptor()` in `opensentinel/proxy/hook
 
 ### Adding an Intervention Strategy
 
+Two strategies are supported: `SYSTEM_PROMPT_APPEND` and `USER_MESSAGE_INJECT`. The `Interceptor` selects the strategy based on `default_strategy` in `InterventionConfig`. To add a new strategy:
+
 1. Add to `StrategyType` enum in `opensentinel/core/intervention/strategies.py`.
-2. Create a class extending `InterventionStrategy` with an `apply()` method.
-3. Add it to the `STRATEGY_REGISTRY` dict in the same file.
+2. Create a class extending `InterventionStrategy` with a `merge()` method.
+3. Add handling for the new type in `Interceptor._apply_intervention()` in `opensentinel/core/interceptor/interceptor.py`.
 
 ### Adding a Classification Method (FSM Engine)
 
