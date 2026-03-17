@@ -12,7 +12,7 @@ from opensentinel.policy.engines.judge.models import (
     EvaluationScope,
     JudgeScore,
 )
-from opensentinel.policy.protocols import PolicyDecision
+from opensentinel.policy.protocols import Decision
 from opensentinel.policy.registry import PolicyEngineRegistry
 
 
@@ -137,13 +137,13 @@ class TestEvaluateRequest:
     @pytest.mark.asyncio
     async def test_allow_when_uninitialized(self, engine, sample_request):
         result = await engine.evaluate_request("s1", sample_request)
-        assert result.decision == PolicyDecision.ALLOW
+        assert result.decision == Decision.ALLOW
 
     @pytest.mark.asyncio
     async def test_allow_by_default(self, engine, judge_config, sample_request):
         await engine.initialize(judge_config)
         result = await engine.evaluate_request("s1", sample_request)
-        assert result.decision == PolicyDecision.ALLOW
+        assert result.decision == Decision.ALLOW
 
 
 
@@ -151,7 +151,7 @@ class TestEvaluateResponse:
     @pytest.mark.asyncio
     async def test_allow_when_uninitialized(self, engine, sample_request, sample_response):
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == PolicyDecision.ALLOW
+        assert result.decision == Decision.ALLOW
 
     @pytest.mark.asyncio
     async def test_passing_response(self, engine, judge_config, sample_request, sample_response):
@@ -159,8 +159,8 @@ class TestEvaluateResponse:
         engine._client.call_judge = AsyncMock(return_value=_passing_judge_response())
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == PolicyDecision.ALLOW
-        assert len(result.violations) == 0
+        assert result.decision == Decision.ALLOW
+        assert len(result.metadata.get("violations", [])) == 0
 
     @pytest.mark.asyncio
     async def test_failing_response(self, engine, judge_config, sample_request, sample_response):
@@ -168,8 +168,8 @@ class TestEvaluateResponse:
         engine._client.call_judge = AsyncMock(return_value=_failing_judge_response())
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision in (PolicyDecision.DENY, PolicyDecision.WARN, PolicyDecision.MODIFY)
-        assert len(result.violations) > 0
+        assert result.decision in (Decision.BLOCK, Decision.INTERVENE)
+        assert len(result.metadata.get("violations", [])) > 0
 
     @pytest.mark.asyncio
     async def test_judge_metadata_in_result(self, engine, judge_config, sample_request, sample_response):
@@ -187,7 +187,7 @@ class TestEvaluateResponse:
         engine._client.call_judge = AsyncMock(side_effect=Exception("LLM error"))
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == PolicyDecision.ALLOW
+        assert result.decision == Decision.ALLOW
 
     @pytest.mark.asyncio
     async def test_string_response_data(self, engine, judge_config, sample_request):
@@ -196,7 +196,7 @@ class TestEvaluateResponse:
         engine._client.call_judge = AsyncMock(return_value=_passing_judge_response())
 
         result = await engine.evaluate_response("s1", "Hello!", sample_request)
-        assert result.decision == PolicyDecision.ALLOW
+        assert result.decision == Decision.ALLOW
 
 
 class TestSessionManagement:

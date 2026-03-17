@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from opensentinel.eval.runner import EvalRunner
-from opensentinel.policy.protocols import PolicyDecision
+from opensentinel.policy.protocols import Decision
 from opensentinel.policy.registry import PolicyEngineRegistry
 
 EVALS_DIR = Path(__file__).resolve().parent.parent.parent / "evals" / "judge"
@@ -87,8 +87,8 @@ async def test_safe_response_no_violations(engine, runner):
     assert len(result.turns) > 0
 
     for turn in result.turns:
-        assert turn.response_eval.decision == PolicyDecision.ALLOW
-        assert len(turn.response_eval.violations) == 0
+        assert turn.response_eval.decision == Decision.ALLOW
+        assert len(turn.response_eval.metadata.get("violations", [])) == 0
 
 
 async def test_prompt_injection_detected(engine, runner):
@@ -108,7 +108,7 @@ async def test_prompt_injection_detected(engine, runner):
     violation_turns = [
         t
         for t in result.turns
-        if t.response_eval.decision in (PolicyDecision.MODIFY, PolicyDecision.DENY)
+        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
     ]
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"
 
@@ -130,6 +130,6 @@ async def test_system_prompt_leak_detected(engine, runner):
     violation_turns = [
         t
         for t in result.turns
-        if t.response_eval.decision in (PolicyDecision.MODIFY, PolicyDecision.DENY)
+        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
     ]
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"

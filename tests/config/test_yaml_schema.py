@@ -375,7 +375,7 @@ class TestInterventionMapping:
                 "engine": "fsm",
                 "fsm": {
                     "intervention": {
-                        "default_strategy": "hard_block",
+                        "default_strategy": "user_message_inject",
                         "max_intervention_attempts": 5,
                         "include_headers": False,
                     },
@@ -383,7 +383,7 @@ class TestInterventionMapping:
             }
         )._map_to_settings()
         cfg = _get_engine_config(result)
-        assert cfg["intervention"]["default_strategy"] == "hard_block"
+        assert cfg["intervention"]["default_strategy"] == "user_message_inject"
         assert cfg["intervention"]["max_intervention_attempts"] == 5
         assert cfg["intervention"]["include_headers"] is False
 
@@ -409,13 +409,13 @@ class TestInterventionMapping:
             {
                 "engine": "fsm",
                 "intervention": {
-                    "default_strategy": "hard_block",
+                    "default_strategy": "user_message_inject",
                     "max_intervention_attempts": 5,
                 },
             }
         )._map_to_settings()
         cfg = _get_engine_config(result)
-        assert cfg["intervention"]["default_strategy"] == "hard_block"
+        assert cfg["intervention"]["default_strategy"] == "user_message_inject"
         assert cfg["intervention"]["max_intervention_attempts"] == 5
 
 

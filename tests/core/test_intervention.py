@@ -7,9 +7,7 @@ from opensentinel.core.intervention.strategies import (
     InterventionConfig,
     SystemPromptAppendStrategy,
     UserMessageInjectStrategy,
-    HardBlockStrategy,
     WorkflowViolationError,
-    STRATEGY_REGISTRY,
 )
 from opensentinel.policy.engines.fsm.intervention import InterventionHandler
 
@@ -84,24 +82,10 @@ class TestInterventionStrategies:
         assert len(injected) == 1
         assert injected[0]["role"] == "user"
 
-    def test_hard_block(self, sample_data):
-        """Test hard block strategy raises exception."""
-        config = InterventionConfig(
-            strategy_type=StrategyType.HARD_BLOCK,
-            message_template="Action not allowed: {reason}",
-        )
-        strategy = HardBlockStrategy()
-        context = {"reason": "missing verification"}
-
-        with pytest.raises(WorkflowViolationError) as exc_info:
-            strategy.apply(sample_data, config, context)
-
-        assert "missing verification" in str(exc_info.value)
-
-    def test_strategy_registry(self):
-        """Test that all strategy types are in registry."""
-        for strategy_type in StrategyType:
-            assert strategy_type in STRATEGY_REGISTRY
+    def test_strategy_types(self):
+        """Test that only the two supported strategy types exist."""
+        types = {st.value for st in StrategyType}
+        assert types == {"system_prompt_append", "user_message_inject"}
 
     def test_message_format_with_missing_key(self):
         """Test message formatting handles missing context keys."""

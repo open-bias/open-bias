@@ -139,8 +139,8 @@ class TestViolationMapping:
         assert result is not None
         assert result.strategy_type == StrategyType.USER_MESSAGE_INJECT
 
-    def test_critical_maps_to_hard_block(self, engine, session, nominal_drift):
-        """Critical severity should map to HARD_BLOCK."""
+    def test_critical_maps_to_user_message_inject(self, engine, session, nominal_drift):
+        """Critical severity should map to USER_MESSAGE_INJECT."""
         violations = [
             ConstraintEvaluation(
                 constraint_id="test",
@@ -150,11 +150,11 @@ class TestViolationMapping:
                 severity="critical",
             )
         ]
-        
+
         result = engine.decide(session, violations, nominal_drift)
-        
+
         assert result is not None
-        assert result.strategy_type == StrategyType.HARD_BLOCK
+        assert result.strategy_type == StrategyType.USER_MESSAGE_INJECT
 
 
 class TestDriftMapping:
@@ -172,26 +172,26 @@ class TestDriftMapping:
         assert result.strategy_type == StrategyType.SYSTEM_PROMPT_APPEND
 
     def test_intervention_drift(self, engine, session):
-        """Intervention drift should map to CONTEXT_REMINDER."""
+        """Intervention drift should map to USER_MESSAGE_INJECT."""
         drift = DriftScores(
             temporal=0.7, semantic=0.7, composite=0.7, level=DriftLevel.INTERVENTION
         )
-        
+
         result = engine.decide(session, [], drift)
-        
+
         assert result is not None
-        assert result.strategy_type == StrategyType.CONTEXT_REMINDER
+        assert result.strategy_type == StrategyType.USER_MESSAGE_INJECT
 
     def test_critical_drift(self, engine, session):
-        """Critical drift should map to HARD_BLOCK."""
+        """Critical drift should map to USER_MESSAGE_INJECT."""
         drift = DriftScores(
             temporal=0.9, semantic=0.9, composite=0.9, level=DriftLevel.CRITICAL
         )
         
         result = engine.decide(session, [], drift)
-        
+
         assert result is not None
-        assert result.strategy_type == StrategyType.HARD_BLOCK
+        assert result.strategy_type == StrategyType.USER_MESSAGE_INJECT
 
 
 class TestCriticalBypassCooldown:
@@ -216,7 +216,7 @@ class TestCriticalBypassCooldown:
         
         # Should NOT be None despite cooldown
         assert result is not None
-        assert result.strategy_type == StrategyType.HARD_BLOCK
+        assert result.strategy_type == StrategyType.USER_MESSAGE_INJECT
 
 
 class TestSelfCorrection:

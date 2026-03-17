@@ -19,7 +19,7 @@ else:
 
 from opensentinel.eval.runner import EvalRunner
 from opensentinel.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
-from opensentinel.policy.protocols import PolicyDecision
+from opensentinel.policy.protocols import Decision
 
 EVALS_DIR = Path(__file__).resolve().parent.parent.parent / "evals" / "nemo"
 
@@ -73,8 +73,8 @@ async def test_clean_support_no_violations(engine, runner):
     assert len(result.turns) > 0
 
     for turn in result.turns:
-        assert turn.response_eval.decision == PolicyDecision.ALLOW
-        assert len(turn.response_eval.violations) == 0
+        assert turn.response_eval.decision == Decision.ALLOW
+        assert len(turn.response_eval.metadata.get("violations", [])) == 0
 
 
 async def test_financial_advice_blocked(engine, runner):
@@ -98,7 +98,7 @@ async def test_financial_advice_blocked(engine, runner):
     violation_turns = [
         t
         for t in result.turns
-        if t.response_eval.decision in (PolicyDecision.MODIFY, PolicyDecision.DENY)
+        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
     ]
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"
 
@@ -124,6 +124,6 @@ async def test_security_bypass_blocked(engine, runner):
     violation_turns = [
         t
         for t in result.turns
-        if t.response_eval.decision in (PolicyDecision.MODIFY, PolicyDecision.DENY)
+        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
     ]
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"
