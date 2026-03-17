@@ -2,7 +2,7 @@
 Interceptor orchestrator.
 
 Manages the execution of checkers at PRE_CALL and POST_CALL phases,
-handles async checker task management, and applies modifications.
+handles async checker task management, and applies interventions.
 """
 
 import asyncio
@@ -10,6 +10,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from opensentinel.core.intervention.strategies import (
+    SystemPromptAppendStrategy,
+    UserMessageInjectStrategy,
+)
 from opensentinel.policy.protocols import Decision, EngineResult
 
 from .adapters import PolicyEngineChecker
@@ -41,7 +45,11 @@ class Interceptor:
     - Modification merging for deferred INTERVENE decisions
     """
 
-    def __init__(self, checkers: list[PolicyEngineChecker]):
+    def __init__(
+        self,
+        checkers: list[PolicyEngineChecker],
+        default_strategy: str = "system_prompt_append",
+    ):
         self._sync_pre_call: list[PolicyEngineChecker] = []
         self._sync_post_call: list[PolicyEngineChecker] = []
         self._async_pre_call: list[PolicyEngineChecker] = []
@@ -57,6 +65,9 @@ class Interceptor:
                 self._sync_pre_call.append(checker)
             else:
                 self._sync_post_call.append(checker)
+
+        # Intervention strategy
+        self._default_strategy = default_strategy
 
         # session_id -> pending async results
         self._pending_async: dict[str, list[_PendingResult]] = {}
@@ -113,9 +124,7 @@ class Interceptor:
                 logger.info(
                     f"Applying async intervention from '{pending.checker_name}'"
                 )
-                modified_data = self._merge_modifications(
-                    modified_data, result.message, result.metadata
-                )
+                modified_data = self._apply_intervention(modified_data, result.message)
 
         # Step 2: Run sync PRE_CALL checkers
         for checker in self._sync_pre_call:
@@ -138,6 +147,14 @@ class Interceptor:
                         allowed=False,
                         message=result.message,
                         metadata=all_metadata,
+                    )
+
+                if result.decision == Decision.INTERVENE and result.message:
+                    logger.info(
+                        f"Applying sync intervention from '{checker.name}'"
+                    )
+                    modified_data = self._apply_intervention(
+                        modified_data, result.message
                     )
 
             except Exception as e:
@@ -290,27 +307,29 @@ class Interceptor:
 
         logger.debug(f"Started async checker '{checker.name}' for session {session_id}")
 
-    def _merge_modifications(
+    def _apply_intervention(
         self,
-        base: dict[str, Any],
+        request_data: dict[str, Any],
         message: str,
-        metadata: dict[str, Any],
     ) -> dict[str, Any]:
         """
-        Merge an intervention message into request data.
+        Apply an intervention message to request data using the configured strategy.
 
-        Uses the configured strategy (defaults to system_prompt_append).
+        Args:
+            request_data: The LLM request data to modify.
+            message: The intervention guidance text.
+
+        Returns:
+            New request data dict with the intervention applied.
         """
-        from opensentinel.core.intervention.strategies import (
-            StrategyType,
-            merge_by_strategy,
-        )
-
-        result = dict(base)
-        # Determine strategy from metadata, default to system_prompt_append
-        strategy = metadata.get("strategy", StrategyType.SYSTEM_PROMPT_APPEND.value)
+        result = dict(request_data)
         messages = result.get("messages", [])
-        result["messages"] = merge_by_strategy(strategy, messages, message)
+
+        if self._default_strategy == "user_message_inject":
+            result["messages"] = UserMessageInjectStrategy.merge(messages, message)
+        else:
+            result["messages"] = SystemPromptAppendStrategy.merge(messages, message)
+
         return result
 
     async def cleanup_session(self, session_id: str) -> None:
