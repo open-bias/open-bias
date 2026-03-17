@@ -77,9 +77,8 @@ from opensentinel.policy.engines.fsm import (
 from opensentinel.policy import (
     PolicyEngine,
     PolicyEngineRegistry,
-    PolicyDecision,
-    PolicyEvaluationResult,
-    PolicyViolation,
+    Decision,
+    EngineResult,
 )
 
 __all__ = [
@@ -104,7 +103,6 @@ __all__ = [
     # Policy engines
     "PolicyEngine",
     "PolicyEngineRegistry",
-    "PolicyDecision",
-    "PolicyEvaluationResult",
-    "PolicyViolation",
+    "Decision",
+    "EngineResult",
 ]

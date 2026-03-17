@@ -8,7 +8,7 @@ mock_nemo = MagicMock()
 sys.modules["nemoguardrails"] = mock_nemo
 
 from opensentinel.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
-from opensentinel.policy.protocols import PolicyDecision
+from opensentinel.policy.protocols import Decision
 
 @pytest.fixture
 def engine():
@@ -31,9 +31,9 @@ def mock_config():
 @pytest.mark.asyncio
 async def test_initialization(engine, mock_config, mock_rails):
     config = {"config_path": "dummy/path"}
-    
+
     await engine.initialize(config)
-    
+
     assert engine._initialized
     mock_config.from_path.assert_called_with("dummy/path")
     mock_nemo.LLMRails.assert_called_once()
@@ -43,80 +43,74 @@ async def test_initialization(engine, mock_config, mock_rails):
 @pytest.mark.asyncio
 async def test_evaluate_request_allow(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
-    
-    # Mock successful generation (no blocking content)
-    mock_result = MagicMock()
-    # Depending on implementation, extract_response_content handles str or obj
-    # If we return a string "OK" it should be fine
+
     mock_rails.generate_async.return_value = "OK"
-    
+
     result = await engine.evaluate_request(
         session_id="test-session",
         request_data={"messages": [{"role": "user", "content": "hello"}]}
     )
-    
-    assert result.decision == PolicyDecision.ALLOW
-    assert len(result.violations) == 0
+
+    assert result.decision == Decision.ALLOW
 
 @pytest.mark.asyncio
 async def test_evaluate_request_blocked(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
-    
+
     # Mock blocked response
     mock_rails.generate_async.return_value = "I cannot fulfill this request."
-    
+
     result = await engine.evaluate_request(
         session_id="test-session",
         request_data={"messages": [{"role": "user", "content": "bad request"}]}
     )
-    
-    assert result.decision == PolicyDecision.DENY
-    assert len(result.violations) == 1
-    assert result.violations[0].name == "nemo_input_blocked"
+
+    assert result.decision == Decision.BLOCK
+    assert "blocked" in result.message.lower()
 
 @pytest.mark.asyncio
 async def test_evaluate_response_allow(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
-    
+
     mock_rails.generate_async.return_value = "Safe response"
-    
+
     result = await engine.evaluate_response(
         session_id="test-session",
         response_data="Safe response",
         request_data={"messages": []}
     )
-    
-    assert result.decision == PolicyDecision.ALLOW
+
+    assert result.decision == Decision.ALLOW
 
 @pytest.mark.asyncio
 async def test_evaluate_response_blocked(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
-    
+
     mock_rails.generate_async.return_value = "I cannot provide this info [blocked]"
-    
+
     result = await engine.evaluate_response(
         session_id="test-session",
         response_data="Unsafe response",
         request_data={"messages": []}
     )
-    
-    assert result.decision == PolicyDecision.DENY
-    assert result.violations[0].name == "nemo_output_blocked"
+
+    assert result.decision == Decision.BLOCK
+    assert result.message is not None
 
 @pytest.mark.asyncio
 async def test_evaluate_request_error_fail_open(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
-    
+
     mock_rails.generate_async.side_effect = Exception("NeMo error")
-    
+
     result = await engine.evaluate_request(
         session_id="test-session",
         request_data={"messages": [{"role": "user", "content": "hi"}]}
     )
-    
-    # Default is fail open (WARN)
-    assert result.decision == PolicyDecision.WARN
-    assert "NeMo evaluation failed" in result.violations[0].message
+
+    # Default is fail open
+    assert result.decision == Decision.ALLOW
+    assert "error" in result.metadata
 
 @pytest.mark.asyncio
 async def test_evaluate_request_error_fail_closed(engine, mock_rails):
@@ -124,13 +118,13 @@ async def test_evaluate_request_error_fail_closed(engine, mock_rails):
         "config_path": "dummy",
         "fail_closed": True
     })
-    
+
     mock_rails.generate_async.side_effect = Exception("NeMo error")
-    
+
     result = await engine.evaluate_request(
         session_id="test-session",
         request_data={"messages": [{"role": "user", "content": "hi"}]}
     )
-    
-    assert result.decision == PolicyDecision.DENY
-    assert result.violations[0].name == "nemo_evaluation_error"
+
+    assert result.decision == Decision.BLOCK
+    assert result.message is not None
