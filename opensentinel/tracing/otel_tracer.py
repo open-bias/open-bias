@@ -424,7 +424,7 @@ class SentinelTracer:
             hook_type: Which hook triggered this (pre_call, post_call, moderation)
             input_data: Request/messages being evaluated
             output_data: Policy evaluation result
-            violations: List of PolicyViolation instances (or dicts with name, severity, message)
+            violations: List of violation dicts with name, severity, message (from EngineResult.metadata)
             metadata: Additional metadata
         """
         if not self._enabled or not self._tracer:

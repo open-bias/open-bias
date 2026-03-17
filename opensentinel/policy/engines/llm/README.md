@@ -24,7 +24,7 @@ Response ──► evaluate_response()
                  │                                    │
                  └──► InterventionHandler ──► Strategy selection + cooldown
                                                   │
-                                           PolicyEvaluationResult
+                                           EngineResult
 ```
 
 ## Architecture
@@ -178,7 +178,7 @@ Called **after** the LLM call — this is the main evaluation pipeline:
 5. **Evaluate constraints** — Batched LLM constraint evaluation with evidence memory
 6. **Decide intervention** — Map violations + drift to an intervention strategy (with cooldown)
 7. **Record transition** — Update session state history
-8. **Return result** — `PolicyEvaluationResult` with decision, violations, and metadata
+8. **Return result** — `EngineResult` with decision, message, and metadata
 
 ### Decision Logic
 

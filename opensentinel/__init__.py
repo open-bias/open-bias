@@ -35,7 +35,7 @@ Quick Start:
 
 Using Policy Engines Directly:
     ```python
-    from opensentinel.policy import PolicyEngineRegistry, PolicyDecision
+    from opensentinel.policy import PolicyEngineRegistry, Decision
 
     # Create and initialize an FSM engine
     engine = PolicyEngineRegistry.create("fsm")
@@ -47,8 +47,8 @@ Using Policy Engines Directly:
         request_data={"messages": [...]},
     )
 
-    if result.decision == PolicyDecision.DENY:
-        print("Request blocked:", result.violations)
+    if result.decision == Decision.BLOCK:
+        print("Request blocked:", result.message)
     ```
 """
 

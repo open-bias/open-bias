@@ -19,7 +19,7 @@ Response ──► evaluate_response() ──► Classify ──► Check Constr
                                        │               │                    │
                                     StateClassifier  ConstraintEvaluator  StateMachine
                                        │               │                    │
-                                    ◄──────────── PolicyEvaluationResult ───┘
+                                    ◄──────────── EngineResult ─────────────┘
 ```
 
 ## Architecture
