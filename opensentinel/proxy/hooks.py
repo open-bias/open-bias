@@ -30,24 +30,23 @@ https://docs.litellm.ai/docs/observability/custom_callback
 import asyncio
 import logging
 import time
-from typing import Optional, Union, Dict, Any, Literal, List, Callable, TypeVar
+from collections.abc import Callable
 from datetime import datetime
+from typing import Any, Literal
 
+from litellm.caching.caching import DualCache
 from litellm.integrations.custom_logger import CustomLogger
 from litellm.proxy._types import UserAPIKeyAuth
-from litellm.caching.caching import DualCache
 
 from opensentinel.config.settings import SentinelSettings
-from opensentinel.policy.protocols import PolicyEngine
-from opensentinel.core.intervention.strategies import WorkflowViolationError
 from opensentinel.core.interceptor import (
-    Interceptor,
-    Checker,
-    CheckPhase,
     CheckerMode,
+    CheckPhase,
+    Interceptor,
     PolicyEngineChecker,
-    PolicyDecision,
 )
+from opensentinel.core.intervention.strategies import WorkflowViolationError
+from opensentinel.policy.protocols import PolicyEngine
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +56,10 @@ logger = logging.getLogger(__name__)
 
 # Module-level counter tracking fail-open activations per hook.
 # Useful for monitoring/alerting without requiring an external metrics library.
-_fail_open_counter: Dict[str, int] = {}
+_fail_open_counter: dict[str, int] = {}
 
 
-def get_fail_open_counts() -> Dict[str, int]:
+def get_fail_open_counts() -> dict[str, int]:
     """Return a snapshot of fail-open activation counts per hook."""
     return dict(_fail_open_counter)
 
@@ -141,15 +140,15 @@ class SentinelCallback(CustomLogger):
     Thread-safety is ensured through asyncio locks for session state.
     """
 
-    def __init__(self, settings: Optional[SentinelSettings] = None):
+    def __init__(self, settings: SentinelSettings | None = None):
         self.settings = settings or SentinelSettings()
 
         # Interceptor (lazy initialized)
-        self._interceptor: Optional[Interceptor] = None
+        self._interceptor: Interceptor | None = None
         self._interceptor_initialized = False
 
         # Policy engine (lazy initialized) - kept for direct access if needed
-        self._policy_engine: Optional[PolicyEngine] = None
+        self._policy_engine: PolicyEngine | None = None
         self._policy_engine_initialized = False
 
         # OpenTelemetry tracer for Open Sentinel events (lazy initialized)
@@ -157,7 +156,7 @@ class SentinelCallback(CustomLogger):
 
         logger.info("SentinelCallback initialized")
 
-    async def _get_interceptor(self) -> Optional[Interceptor]:
+    async def _get_interceptor(self) -> Interceptor | None:
         """Lazy-load interceptor with configured checkers."""
         if self._interceptor_initialized:
             return self._interceptor
@@ -169,7 +168,7 @@ class SentinelCallback(CustomLogger):
                 return None
 
             # Create checkers from policy engine
-            checkers: List[Checker] = []
+            checkers: list[PolicyEngineChecker] = []
 
             # Sync PRE_CALL checker for request evaluation
             checkers.append(
@@ -201,7 +200,7 @@ class SentinelCallback(CustomLogger):
 
         return self._interceptor
 
-    async def _get_policy_engine(self) -> Optional[PolicyEngine]:
+    async def _get_policy_engine(self) -> PolicyEngine | None:
         """Lazy-load policy engine based on configuration."""
         if self._policy_engine_initialized:
             return self._policy_engine
@@ -317,7 +316,7 @@ class SentinelCallback(CustomLogger):
         cache: DualCache,
         data: dict,
         call_type: CallType,
-    ) -> Optional[Union[Exception, str, dict]]:
+    ) -> Exception | str | dict | None:
         """
         Execute BEFORE LLM call.  Wrapped with fail-open + timeout.
 
@@ -338,15 +337,15 @@ class SentinelCallback(CustomLogger):
         cache: DualCache,
         data: dict,
         call_type: CallType,
-    ) -> Optional[Union[Exception, str, dict]]:
+    ) -> Exception | str | dict | None:
         """Inner implementation for async_pre_call_hook."""
         session_id = self._extract_session_id(data)
-        
+
         # Persist session ID in metadata to ensure consistency across hooks
         # This prevents generating a new random UUID in post_call/failure hooks
         if "metadata" not in data:
             data["metadata"] = {}
-        
+
         # Use existing if present, otherwise set the extracted/generated one
         if not data["metadata"].get("session_id"):
             data["metadata"]["session_id"] = session_id
@@ -386,7 +385,6 @@ class SentinelCallback(CustomLogger):
 
                     output_data = {
                         "allowed": result.allowed,
-                        "num_results": len(result.results),
                         "has_modifications": result.modified_data is not None,
                     }
                     output_json = json.dumps(output_data, default=str)
@@ -395,25 +393,14 @@ class SentinelCallback(CustomLogger):
 
             # Handle result
             if not result.allowed:
-                # Find the failing result for context
-                fail_results = [
-                    r for r in result.results if r.decision == PolicyDecision.DENY
-                ]
-                violations = []
-                message = "Request blocked by checker"
-                if fail_results:
-                    for r in fail_results:
-                        violations.extend(v.name for v in r.violations)
-                    message = fail_results[0].message or message
-
+                message = result.message or "Request blocked by policy"
                 logger.warning(
-                    f"Request blocked for session {session_id}: {violations}"
+                    f"Request blocked for session {session_id}: {message}"
                 )
                 raise WorkflowViolationError(
                     message,
                     context={
                         "session_id": session_id,
-                        "violations": violations,
                     },
                 )
 
@@ -421,29 +408,12 @@ class SentinelCallback(CustomLogger):
             if result.modified_data:
                 data = result.modified_data
 
-                # Extract intervention name from results
-                intervention_name = "pre_call_modification"
-                for r in result.results:
-                    if r.decision == PolicyDecision.MODIFY:
-                        # Check violations first
-                        for v in r.violations:
-                            if v.intervention:
-                                intervention_name = v.intervention
-                                break
-                        
-                        # Check modified_data metadata
-                        if r.modified_data and "intervention_name" in r.modified_data:
-                            intervention_name = str(r.modified_data["intervention_name"])
-                            
-                        if intervention_name != "pre_call_modification":
-                            break
-
                 # Log intervention via OTEL
                 if self.tracer:
                     self.tracer.log_intervention(
                         session_id=session_id,
-                        intervention_name=intervention_name,
-                        context={"num_checkers": len(result.results)},
+                        intervention_name="pre_call_intervention",
+                        context=result.metadata,
                     )
 
         # Capture start time at the end of pre-call to accurately measure LLM latency in trace
@@ -582,7 +552,6 @@ class SentinelCallback(CustomLogger):
 
                     output_data = {
                         "allowed": result.allowed,
-                        "num_results": len(result.results),
                         "has_modifications": result.modified_data is not None,
                     }
                     output_json = json.dumps(output_data, default=str)

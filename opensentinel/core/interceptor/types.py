@@ -6,9 +6,7 @@ Defines the enums and dataclasses used throughout the interceptor module.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
-
-from opensentinel.policy.protocols import PolicyDecision, PolicyViolation
+from typing import Any
 
 
 class CheckPhase(Enum):
@@ -26,30 +24,10 @@ class CheckerMode(Enum):
 
 
 @dataclass
-class CheckResult:
-    """Result returned by a checker."""
-
-    decision: PolicyDecision
-    checker_name: str
-    modified_data: Optional[Dict[str, Any]] = None  # For MODIFY decisions
-    violations: List[PolicyViolation] = field(default_factory=list)
-    message: Optional[str] = None
-
-
-@dataclass
-class CheckerContext:
-    """Context passed to checkers."""
-
-    session_id: str
-    user_request_id: str  # Single ID for tracing
-    request_data: Dict[str, Any]
-    response_data: Optional[Any] = None
-
-
-@dataclass
 class InterceptionResult:
     """Result of running interceptor pre_call or post_call."""
 
     allowed: bool
-    modified_data: Optional[Dict[str, Any]] = None
-    results: List[CheckResult] = field(default_factory=list)
+    modified_data: dict[str, Any] | None = None
+    message: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
