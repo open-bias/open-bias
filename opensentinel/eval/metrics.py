@@ -28,9 +28,11 @@ def compute_metrics(results: list[EvalResult]) -> EvalMetrics:
             decision_name = turn.response_eval.decision.value
             metrics.decisions[decision_name] = metrics.decisions.get(decision_name, 0) + 1
 
-            metrics.violation_count += len(turn.response_eval.violations)
+            metrics.violation_count += len(
+                turn.response_eval.metadata.get("violations", [])
+            )
 
-            if turn.response_eval.intervention_needed:
+            if turn.response_eval.decision.value in ("intervene", "block"):
                 metrics.intervention_count += 1
 
     return metrics

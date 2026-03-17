@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from opensentinel.policy.protocols import PolicyEngine, PolicyEvaluationResult
+from opensentinel.policy.protocols import PolicyEngine, EngineResult
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +21,8 @@ class TurnResult:
     turn_index: int
     request_data: dict[str, Any]
     response_data: dict[str, Any]
-    request_eval: PolicyEvaluationResult
-    response_eval: PolicyEvaluationResult
+    request_eval: EngineResult
+    response_eval: EngineResult
 
 
 @dataclass

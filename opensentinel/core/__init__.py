@@ -9,8 +9,6 @@ from opensentinel.core.intervention import (
     StrategyType,
     InterventionConfig,
     WorkflowViolationError,
-    get_strategy,
-    STRATEGY_REGISTRY,
 )
 
 __all__ = [
@@ -18,6 +16,4 @@ __all__ = [
     "StrategyType",
     "InterventionConfig",
     "WorkflowViolationError",
-    "get_strategy",
-    "STRATEGY_REGISTRY",
 ]

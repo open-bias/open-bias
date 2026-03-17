@@ -281,21 +281,16 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             if intervention_config:
                 from opensentinel.core.intervention.strategies import (
                     InterventionStrategy,
-                    StrategyType,
                 )
-                if intervention_config.strategy_type == StrategyType.HARD_BLOCK:
-                    decision = Decision.BLOCK
-                    result_message = intervention_config.message_template
-                else:
-                    decision = Decision.INTERVENE
-                    template_context = {
-                        "state": classification.best_state,
-                        "drift": drift.composite,
-                        "drift_level": drift.level.value,
-                    }
-                    result_message = InterventionStrategy.format_message(
-                        intervention_config.message_template, template_context
-                    )
+                decision = Decision.INTERVENE
+                template_context = {
+                    "state": classification.best_state,
+                    "drift": drift.composite,
+                    "drift_level": drift.level.value,
+                }
+                result_message = InterventionStrategy.format_message(
+                    intervention_config.message_template, template_context
+                )
 
             # Critical violations override to BLOCK
             if any(v["severity"] == "critical" for v in violations):
