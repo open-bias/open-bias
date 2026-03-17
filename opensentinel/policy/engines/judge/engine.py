@@ -15,9 +15,8 @@ if TYPE_CHECKING:
 
 from opensentinel.policy.protocols import (
     PolicyEngine,
-    PolicyDecision,
-    PolicyEvaluationResult,
-    PolicyViolation,
+    Decision,
+    EngineResult,
     require_initialized,
 )
 from opensentinel.policy.registry import register_engine
@@ -37,13 +36,13 @@ from opensentinel.policy.engines.judge.rubrics import (
 
 logger = logging.getLogger(__name__)
 
-# Mapping from VerdictAction to (PolicyDecision, severity, intervention)
-_VERDICT_MAP: Dict[VerdictAction, tuple] = {
-    VerdictAction.PASS: (PolicyDecision.ALLOW, None, None),
-    VerdictAction.WARN: (PolicyDecision.WARN, "warning", None),
-    VerdictAction.INTERVENE: (PolicyDecision.MODIFY, "error", "system_prompt_append"),
-    VerdictAction.BLOCK: (PolicyDecision.DENY, "critical", "hard_block"),
-    VerdictAction.ESCALATE: (PolicyDecision.WARN, "warning", None),
+# Mapping from VerdictAction to Decision
+_VERDICT_MAP: Dict[VerdictAction, Decision] = {
+    VerdictAction.PASS: Decision.ALLOW,
+    VerdictAction.WARN: Decision.ALLOW,
+    VerdictAction.INTERVENE: Decision.INTERVENE,
+    VerdictAction.BLOCK: Decision.BLOCK,
+    VerdictAction.ESCALATE: Decision.INTERVENE,
 }
 
 
@@ -171,30 +170,20 @@ class JudgePolicyEngine(PolicyEngine):
         session_id: str,
         request_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
-    ) -> PolicyEvaluationResult:
+    ) -> EngineResult:
         """Evaluate an incoming request (PRE_CALL).
 
         Default: ALLOW (most judgment happens post-call).
-        If pre_call_enabled and a pending intervention exists from a
-        previous evaluation, apply it here.
-
-        Args:
-            session_id: Unique session identifier.
-            request_data: The LLM request data.
-            context: Additional context.
-
-        Returns:
-            PolicyEvaluationResult.
+        If pre_call_enabled, run safety screening.
         """
         if not self._initialized:
-            return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
-
+            return EngineResult(decision=Decision.ALLOW)
 
         # Optional pre-call screening
         if self._pre_call_enabled:
             return await self._evaluate_pre_call(session_id, request_data, context)
 
-        return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
+        return EngineResult(decision=Decision.ALLOW)
 
     async def evaluate_response(
         self,
@@ -202,27 +191,17 @@ class JudgePolicyEngine(PolicyEngine):
         response_data: Any,
         request_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
-    ) -> PolicyEvaluationResult:
+    ) -> EngineResult:
         """Evaluate an LLM response (POST_CALL).
 
         Main evaluation path:
         1. Always run turn-scope rubric on latest response
         2. Run conversation-scope rubric on interval or when triggered
         3. Merge verdicts (most restrictive action wins)
-        4. Map to PolicyEvaluationResult
-
-        Args:
-            session_id: Unique session identifier.
-            response_data: The LLM response.
-            request_data: The original request data.
-            context: Additional context.
-
-        Returns:
-            PolicyEvaluationResult with decision and any violations.
+        4. Map to EngineResult
         """
-
         if not self._initialized:
-            return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
+            return EngineResult(decision=Decision.ALLOW)
 
         session = self._get_or_create_session(session_id)
         response_content = self._extract_response_content(response_data)
@@ -232,7 +211,7 @@ class JudgePolicyEngine(PolicyEngine):
         primary_model = self._client.primary_model
         if not primary_model:
             logger.error("No judge models configured")
-            return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
+            return EngineResult(decision=Decision.ALLOW)
 
         verdicts: List[JudgeVerdict] = []
 
@@ -330,7 +309,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         # 3. Merge verdicts and build result
         if not verdicts:
-            return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
+            return EngineResult(decision=Decision.ALLOW)
 
         return self._build_result(verdicts, session)
 
@@ -513,11 +492,11 @@ class JudgePolicyEngine(PolicyEngine):
         session_id: str,
         request_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
-    ) -> PolicyEvaluationResult:
+    ) -> EngineResult:
         """Run pre-call safety screening on user message."""
         rubric = RubricRegistry.get(self._pre_call_rubric)
         if not rubric:
-            return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
+            return EngineResult(decision=Decision.ALLOW)
 
         messages = request_data.get("messages", [])
         user_message = ""
@@ -527,11 +506,11 @@ class JudgePolicyEngine(PolicyEngine):
                 break
 
         if not user_message:
-            return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
+            return EngineResult(decision=Decision.ALLOW)
 
         primary_model = self._client.primary_model
         if not primary_model:
-            return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
+            return EngineResult(decision=Decision.ALLOW)
 
         try:
             verdict = await self._evaluator.evaluate_turn(
@@ -545,18 +524,17 @@ class JudgePolicyEngine(PolicyEngine):
             return self._build_result([verdict], self._get_or_create_session(session_id))
         except Exception as e:
             logger.error(f"Pre-call evaluation failed: {e}")
-            return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
+            return EngineResult(decision=Decision.ALLOW)
 
     def _build_result(
         self,
         verdicts: List[JudgeVerdict],
         session: JudgeSessionContext,
-    ) -> PolicyEvaluationResult:
-        """Build PolicyEvaluationResult from judge verdicts.
+    ) -> EngineResult:
+        """Build EngineResult from judge verdicts.
 
         Takes the most restrictive action across all verdicts.
         """
-        # Find most restrictive verdict
         action_priority = {
             VerdictAction.PASS: 0,
             VerdictAction.WARN: 1,
@@ -566,43 +544,32 @@ class JudgePolicyEngine(PolicyEngine):
         }
 
         worst_verdict = max(verdicts, key=lambda v: action_priority.get(v.action, 0))
-        decision, severity, intervention = _VERDICT_MAP[worst_verdict.action]
+        decision = _VERDICT_MAP[worst_verdict.action]
 
-        violations = []
-        if severity:
-            for verdict in verdicts:
-                if verdict.action != VerdictAction.PASS:
-                    v_decision, v_severity, v_intervention = _VERDICT_MAP[verdict.action]
-                    violations.append(PolicyViolation(
-                        name=f"judge_{verdict.scope.value}_{verdict.action.value}",
-                        severity=v_severity or "warning",
-                        message=verdict.summary,
-                        intervention=v_intervention,
-                        metadata={
-                            "composite_score": verdict.composite_score,
-                            "judge_model": verdict.judge_model,
-                            "scope": verdict.scope.value,
-                        },
-                    ))
+        # message = guidance for INTERVENE, reason for BLOCK
+        message: Optional[str] = None
+        if decision in (Decision.INTERVENE, Decision.BLOCK):
+            message = worst_verdict.summary
 
-        # For INTERVENE, return MODIFY with guidance in modified_request
-        intervention_needed = None
-        modified_request = None
-        if worst_verdict.action == VerdictAction.INTERVENE:
-            intervention_needed = "system_prompt_append"
-            modified_request = {
-                "system_prompt_append": f"[JUDGE GUIDANCE]: {worst_verdict.summary}",
-            }
-
-        # Confidence info
         any_low_confidence = any(v.low_confidence for v in verdicts)
 
-        metadata = {
+        metadata: Dict[str, Any] = {
             "judge": {
                 "verdicts": [v.to_dict() for v in verdicts],
                 "session_turn": session.turn_count,
                 "low_confidence": any_low_confidence,
-            }
+            },
+            "violations": [
+                {
+                    "name": f"judge_{v.scope.value}_{v.action.value}",
+                    "composite_score": v.composite_score,
+                    "judge_model": v.judge_model,
+                    "scope": v.scope.value,
+                    "summary": v.summary,
+                }
+                for v in verdicts
+                if v.action != VerdictAction.PASS
+            ],
         }
 
         if worst_verdict.action == VerdictAction.ESCALATE:
@@ -614,11 +581,9 @@ class JudgePolicyEngine(PolicyEngine):
                 "Results may be unreliable."
             )
 
-        return PolicyEvaluationResult(
+        return EngineResult(
             decision=decision,
-            violations=violations,
-            intervention_needed=intervention_needed,
-            modified_request=modified_request,
+            message=message,
             metadata=metadata,
         )
 
