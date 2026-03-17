@@ -5,7 +5,7 @@ These protocols define the contract that all policy engines must implement,
 enabling pluggable policy evaluation while maintaining a consistent API.
 """
 
-from typing import Protocol, Optional, Dict, Any, List, runtime_checkable, TYPE_CHECKING
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from dataclasses import dataclass, field
 from enum import Enum
 from abc import ABC, abstractmethod
@@ -13,39 +13,23 @@ import functools
 import inspect
 
 if TYPE_CHECKING:
-    from opensentinel.core.intervention.strategies import InterventionConfig
     from opensentinel.policy.compiler.protocol import PolicyCompiler
 
 
-class PolicyDecision(Enum):
+class Decision(Enum):
     """Result of policy evaluation."""
 
-    ALLOW = "allow"      # Action is permitted
-    DENY = "deny"        # Action is blocked
-    MODIFY = "modify"    # Action allowed but request should be modified
-    WARN = "warn"        # Action allowed but logged as warning
+    ALLOW = "allow"
+    BLOCK = "block"
+    INTERVENE = "intervene"
 
 
 @dataclass
-class PolicyViolation:
-    """Details of a policy violation."""
+class EngineResult:
+    """Result returned by a policy engine evaluation."""
 
-    name: str                                          # Violation identifier
-    severity: str                                      # "warning", "error", "critical"
-    message: str                                       # Human-readable description
-    intervention: Optional[str] = None                 # Suggested intervention name
-    metadata: Dict[str, Any] = field(default_factory=dict)          # Additional context
-
-
-
-@dataclass
-class PolicyEvaluationResult:
-    """Result of evaluating a request/response against policies."""
-
-    decision: PolicyDecision
-    violations: List[PolicyViolation] = field(default_factory=list)
-    intervention_needed: Optional[str] = None
-    modified_request: Optional[Dict[str, Any]] = None
+    decision: Decision
+    message: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -58,24 +42,6 @@ class StateClassificationResult:
     confidence: float
     method: str
     details: Dict[str, Any] = field(default_factory=dict)
-
-
-@runtime_checkable
-class InterventionHandlerProtocol(Protocol):
-    """Protocol for intervention handlers across engines.
-
-    Both FSM and LLM engines have intervention handlers with different
-    interfaces. This protocol defines the common surface area for
-    looking up intervention configurations.
-    """
-
-    def get_config(self, intervention_name: str) -> Optional["InterventionConfig"]:
-        """Get intervention config by name."""
-        ...
-
-    def list_interventions(self) -> List[str]:
-        """List all available intervention names."""
-        ...
 
 
 class PolicyEngine(ABC):
@@ -116,11 +82,11 @@ class PolicyEngine(ABC):
         session_id: str,
         request_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
-    ) -> PolicyEvaluationResult:
+    ) -> EngineResult:
         """
         Evaluate an incoming request against policies.
 
-        Called BEFORE the LLM call. Can modify, allow, or block the request.
+        Called BEFORE the LLM call. Can allow, intervene, or block the request.
 
         Args:
             session_id: Unique session identifier
@@ -128,7 +94,7 @@ class PolicyEngine(ABC):
             context: Additional context for evaluation
 
         Returns:
-            PolicyEvaluationResult with decision and any violations
+            EngineResult with decision and optional message
         """
         ...
 
@@ -139,7 +105,7 @@ class PolicyEngine(ABC):
         response_data: Any,
         request_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
-    ) -> PolicyEvaluationResult:
+    ) -> EngineResult:
         """
         Evaluate an LLM response against policies.
 
@@ -153,7 +119,7 @@ class PolicyEngine(ABC):
             context: Additional context for evaluation
 
         Returns:
-            PolicyEvaluationResult with decision and any violations
+            EngineResult with decision and optional message
         """
         ...
 
@@ -197,36 +163,6 @@ class PolicyEngine(ABC):
         Override in subclasses that have a dedicated compiler.
         Returns None by default (engine has no compiler).
         """
-        return None
-
-    def get_intervention_handler(self) -> Optional[InterventionHandlerProtocol]:
-        """Get the intervention handler for this engine.
-
-        Override in subclasses that manage intervention configurations.
-        Returns None by default (engine has no intervention handler).
-        """
-        return None
-
-    def resolve_intervention(
-        self,
-        name: str,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> Optional["InterventionConfig"]:
-        """Resolve an intervention name to its configuration.
-
-        Convenience method that delegates to get_intervention_handler().
-        Override for engines that handle interventions without a full handler.
-
-        Args:
-            name: Intervention name to resolve
-            context: Optional context for resolution
-
-        Returns:
-            InterventionConfig if found, None otherwise
-        """
-        handler = self.get_intervention_handler()
-        if handler is not None:
-            return handler.get_config(name)
         return None
 
 
