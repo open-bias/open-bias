@@ -36,7 +36,9 @@ def print_report(results: list[EvalResult], verbose: bool = False) -> None:
     for result in results:
         name = Path(result.scenario_path).name if result.scenario_path else "unknown"
         turns = str(len(result.turns))
-        violations = sum(len(t.response_eval.violations) for t in result.turns)
+        violations = sum(
+            len(t.response_eval.metadata.get("violations", [])) for t in result.turns
+        )
         status = (
             "[red]error[/]"
             if result.error
@@ -53,13 +55,16 @@ def print_report(results: list[EvalResult], verbose: bool = False) -> None:
             console.print(f"\n[bold]{name}[/]")
             for turn in result.turns:
                 decision = turn.response_eval.decision.value
-                v_count = len(turn.response_eval.violations)
+                violations_list = turn.response_eval.metadata.get("violations", [])
+                v_count = len(violations_list)
                 marker = "[green].[/]" if v_count == 0 else "[red]![/]"
                 console.print(
                     f"  {marker} Turn {turn.turn_index}: decision={decision}, violations={v_count}"
                 )
-                for v in turn.response_eval.violations:
-                    console.print(f"      - {v.name}: {v.message}")
+                for v in violations_list:
+                    v_name: str = (v.get("name") or v.get("constraint_id") or "unknown") if isinstance(v, dict) else getattr(v, "name", str(v))
+                    v_msg: str = (v.get("message") or "") if isinstance(v, dict) else getattr(v, "message", "")
+                    console.print(f"      - {v_name}: {v_msg}")
 
     # Final status
     total_violations = metrics.violation_count
@@ -87,14 +92,14 @@ def export_json(results: list[EvalResult]) -> dict[str, Any]:
                     "request_decision": turn.request_eval.decision.value,
                     "response_decision": turn.response_eval.decision.value,
                     "violations": [
-                        {
-                            "name": v.name,
-                            "severity": v.severity,
-                            "message": v.message,
+                        v if isinstance(v, dict) else {
+                            "name": getattr(v, "name", str(v)),
+                            "severity": getattr(v, "severity", ""),
+                            "message": getattr(v, "message", ""),
                         }
-                        for v in turn.response_eval.violations
+                        for v in turn.response_eval.metadata.get("violations", [])
                     ],
-                    "intervention_needed": turn.response_eval.intervention_needed,
+                    "intervention_needed": turn.response_eval.decision.value in ("intervene", "block"),
                 }
             )
 

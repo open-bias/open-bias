@@ -62,13 +62,13 @@ class InterventionHandler:
             message = template
 
             if template.startswith("block:"):
-                strategy = StrategyType.HARD_BLOCK
+                strategy = StrategyType.SYSTEM_PROMPT_APPEND
                 message = template[6:].strip()
             elif template.startswith("inject:"):
                 strategy = StrategyType.USER_MESSAGE_INJECT
                 message = template[7:].strip()
             elif template.startswith("remind:"):
-                strategy = StrategyType.CONTEXT_REMINDER
+                strategy = StrategyType.SYSTEM_PROMPT_APPEND
                 message = template[7:].strip()
 
             configs[name] = InterventionConfig(

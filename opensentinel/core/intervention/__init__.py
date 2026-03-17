@@ -9,8 +9,6 @@ are detected:
 
 1. SYSTEM_PROMPT_APPEND: Add correction to system message
 2. USER_MESSAGE_INJECT: Add user message with guidance
-3. CONTEXT_REMINDER: Add assistant context reminder
-4. HARD_BLOCK: Reject request entirely
 """
 
 from opensentinel.core.intervention.strategies import (
@@ -19,12 +17,7 @@ from opensentinel.core.intervention.strategies import (
     InterventionStrategy,
     SystemPromptAppendStrategy,
     UserMessageInjectStrategy,
-    ContextReminderStrategy,
-    HardBlockStrategy,
     WorkflowViolationError,
-    STRATEGY_REGISTRY,
-    get_strategy,
-    merge_by_strategy,
 )
 
 __all__ = [
@@ -33,10 +26,5 @@ __all__ = [
     "InterventionStrategy",
     "SystemPromptAppendStrategy",
     "UserMessageInjectStrategy",
-    "ContextReminderStrategy",
-    "HardBlockStrategy",
     "WorkflowViolationError",
-    "STRATEGY_REGISTRY",
-    "get_strategy",
-    "merge_by_strategy",
 ]

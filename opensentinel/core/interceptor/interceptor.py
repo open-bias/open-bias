@@ -124,7 +124,8 @@ class Interceptor:
                 logger.info(
                     f"Applying async intervention from '{pending.checker_name}'"
                 )
-                modified_data = self._apply_intervention(modified_data, result.message)
+                strategy = result.metadata.get("strategy", self._default_strategy)
+                modified_data = self._apply_intervention(modified_data, result.message, strategy)
 
         # Step 2: Run sync PRE_CALL checkers
         for checker in self._sync_pre_call:
@@ -153,8 +154,9 @@ class Interceptor:
                     logger.info(
                         f"Applying sync intervention from '{checker.name}'"
                     )
+                    strategy = result.metadata.get("strategy", self._default_strategy)
                     modified_data = self._apply_intervention(
-                        modified_data, result.message
+                        modified_data, result.message, strategy
                     )
 
             except Exception as e:
@@ -311,6 +313,7 @@ class Interceptor:
         self,
         request_data: dict[str, Any],
         message: str,
+        strategy: str | None = None,
     ) -> dict[str, Any]:
         """
         Apply an intervention message to request data using the configured strategy.
@@ -318,14 +321,16 @@ class Interceptor:
         Args:
             request_data: The LLM request data to modify.
             message: The intervention guidance text.
+            strategy: Strategy name override; falls back to self._default_strategy.
 
         Returns:
             New request data dict with the intervention applied.
         """
         result = dict(request_data)
         messages = result.get("messages", [])
+        effective_strategy = strategy or self._default_strategy
 
-        if self._default_strategy == "user_message_inject":
+        if effective_strategy == "user_message_inject":
             result["messages"] = UserMessageInjectStrategy.merge(messages, message)
         else:
             result["messages"] = SystemPromptAppendStrategy.merge(messages, message)

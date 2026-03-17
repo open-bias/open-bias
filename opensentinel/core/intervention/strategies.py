@@ -10,14 +10,6 @@ Strategies define HOW to modify LLM requests when deviation is detected:
 2. USER_MESSAGE_INJECT: Add user message with guidance
    - More visible to the model
    - Good for important corrections
-
-3. CONTEXT_REMINDER: Add assistant context reminder
-   - Simulates the assistant "remembering" something
-   - Useful for complex multi-step workflows
-
-4. HARD_BLOCK: Reject request entirely
-   - Most severe, use for critical violations
-   - Returns error to client
 """
 
 import logging
@@ -34,8 +26,6 @@ class StrategyType(Enum):
 
     SYSTEM_PROMPT_APPEND = "system_prompt_append"
     USER_MESSAGE_INJECT = "user_message_inject"
-    CONTEXT_REMINDER = "context_reminder"
-    HARD_BLOCK = "hard_block"
 
 
 @dataclass
@@ -205,121 +195,9 @@ class UserMessageInjectStrategy(InterventionStrategy):
         return data
 
 
-class ContextReminderStrategy(InterventionStrategy):
-    """
-    Add an assistant context reminder.
-
-    Simulates the assistant "remembering" important context.
-    Useful for maintaining workflow state awareness.
-
-    Example output:
-    ```
-    Assistant: [Context reminder: I need to verify the customer's
-    identity before I can help with account changes.]
-    ```
-    """
-
-    @staticmethod
-    def merge(messages: List[Dict[str, Any]], value: str) -> List[Dict[str, Any]]:
-        messages = list(messages)
-        reminder = {"role": "assistant", "content": f"[Context reminder: {value}]"}
-
-        if messages:
-            messages.insert(-1, reminder)
-        else:
-            messages.append(reminder)
-
-        return messages
-
-    def apply(
-        self,
-        data: dict,
-        config: InterventionConfig,
-        context: Dict[str, Any],
-    ) -> dict:
-        data = dict(data)
-        correction = self.format_message(config.message_template, context)
-        data["messages"] = self.merge(data.get("messages", []), correction)
-        logger.debug("Applied context_reminder intervention")
-        return data
-
-
-class HardBlockStrategy(InterventionStrategy):
-    """
-    Block the request entirely.
-
-    Most severe intervention - raises an exception that
-    prevents the LLM call from proceeding.
-
-    Use for critical violations where continuing would be harmful.
-    """
-
-    @staticmethod
-    def merge(messages: List[Dict[str, Any]], value: str) -> List[Dict[str, Any]]:
-        raise WorkflowViolationError(
-            f"Workflow violation blocked: {value}",
-            context={},
-        )
-
-    def apply(
-        self,
-        data: dict,
-        config: InterventionConfig,
-        context: Dict[str, Any],
-    ) -> dict:
-        correction = self.format_message(config.message_template, context)
-
-        logger.warning(f"Hard block intervention: {correction}")
-
-        # Raise exception to block the request
-        raise WorkflowViolationError(
-            f"Workflow violation blocked: {correction}",
-            context=context,
-        )
-
-
 class WorkflowViolationError(Exception):
     """Exception raised when a workflow violation blocks a request."""
 
     def __init__(self, message: str, context: Optional[Dict[str, Any]] = None):
         super().__init__(message)
         self.context = context or {}
-
-
-# Strategy registry
-STRATEGY_REGISTRY: Dict[StrategyType, InterventionStrategy] = {
-    StrategyType.SYSTEM_PROMPT_APPEND: SystemPromptAppendStrategy(),
-    StrategyType.USER_MESSAGE_INJECT: UserMessageInjectStrategy(),
-    StrategyType.CONTEXT_REMINDER: ContextReminderStrategy(),
-    StrategyType.HARD_BLOCK: HardBlockStrategy(),
-}
-
-
-def get_strategy(strategy_type: StrategyType) -> InterventionStrategy:
-    """Get strategy instance by type."""
-    strategy = STRATEGY_REGISTRY.get(strategy_type)
-    if not strategy:
-        raise ValueError(f"Unknown strategy type: {strategy_type}")
-    return strategy
-
-
-def merge_by_strategy(
-    strategy_key: str, messages: List[Dict[str, Any]], value: str
-) -> List[Dict[str, Any]]:
-    """
-    Look up a strategy by its string key and apply its merge operation.
-
-    Args:
-        strategy_key: Strategy type value string (e.g., "system_prompt_append").
-        messages: Messages list to modify.
-        value: Pre-formatted intervention text.
-
-    Returns:
-        New messages list with intervention applied.
-
-    Raises:
-        ValueError: If strategy_key is not recognized.
-        WorkflowViolationError: If strategy is hard_block.
-    """
-    strategy_type = StrategyType(strategy_key)
-    return STRATEGY_REGISTRY[strategy_type].merge(messages, value)

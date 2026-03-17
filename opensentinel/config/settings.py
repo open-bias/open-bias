@@ -101,7 +101,7 @@ class InterventionConfig(BaseModel):
 
     # Default strategy when not specified in workflow
     default_strategy: Literal[
-        "system_prompt_append", "user_message_inject", "hard_block"
+        "system_prompt_append", "user_message_inject"
     ] = "system_prompt_append"
     # Maximum times to apply same intervention before escalating
     max_intervention_attempts: int = 3

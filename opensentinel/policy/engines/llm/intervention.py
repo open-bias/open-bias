@@ -44,16 +44,16 @@ class InterventionHandler:
         "warning": StrategyType.SYSTEM_PROMPT_APPEND,
         "medium": StrategyType.USER_MESSAGE_INJECT,
         "error": StrategyType.USER_MESSAGE_INJECT,
-        "high": StrategyType.CONTEXT_REMINDER,
-        "critical": StrategyType.HARD_BLOCK,
+        "high": StrategyType.USER_MESSAGE_INJECT,
+        "critical": StrategyType.USER_MESSAGE_INJECT,
     }
 
     # Drift level to strategy mapping
     DRIFT_STRATEGY_MAP = {
         DriftLevel.NOMINAL: None,
         DriftLevel.WARNING: StrategyType.SYSTEM_PROMPT_APPEND,
-        DriftLevel.INTERVENTION: StrategyType.CONTEXT_REMINDER,
-        DriftLevel.CRITICAL: StrategyType.HARD_BLOCK,
+        DriftLevel.INTERVENTION: StrategyType.USER_MESSAGE_INJECT,
+        DriftLevel.CRITICAL: StrategyType.USER_MESSAGE_INJECT,
     }
 
     def __init__(
@@ -183,13 +183,13 @@ class InterventionHandler:
         strategy = StrategyType.SYSTEM_PROMPT_APPEND
         message = template
         if template.startswith("block:"):
-            strategy = StrategyType.HARD_BLOCK
+            strategy = StrategyType.SYSTEM_PROMPT_APPEND
             message = template[6:].strip()
         elif template.startswith("inject:"):
             strategy = StrategyType.USER_MESSAGE_INJECT
             message = template[7:].strip()
         elif template.startswith("remind:"):
-            strategy = StrategyType.CONTEXT_REMINDER
+            strategy = StrategyType.SYSTEM_PROMPT_APPEND
             message = template[7:].strip()
         return InterventionConfig(
             strategy_type=strategy,
@@ -221,8 +221,6 @@ class InterventionHandler:
         order = [
             StrategyType.SYSTEM_PROMPT_APPEND,
             StrategyType.USER_MESSAGE_INJECT,
-            StrategyType.CONTEXT_REMINDER,
-            StrategyType.HARD_BLOCK,
         ]
         return order.index(a) - order.index(b)
 
@@ -231,8 +229,6 @@ class InterventionHandler:
         priority_map = {
             StrategyType.SYSTEM_PROMPT_APPEND: 1,
             StrategyType.USER_MESSAGE_INJECT: 2,
-            StrategyType.CONTEXT_REMINDER: 3,
-            StrategyType.HARD_BLOCK: 4,
         }
         return priority_map.get(strategy, 0)
 
