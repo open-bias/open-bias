@@ -143,6 +143,58 @@ class TestSyncPreCall:
         assert result.allowed is True
 
 
+    async def test_intervene_modifies_request_system_prompt(self):
+        """INTERVENE checker appends guidance to system prompt by default."""
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            decision=Decision.INTERVENE,
+            message="Stay on topic",
+        )
+        interceptor = Interceptor([checker])
+        req = _request()
+
+        result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
+
+        assert result.allowed is True
+        assert result.modified_data is not None
+        system_msg = result.modified_data["messages"][0]
+        assert system_msg["role"] == "system"
+        assert "Stay on topic" in system_msg["content"]
+
+    async def test_intervene_user_message_inject_strategy(self):
+        """INTERVENE with user_message_inject strategy injects a user message."""
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            decision=Decision.INTERVENE,
+            message="Verify identity first",
+        )
+        interceptor = Interceptor([checker], default_strategy="user_message_inject")
+        req = _request()
+
+        result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
+
+        assert result.allowed is True
+        assert result.modified_data is not None
+        # Should have a user guidance message injected
+        contents = [m["content"] for m in result.modified_data["messages"]]
+        assert any("Verify identity first" in c for c in contents)
+
+    async def test_intervene_without_message_no_modification(self):
+        """INTERVENE with no message — no modification applied."""
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            decision=Decision.INTERVENE,
+            message=None,
+        )
+        interceptor = Interceptor([checker])
+        req = _request()
+
+        result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
+
+        assert result.allowed is True
+        assert result.modified_data is None
+
+
 # ===========================================================================
 # Sync POST_CALL tests
 # ===========================================================================
@@ -221,6 +273,28 @@ class TestAsyncCheckerLifecycle:
         result = await interceptor.run_pre_call(SESSION, _request(), "req-002")
 
         assert result.allowed is True
+
+    async def test_async_intervene_modifies_next_request(self):
+        """Async checker returns INTERVENE — next PRE_CALL applies intervention."""
+        async_checker = _mock_checker(
+            name="async_guide",
+            phase=CheckPhase.POST_CALL,
+            mode=CheckerMode.ASYNC,
+            decision=Decision.INTERVENE,
+            message="Remember the workflow",
+            delay=0.01,
+        )
+        interceptor = Interceptor([async_checker])
+
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
+        await asyncio.sleep(0.05)
+
+        result = await interceptor.run_pre_call(SESSION, _request(), "req-002")
+
+        assert result.allowed is True
+        assert result.modified_data is not None
+        system_msg = result.modified_data["messages"][0]
+        assert "Remember the workflow" in system_msg["content"]
 
     async def test_async_block_blocks_next_request(self):
         """Async checker returns BLOCK — next PRE_CALL blocks."""
