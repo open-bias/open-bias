@@ -5,7 +5,7 @@ Tests for LLMPolicyEngine.
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from opensentinel.policy.engines.llm import LLMPolicyEngine
-from opensentinel.policy.protocols import PolicyDecision
+from opensentinel.policy.protocols import Decision
 
 
 @pytest.fixture
@@ -94,7 +94,7 @@ class TestEvaluateRequest:
     async def test_allow_when_uninitialized(self, engine):
         """Uninitialized engine should allow requests."""
         result = await engine.evaluate_request("session1", {"messages": []})
-        assert result.decision == PolicyDecision.ALLOW
+        assert result.decision == Decision.ALLOW
 
     @pytest.mark.asyncio
     async def test_allow_when_initialized(self, engine, sample_workflow):
@@ -102,7 +102,7 @@ class TestEvaluateRequest:
         await engine.initialize({"workflow": sample_workflow})
 
         result = await engine.evaluate_request("session1", {"messages": []})
-        assert result.decision == PolicyDecision.ALLOW
+        assert result.decision == Decision.ALLOW
 
 
 class TestEvaluateResponse:
@@ -116,7 +116,7 @@ class TestEvaluateResponse:
             {"choices": [{"message": {"content": "Hello!"}}]},
             {"messages": []},
         )
-        assert result.decision == PolicyDecision.ALLOW
+        assert result.decision == Decision.ALLOW
 
     @pytest.mark.asyncio
     async def test_classify_and_evaluate(self, engine, sample_workflow):
@@ -138,7 +138,7 @@ class TestEvaluateResponse:
             {"messages": []},
         )
         
-        assert result.decision in [PolicyDecision.ALLOW, PolicyDecision.WARN]
+        assert result.decision in [Decision.ALLOW, Decision.INTERVENE]
         assert "state" in result.metadata
 
 

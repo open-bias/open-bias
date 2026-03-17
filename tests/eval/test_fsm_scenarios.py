@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from opensentinel.eval.runner import EvalRunner
-from opensentinel.policy.protocols import PolicyDecision
+from opensentinel.policy.protocols import Decision
 from opensentinel.policy.registry import PolicyEngineRegistry
 
 EVALS_DIR = Path(__file__).resolve().parent.parent.parent / "evals" / "fsm"
@@ -48,15 +48,15 @@ async def test_happy_path_no_violations(engine, runner):
     assert len(result.turns) > 0
 
     for turn in result.turns:
-        assert turn.response_eval.decision == PolicyDecision.ALLOW
-        assert len(turn.response_eval.violations) == 0
+        assert turn.response_eval.decision == Decision.ALLOW
+        assert len(turn.response_eval.metadata.get("violations", [])) == 0
 
 
 async def test_skip_verification_detected(engine, runner):
     """Violation: agent skips identity_verification and jumps to account_action.
 
     The change_subscription tool call should trigger the
-    verify_before_account_action constraint, producing a MODIFY or DENY.
+    verify_before_account_action constraint, producing an INTERVENE or BLOCK.
     """
     messages = json.loads((EVALS_DIR / "skip_verification.json").read_text())
     result = await runner.run(engine, messages)
@@ -68,13 +68,15 @@ async def test_skip_verification_detected(engine, runner):
     violation_turns = [
         t
         for t in result.turns
-        if t.response_eval.decision in (PolicyDecision.MODIFY, PolicyDecision.DENY)
+        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
     ]
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"
 
     # The specific constraint name should appear in violations
     all_violation_names = [
-        v.name for t in result.turns for v in t.response_eval.violations
+        v.get("name", v.get("constraint_id", ""))
+        for t in result.turns
+        for v in t.response_eval.metadata.get("violations", [])
     ]
     assert "verify_before_account_action" in all_violation_names, (
         f"Expected 'verify_before_account_action' in violations, got: {all_violation_names}"
@@ -94,8 +96,8 @@ async def test_escalation_path_no_violations(engine, runner):
     assert len(result.turns) > 0
 
     for turn in result.turns:
-        assert turn.response_eval.decision == PolicyDecision.ALLOW
-        assert len(turn.response_eval.violations) == 0
+        assert turn.response_eval.decision == Decision.ALLOW
+        assert len(turn.response_eval.metadata.get("violations", [])) == 0
 
 
 async def test_multi_issue_no_violations(engine, runner):
@@ -111,15 +113,15 @@ async def test_multi_issue_no_violations(engine, runner):
     assert len(result.turns) > 0
 
     for turn in result.turns:
-        assert turn.response_eval.decision == PolicyDecision.ALLOW
-        assert len(turn.response_eval.violations) == 0
+        assert turn.response_eval.decision == Decision.ALLOW
+        assert len(turn.response_eval.metadata.get("violations", [])) == 0
 
 
 async def test_direct_account_action_detected(engine, runner):
     """Violation: agent jumps to account_action without identity verification.
 
     The update_billing tool call should trigger the
-    verify_before_account_action constraint, producing a MODIFY or DENY.
+    verify_before_account_action constraint, producing an INTERVENE or BLOCK.
     """
     messages = json.loads((EVALS_DIR / "direct_account_action.json").read_text())
     result = await runner.run(engine, messages)
@@ -131,13 +133,15 @@ async def test_direct_account_action_detected(engine, runner):
     violation_turns = [
         t
         for t in result.turns
-        if t.response_eval.decision in (PolicyDecision.MODIFY, PolicyDecision.DENY)
+        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
     ]
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"
 
     # The specific constraint name should appear in violations
     all_violation_names = [
-        v.name for t in result.turns for v in t.response_eval.violations
+        v.get("name", v.get("constraint_id", ""))
+        for t in result.turns
+        for v in t.response_eval.metadata.get("violations", [])
     ]
     assert "verify_before_account_action" in all_violation_names, (
         f"Expected 'verify_before_account_action' in violations, got: {all_violation_names}"

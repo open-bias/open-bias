@@ -12,7 +12,7 @@ from opensentinel.policy.engines.judge.models import (
     VerdictAction,
     EvaluationScope,
 )
-from opensentinel.policy.protocols import PolicyDecision
+from opensentinel.policy.protocols import Decision
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ class TestTracerIntegration:
         engine._client.call_judge = AsyncMock(return_value=_passing_response())
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == PolicyDecision.ALLOW
+        assert result.decision == Decision.ALLOW
 
     @pytest.mark.asyncio
     async def test_tracer_error_does_not_break_eval(
@@ -112,7 +112,7 @@ class TestTracerIntegration:
         mock_tracer.log_judge_evaluation.side_effect = Exception("Trace failed")
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == PolicyDecision.ALLOW
+        assert result.decision == Decision.ALLOW
 
     @pytest.mark.asyncio
     async def test_trace_verdict_with_ensemble_flag(self, engine, mock_tracer):

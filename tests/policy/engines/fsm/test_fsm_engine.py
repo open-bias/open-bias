@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from opensentinel.policy.engines.fsm.engine import FSMPolicyEngine, StateClassificationResult, TransitionResult
-from opensentinel.policy.protocols import PolicyDecision
+from opensentinel.policy.protocols import Decision
 
 @pytest.fixture
 def engine():
@@ -60,8 +60,8 @@ async def test_evaluate_response_success(engine, mocks):
     
     result = await engine.evaluate_response("sid", "response", {})
     
-    assert result.decision == PolicyDecision.ALLOW
-    assert len(result.violations) == 0
+    assert result.decision == Decision.ALLOW
+    assert len(result.metadata.get("violations", [])) == 0
     mocks["sm"].return_value.transition.assert_called_once()
 
 @pytest.mark.asyncio
@@ -92,9 +92,8 @@ async def test_evaluate_response_with_violations(engine, mocks):
 
     result = await engine.evaluate_response("sid", "response", {})
 
-    assert result.decision == PolicyDecision.DENY
-    assert len(result.violations) == 1
-    assert result.intervention_needed == "block"
+    assert result.decision == Decision.BLOCK
+    assert len(result.metadata.get("violations", [])) == 1
 
 @pytest.mark.asyncio
 async def test_initialization_with_config_path(engine, mocks):
