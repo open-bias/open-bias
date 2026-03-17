@@ -13,10 +13,8 @@ if TYPE_CHECKING:
 
 from opensentinel.policy.protocols import (
     StatefulPolicyEngine,
-    InterventionHandlerProtocol,
-    PolicyEvaluationResult,
-    PolicyDecision,
-    PolicyViolation,
+    Decision,
+    EngineResult,
     StateClassificationResult,
     require_initialized,
 )
@@ -142,27 +140,12 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         session_id: str,
         request_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
-    ) -> PolicyEvaluationResult:
-        """
-        Evaluate request - check if there are pending interventions.
-
-        For FSM, most evaluation happens after response (in evaluate_response).
-        Pre-call evaluation checks for pending interventions from previous violations.
-
-        Args:
-            session_id: Unique session identifier
-            request_data: The LLM request data
-            context: Additional context
-
-        Returns:
-            PolicyEvaluationResult with decision
-        """
-
+    ) -> EngineResult:
+        """Evaluate request — FSM evaluation happens post-call."""
         session = await self._state_machine.get_or_create_session(session_id)
 
-        return PolicyEvaluationResult(
-            decision=PolicyDecision.ALLOW,
-            violations=[],
+        return EngineResult(
+            decision=Decision.ALLOW,
             metadata={
                 "current_state": session.current_state,
                 "workflow": self._workflow.name,
@@ -176,26 +159,8 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         response_data: Any,
         request_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
-    ) -> PolicyEvaluationResult:
-        """
-        Evaluate response - classify state, check constraints, transition.
-
-        This is the main evaluation method that:
-        1. Classifies the response to determine what workflow state it represents
-        2. Checks constraints BEFORE transitioning
-        3. Performs the state transition
-        4. Records any violations and pending interventions
-
-        Args:
-            session_id: Unique session identifier
-            response_data: The LLM response
-            request_data: Original request data
-            context: Additional context
-
-        Returns:
-            PolicyEvaluationResult with decision and any violations
-        """
-
+    ) -> EngineResult:
+        """Evaluate response — classify state, check constraints, transition."""
         session = await self._state_machine.get_or_create_session(session_id)
         previous_state = session.current_state
 
@@ -213,21 +178,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
             proposed_state=classification.state_name,
         )
 
-        # Convert to PolicyViolation format
-        violations = [
-            PolicyViolation(
-                name=cv.constraint_name,
-                severity=cv.severity,
-                message=cv.message,
-                intervention=cv.intervention,
-                metadata={
-                    "constraint_type": cv.constraint_type.value,
-                    **cv.details,
-                },
-            )
-            for cv in constraint_violations
-        ]
-
         # Attempt state transition
         transition_result, error = await self._state_machine.transition(
             session_id,
@@ -237,49 +187,41 @@ class FSMPolicyEngine(StatefulPolicyEngine):
             method=classification.method,
         )
 
-        # Determine intervention and decision
-        intervention = None
-        modified_request = None
-        decision = PolicyDecision.ALLOW
+        # Map constraint violations to Decision
+        decision = Decision.ALLOW
+        message: Optional[str] = None
 
-        if violations:
-            # Find first violation with intervention
-            for v in violations:
-                if v.intervention:
-                    intervention = v.intervention
-                    config = (
-                        self._intervention_handler.get_config(v.intervention)
-                        if self._intervention_handler
-                        else None
-                    )
-                    if config:
-                        from opensentinel.core.intervention.strategies import (
-                            InterventionStrategy,
-                            StrategyType,
-                        )
-                        template_context = v.metadata or {}
-                        formatted = InterventionStrategy.format_message(
-                            config.message_template, template_context
-                        )
-                        if config.strategy_type == StrategyType.HARD_BLOCK:
-                            decision = PolicyDecision.DENY
-                        else:
-                            decision = PolicyDecision.MODIFY
-                            key = config.strategy_type.value
-                            modified_request = {key: formatted}
-                    else:
-                        decision = PolicyDecision.MODIFY
-                    break
+        if constraint_violations:
+            has_critical = any(cv.severity == "critical" for cv in constraint_violations)
 
-            # Critical violations should deny
-            if any(v.severity == "critical" for v in violations):
-                decision = PolicyDecision.DENY
+            if has_critical:
+                decision = Decision.BLOCK
+                critical = next(cv for cv in constraint_violations if cv.severity == "critical")
+                message = critical.message
+            else:
+                decision = Decision.INTERVENE
+                # Build message from intervention handler template if available
+                for cv in constraint_violations:
+                    if cv.intervention and self._intervention_handler:
+                        config = self._intervention_handler.get_config(cv.intervention)
+                        if config:
+                            from opensentinel.core.intervention.strategies import (
+                                InterventionStrategy,
+                            )
+                            template_context = {
+                                "constraint_type": cv.constraint_type.value,
+                                **cv.details,
+                            }
+                            message = InterventionStrategy.format_message(
+                                config.message_template, template_context
+                            )
+                            break
+                if message is None:
+                    message = constraint_violations[0].message
 
-        return PolicyEvaluationResult(
+        return EngineResult(
             decision=decision,
-            violations=violations,
-            intervention_needed=intervention,
-            modified_request=modified_request,
+            message=message,
             metadata={
                 "previous_state": previous_state,
                 "current_state": classification.state_name,
@@ -288,6 +230,16 @@ class FSMPolicyEngine(StatefulPolicyEngine):
                 "transition_result": transition_result.value,
                 "transition_error": error,
                 "workflow": self._workflow.name,
+                "violations": [
+                    {
+                        "name": cv.constraint_name,
+                        "severity": cv.severity,
+                        "message": cv.message,
+                        "constraint_type": cv.constraint_type.value,
+                        **cv.details,
+                    }
+                    for cv in constraint_violations
+                ],
             },
         )
 
@@ -378,10 +330,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         if base_url:
             kwargs["base_url"] = base_url
         return FSMCompiler(**kwargs)
-
-    def get_intervention_handler(self) -> Optional[InterventionHandlerProtocol]:
-        """Return the FSM intervention handler."""
-        return self._intervention_handler
 
     async def shutdown(self) -> None:
         """Cleanup resources."""
