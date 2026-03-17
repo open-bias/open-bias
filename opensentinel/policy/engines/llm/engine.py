@@ -13,10 +13,8 @@ from typing import Optional, Dict, Any, List
 from opensentinel.policy.registry import register_engine
 from opensentinel.policy.protocols import (
     StatefulPolicyEngine,
-    InterventionHandlerProtocol,
-    PolicyEvaluationResult,
-    PolicyDecision,
-    PolicyViolation,
+    Decision,
+    EngineResult,
     StateClassificationResult,
     require_initialized,
 )
@@ -164,15 +162,9 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         session_id: str,
         request_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
-    ) -> PolicyEvaluationResult:
-        """Evaluate incoming request.
-
-        Currently a pass-through; all evaluation happens in evaluate_response.
-        """
-        if not self._initialized:
-            return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
-
-        return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
+    ) -> EngineResult:
+        """Evaluate incoming request — pass-through, evaluation happens post-call."""
+        return EngineResult(decision=Decision.ALLOW)
 
     async def evaluate_response(
         self,
@@ -180,108 +172,94 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         response_data: Any,
         request_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
-    ) -> PolicyEvaluationResult:
-        """Evaluate LLM response - classify, detect drift, check constraints.
-        
-        This is the main evaluation flow:
-        1. Extract assistant message and tool calls
-        2. Add turn to session
-        3. Classify state
-        4. Compute drift
-        5. Evaluate constraints
-        6. Decide intervention
-        7. Record transition
-        """
+    ) -> EngineResult:
+        """Evaluate LLM response — classify, detect drift, check constraints."""
         if not self._initialized:
-            return PolicyEvaluationResult(decision=PolicyDecision.ALLOW)
-        
+            return EngineResult(decision=Decision.ALLOW)
+
         session = self._get_or_create_session(session_id)
-        
+
         # Extract content from response
         message = self._extract_content(response_data)
         tool_calls = self._extract_tool_calls(response_data)
-        
+
         # Add turn to session
         session.add_turn({
             "role": "assistant",
             "message": message,
             "tool_calls": tool_calls,
         })
-        
-        violations: List[PolicyViolation] = []
-        
+
+        violations: List[Dict[str, Any]] = []
+
         try:
             # 1. Classify state
             classification = await self._state_classifier.classify(
                 session, message, tool_calls
             )
-            
+
             # Update confidence buffer
             session.add_confidence(classification.best_confidence)
-            
+
             # Check for structural drift
             if session.is_structurally_drifting():
-                violations.append(PolicyViolation(
-                    name="structural_drift",
-                    severity="warning",
-                    message="Multiple consecutive uncertain classifications",
-                ))
-            
+                violations.append({
+                    "name": "structural_drift",
+                    "severity": "warning",
+                    "message": "Multiple consecutive uncertain classifications",
+                })
+
             # Check for skip violations
             for skipped in classification.skip_violations:
-                violations.append(PolicyViolation(
-                    name="skip_violation",
-                    severity="error",
-                    message=f"Skipped required state: {skipped}",
-                    metadata={"skipped_state": skipped},
-                ))
-            
+                violations.append({
+                    "name": "skip_violation",
+                    "severity": "error",
+                    "message": f"Skipped required state: {skipped}",
+                    "skipped_state": skipped,
+                })
+
             # 2. Compute drift
             expected_tools = self._get_expected_tools(classification.best_state)
             drift = self._drift_detector.compute_drift(
                 session, message, tool_calls, expected_tools
             )
-            
+
             # Add anomaly violations
             if drift.anomaly_flags.get("unexpected_tool_call"):
-                violations.append(PolicyViolation(
-                    name="unexpected_tool_call",
-                    severity="warning",
-                    message="Unexpected tool call for current state",
-                ))
-            
+                violations.append({
+                    "name": "unexpected_tool_call",
+                    "severity": "warning",
+                    "message": "Unexpected tool call for current state",
+                })
+
             if drift.anomaly_flags.get("missing_expected_tool_call"):
-                violations.append(PolicyViolation(
-                    name="missing_expected_tool_call",
-                    severity="warning",
-                    message="Expected tool call not made",
-                ))
-            
+                violations.append({
+                    "name": "missing_expected_tool_call",
+                    "severity": "warning",
+                    "message": "Expected tool call not made",
+                })
+
             # 3. Evaluate constraints
             constraint_evals = await self._constraint_evaluator.evaluate(
                 session, message, tool_calls
             )
-            
-            # Add constraint violations
+
             for cv in constraint_evals:
                 if cv.violated:
-                    violations.append(PolicyViolation(
-                        name=cv.constraint_id,
-                        severity=cv.severity,
-                        message=cv.evidence,
-                        metadata={
-                            "confidence": cv.confidence,
-                            "constraint_id": cv.constraint_id,
-                        },
-                    ))
-            
+                    violations.append({
+                        "name": cv.constraint_id,
+                        "severity": cv.severity,
+                        "message": cv.evidence,
+                        "confidence": cv.confidence,
+                    })
+
             # 4. Decide intervention
             intervention_config = None
             if self._intervention_engine:
                 intervention_config = self._intervention_engine.decide(
                     session, constraint_evals, drift
                 )
-            
+
             # 5. Record transition
             prev_state = session.current_state
             session.record_transition(
@@ -295,35 +273,39 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                     "candidates": len(classification.candidates),
                 },
             )
-            
-            # 6. Build modified_request if intervention needed
-            modified_request = None
-            decision = PolicyDecision.ALLOW
+
+            # 6. Determine decision and message
+            decision = Decision.ALLOW
+            result_message: Optional[str] = None
+
             if intervention_config:
                 from opensentinel.core.intervention.strategies import (
                     InterventionStrategy,
                     StrategyType,
                 )
                 if intervention_config.strategy_type == StrategyType.HARD_BLOCK:
-                    decision = PolicyDecision.DENY
+                    decision = Decision.BLOCK
+                    result_message = intervention_config.message_template
                 else:
-                    decision = PolicyDecision.MODIFY
+                    decision = Decision.INTERVENE
                     template_context = {
                         "state": classification.best_state,
                         "drift": drift.composite,
                         "drift_level": drift.level.value,
                     }
-                    formatted = InterventionStrategy.format_message(
+                    result_message = InterventionStrategy.format_message(
                         intervention_config.message_template, template_context
                     )
-                    key = intervention_config.strategy_type.value
-                    modified_request = {key: formatted}
 
-            return PolicyEvaluationResult(
+            # Critical violations override to BLOCK
+            if any(v["severity"] == "critical" for v in violations):
+                decision = Decision.BLOCK
+                critical = next(v for v in violations if v["severity"] == "critical")
+                result_message = critical["message"]
+
+            return EngineResult(
                 decision=decision,
-                violations=violations,
-                intervention_needed=intervention_config.strategy_type.value if intervention_config else None,
-                modified_request=modified_request,
+                message=result_message,
                 metadata={
                     "state": classification.best_state,
                     "confidence": classification.best_confidence,
@@ -331,13 +313,14 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                     "drift": drift.composite,
                     "drift_level": drift.level.value,
                     "transition_legal": classification.transition_legal,
+                    "violations": violations,
                 },
             )
-            
+
         except Exception as e:
             logger.error(f"Response evaluation failed: {e}")
-            return PolicyEvaluationResult(
-                decision=PolicyDecision.ALLOW,
+            return EngineResult(
+                decision=Decision.ALLOW,
                 metadata={"error": str(e)},
             )
 
@@ -408,10 +391,6 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         if session_id in self._sessions:
             del self._sessions[session_id]
             logger.debug(f"Reset session: {session_id}")
-
-    def get_intervention_handler(self) -> Optional[InterventionHandlerProtocol]:
-        """Return the LLM intervention handler."""
-        return self._intervention_engine
 
     async def shutdown(self) -> None:
         """Cleanup resources."""
