@@ -213,21 +213,25 @@ async def test_pre_call_hook_exception_returns_original_data(
 
 
 @pytest.mark.asyncio
-async def test_pre_call_hook_propagates_violation(
+async def test_pre_call_hook_returns_exception_on_block(
     callback, mock_api_key, mock_cache
 ):
-    """WorkflowViolationError from interceptor still propagates through safe_hook."""
+    """When interceptor blocks, _pre_call_impl returns an Exception object (not raises)."""
+    from opensentinel.core.interceptor.types import InterceptionResult
+
     data = {"messages": [{"role": "user", "content": "hello"}]}
 
-    async def blocking_impl(*a, **kw):
-        raise WorkflowViolationError("blocked", context={"session_id": "test"})
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_pre_call = AsyncMock(
+        return_value=InterceptionResult(allowed=False, message="blocked by policy")
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
 
-    callback._pre_call_impl = blocking_impl
-
-    with pytest.raises(WorkflowViolationError, match="blocked"):
-        await callback.async_pre_call_hook(
-            mock_api_key, mock_cache, data, "completion"
-        )
+    result = await callback.async_pre_call_hook(
+        mock_api_key, mock_cache, data, "completion"
+    )
+    assert isinstance(result, Exception)
+    assert "blocked by policy" in str(result)
 
 
 @pytest.mark.asyncio

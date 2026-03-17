@@ -178,6 +178,9 @@ class PolicyConfig(BaseModel):
     # For composite engine: list of child engines
     engines: List[PolicyEngineConfig] = Field(default_factory=list)
 
+    # Intervention configuration
+    intervention: InterventionConfig = Field(default_factory=InterventionConfig)
+
     # Fallback behavior when engine evaluation fails
     # True = allow request on error (fail open)
     # False = deny request on error (fail closed)
