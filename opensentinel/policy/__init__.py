@@ -43,12 +43,10 @@ For composite engines:
 from opensentinel.policy.protocols import (
     PolicyEngine,
     StatefulPolicyEngine,
-    InterventionHandlerProtocol,
-
-    PolicyEvaluationResult,
-    PolicyDecision,
-    PolicyViolation,
+    Decision,
+    EngineResult,
     StateClassificationResult,
+    require_initialized,
 )
 from opensentinel.policy.registry import PolicyEngineRegistry, register_engine
 
@@ -88,13 +86,11 @@ __all__ = [
     # Core protocols
     "PolicyEngine",
     "StatefulPolicyEngine",
-    "InterventionHandlerProtocol",
     "require_initialized",
 
     # Result types
-    "PolicyEvaluationResult",
-    "PolicyDecision",
-    "PolicyViolation",
+    "Decision",
+    "EngineResult",
     "StateClassificationResult",
     # Engine registry
     "PolicyEngineRegistry",

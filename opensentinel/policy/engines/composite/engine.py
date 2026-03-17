@@ -8,18 +8,14 @@ This enables using multiple policy mechanisms together,
 e.g., FSM workflow enforcement + NeMo content moderation.
 """
 
-from typing import Optional, Dict, Any, List, TYPE_CHECKING
+from typing import Optional, Dict, Any, List
 import logging
 import asyncio
 
-if TYPE_CHECKING:
-    from opensentinel.core.intervention.strategies import InterventionConfig
-
 from opensentinel.policy.protocols import (
     PolicyEngine,
-    PolicyEvaluationResult,
-    PolicyDecision,
-    PolicyViolation,
+    Decision,
+    EngineResult,
     require_initialized,
 )
 from opensentinel.policy.registry import register_engine, PolicyEngineRegistry
@@ -28,10 +24,9 @@ logger = logging.getLogger(__name__)
 
 # Decision priority for merging (higher = more restrictive)
 DECISION_PRIORITY = {
-    PolicyDecision.DENY: 4,
-    PolicyDecision.MODIFY: 3,
-    PolicyDecision.WARN: 2,
-    PolicyDecision.ALLOW: 1,
+    Decision.BLOCK: 3,
+    Decision.INTERVENE: 2,
+    Decision.ALLOW: 1,
 }
 
 
@@ -41,14 +36,15 @@ class CompositePolicyEngine(PolicyEngine):
     Combines multiple policy engines.
 
     Evaluation strategy:
-    - Request: All engines evaluate in parallel, most restrictive decision wins
-    - Response: All engines evaluate in parallel, collect all violations
-    - Interventions: First engine with intervention wins
+    - All engines evaluate in parallel
+    - Most restrictive decision wins: BLOCK > INTERVENE > ALLOW
+    - First INTERVENE message wins
+    - All metadata merged under engine names
 
     Configuration:
         - engines: list - List of engine configurations
           Each entry: {"type": "fsm|nemo|...", "config": {...}}
-        - strategy: str - Merge strategy: "all" (run all) or "first_deny" (stop on first deny)
+        - strategy: str - Merge strategy: "all" (run all) or "first_block" (stop on first block)
         - parallel: bool - Run engines in parallel (default: True)
 
     Example:
@@ -91,7 +87,7 @@ class CompositePolicyEngine(PolicyEngine):
         Args:
             config: Configuration dict with:
                 - engines: List of {"type": str, "config": dict}
-                - strategy: "all" or "first_deny" (optional)
+                - strategy: "all" or "first_block" (optional)
                 - parallel: bool (optional, default True)
 
         Raises:
@@ -129,87 +125,16 @@ class CompositePolicyEngine(PolicyEngine):
         session_id: str,
         request_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
-    ) -> PolicyEvaluationResult:
+    ) -> EngineResult:
         """
         Evaluate request through all engines.
 
         Returns the most restrictive decision from all engines.
-        If any engine returns MODIFY with modified_request, uses the first one.
-
-        Args:
-            session_id: Unique session identifier
-            request_data: The LLM request data
-            context: Additional context
-
-        Returns:
-            Merged PolicyEvaluationResult
         """
-
-        if self._parallel:
-            results = await asyncio.gather(*[
-                engine.evaluate_request(session_id, request_data, context)
-                for engine in self._engines
-            ], return_exceptions=True)
-
-            # Handle exceptions
-            valid_results = []
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    logger.error(
-                        f"Engine {self._engines[i].name} request evaluation failed: {result}"
-                    )
-                    # Add error as violation but continue
-                    valid_results.append(PolicyEvaluationResult(
-                        decision=PolicyDecision.WARN,
-                        violations=[
-                            PolicyViolation(
-                                name=f"{self._engines[i].engine_type}_error",
-                                severity="warning",
-                                message=str(result),
-                            )
-                        ],
-                    ))
-                else:
-                    valid_results.append(result)
-
-            # Truncate at first DENY when strategy is "first_deny"
-            if self._strategy == "first_deny":
-                truncated_results = []
-                for result in valid_results:
-                    truncated_results.append(result)
-                    if result.decision == PolicyDecision.DENY:
-                        break
-                valid_results = truncated_results
-
-            return self._merge_results(valid_results)
-        else:
-            # Sequential evaluation
-            results = []
-            for engine in self._engines:
-                try:
-                    result = await engine.evaluate_request(
-                        session_id, request_data, context
-                    )
-                    results.append(result)
-
-                    # Early exit on first deny if strategy is "first_deny"
-                    if self._strategy == "first_deny" and result.decision == PolicyDecision.DENY:
-                        break
-
-                except Exception as e:
-                    logger.error(f"Engine {engine.name} request evaluation failed: {e}")
-                    results.append(PolicyEvaluationResult(
-                        decision=PolicyDecision.WARN,
-                        violations=[
-                            PolicyViolation(
-                                name=f"{engine.engine_type}_error",
-                                severity="warning",
-                                message=str(e),
-                            )
-                        ],
-                    ))
-
-            return self._merge_results(results)
+        results = await self._run_engines(
+            "request", session_id, request_data=request_data, context=context
+        )
+        return self._merge_results(results)
 
     @require_initialized
     async def evaluate_response(
@@ -218,110 +143,70 @@ class CompositePolicyEngine(PolicyEngine):
         response_data: Any,
         request_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
-    ) -> PolicyEvaluationResult:
+    ) -> EngineResult:
         """
         Evaluate response through all engines.
 
-        Collects violations from all engines and returns most restrictive decision.
-
-        Args:
-            session_id: Unique session identifier
-            response_data: The LLM response
-            request_data: Original request data
-            context: Additional context
-
-        Returns:
-            Merged PolicyEvaluationResult
+        Returns the most restrictive decision from all engines.
         """
+        results = await self._run_engines(
+            "response", session_id,
+            response_data=response_data, request_data=request_data, context=context
+        )
+        return self._merge_results(results)
 
-        if self._parallel:
-            results = await asyncio.gather(*[
-                engine.evaluate_response(session_id, response_data, request_data, context)
-                for engine in self._engines
-            ], return_exceptions=True)
+    async def _run_engines(
+        self,
+        phase: str,
+        session_id: str,
+        request_data: Optional[Dict[str, Any]] = None,
+        response_data: Any = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> List[EngineResult]:
+        """Run all engines for the given phase, handling errors as fail-open."""
 
-            # Handle exceptions
-            valid_results = []
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    logger.error(
-                        f"Engine {self._engines[i].name} response evaluation failed: {result}"
-                    )
-                    valid_results.append(PolicyEvaluationResult(
-                        decision=PolicyDecision.WARN,
-                        violations=[
-                            PolicyViolation(
-                                name=f"{self._engines[i].engine_type}_error",
-                                severity="warning",
-                                message=str(result),
-                            )
-                        ],
-                    ))
+        async def run_one(engine: PolicyEngine) -> EngineResult:
+            try:
+                if phase == "request":
+                    return await engine.evaluate_request(session_id, request_data, context)
                 else:
-                    valid_results.append(result)
-
-            # Truncate at first DENY when strategy is "first_deny"
-            if self._strategy == "first_deny":
-                truncated_results = []
-                for result in valid_results:
-                    truncated_results.append(result)
-                    if result.decision == PolicyDecision.DENY:
-                        break
-                valid_results = truncated_results
-
-            return self._merge_results(valid_results)
-        else:
-            # Sequential evaluation
-            results = []
-            for engine in self._engines:
-                try:
-                    result = await engine.evaluate_response(
+                    return await engine.evaluate_response(
                         session_id, response_data, request_data, context
                     )
-                    results.append(result)
+            except Exception as e:
+                logger.error(f"Engine {engine.name} {phase} evaluation failed: {e}")
+                return EngineResult(
+                    decision=Decision.ALLOW,
+                    metadata={"error": str(e), "engine": engine.name},
+                )
 
-                    if self._strategy == "first_deny" and result.decision == PolicyDecision.DENY:
-                        break
+        if self._parallel:
+            results = await asyncio.gather(*[run_one(e) for e in self._engines])
+            valid_results = list(results)
+        else:
+            valid_results = []
+            for engine in self._engines:
+                result = await run_one(engine)
+                valid_results.append(result)
+                if self._strategy == "first_block" and result.decision == Decision.BLOCK:
+                    break
 
-                except Exception as e:
-                    logger.error(f"Engine {engine.name} response evaluation failed: {e}")
-                    results.append(PolicyEvaluationResult(
-                        decision=PolicyDecision.WARN,
-                        violations=[
-                            PolicyViolation(
-                                name=f"{engine.engine_type}_error",
-                                severity="warning",
-                                message=str(e),
-                            )
-                        ],
-                    ))
+        return valid_results
 
-            return self._merge_results(results)
-
-    def _merge_results(
-        self,
-        results: List[PolicyEvaluationResult],
-    ) -> PolicyEvaluationResult:
+    def _merge_results(self, results: List[EngineResult]) -> EngineResult:
         """
         Merge results from multiple engines.
 
-        Strategy:
-        - Decision: Most restrictive wins (DENY > MODIFY > WARN > ALLOW)
-        - Violations: Collect all
-        - Intervention: First one found
-        - Modified request: First one found
-        - Metadata: Merge all
+        Priority: BLOCK > INTERVENE > ALLOW
+        First INTERVENE message wins; first BLOCK message wins.
+        All metadata merged under engine names.
         """
         if not results:
-            return PolicyEvaluationResult(
-                decision=PolicyDecision.ALLOW,
-                violations=[],
-            )
+            return EngineResult(decision=Decision.ALLOW)
 
-        final_decision = PolicyDecision.ALLOW
-        all_violations: List[PolicyViolation] = []
-        intervention = None
-        modified_request = None
+        final_decision = Decision.ALLOW
+        intervene_message: Optional[str] = None
+        block_message: Optional[str] = None
         metadata: Dict[str, Any] = {"engines": {}}
 
         for i, result in enumerate(results):
@@ -331,26 +216,24 @@ class CompositePolicyEngine(PolicyEngine):
             if DECISION_PRIORITY[result.decision] > DECISION_PRIORITY[final_decision]:
                 final_decision = result.decision
 
-            # Collect all violations
-            all_violations.extend(result.violations)
+            # First INTERVENE message wins
+            if result.decision == Decision.INTERVENE and intervene_message is None:
+                intervene_message = result.message
 
-            # First intervention wins
-            if result.intervention_needed and not intervention:
-                intervention = result.intervention_needed
+            # First BLOCK message wins
+            if result.decision == Decision.BLOCK and block_message is None:
+                block_message = result.message
 
-            # First modified request wins
-            if result.modified_request and not modified_request:
-                modified_request = result.modified_request
-
-            # Merge metadata
+            # Merge metadata under engine name
             if result.metadata:
                 metadata["engines"][engine_name] = result.metadata
 
-        return PolicyEvaluationResult(
+        # Use block message if blocked, otherwise intervene message
+        final_message = block_message if final_decision == Decision.BLOCK else intervene_message
+
+        return EngineResult(
             decision=final_decision,
-            violations=all_violations,
-            intervention_needed=intervention,
-            modified_request=modified_request,
+            message=final_message,
             metadata=metadata,
         )
 
@@ -387,21 +270,6 @@ class CompositePolicyEngine(PolicyEngine):
         self._engines.clear()
         self._initialized = False
         logger.info("CompositePolicyEngine shutdown")
-
-    def resolve_intervention(
-        self,
-        name: str,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> Optional["InterventionConfig"]:
-        """Delegate intervention resolution to child engines.
-
-        Iterates child engines and returns the first non-None result.
-        """
-        for engine in self._engines:
-            result = engine.resolve_intervention(name, context)
-            if result is not None:
-                return result
-        return None
 
     def get_engines(self) -> List[PolicyEngine]:
         """Get list of child engines (for debugging)."""

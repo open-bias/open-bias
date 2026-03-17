@@ -18,14 +18,12 @@ import logging
 import sys
 
 if TYPE_CHECKING:
-    from opensentinel.core.intervention.strategies import InterventionConfig
     from opensentinel.policy.compiler.protocol import PolicyCompiler
 
 from opensentinel.policy.protocols import (
     PolicyEngine,
-    PolicyEvaluationResult,
-    PolicyDecision,
-    PolicyViolation,
+    Decision,
+    EngineResult,
     require_initialized,
 )
 from opensentinel.policy.registry import register_engine
@@ -215,7 +213,7 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         session_id: str,
         request_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
-    ) -> PolicyEvaluationResult:
+    ) -> EngineResult:
         """
         Evaluate request using NeMo input rails.
 
@@ -223,29 +221,17 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         - Allow the request unchanged
         - Modify the request (mask sensitive data, etc.)
         - Block the request (jailbreak detected, etc.)
-
-        Args:
-            session_id: Unique session identifier
-            request_data: The LLM request data
-            context: Additional context
-
-        Returns:
-            PolicyEvaluationResult with decision
         """
 
         if "input" not in self._enabled_rails:
-            return PolicyEvaluationResult(
-                decision=PolicyDecision.ALLOW,
-                violations=[],
+            return EngineResult(
+                decision=Decision.ALLOW,
                 metadata={"rails_skipped": "input not enabled"},
             )
 
         messages = request_data.get("messages", [])
         if not messages:
-            return PolicyEvaluationResult(
-                decision=PolicyDecision.ALLOW,
-                violations=[],
-            )
+            return EngineResult(decision=Decision.ALLOW)
 
         try:
             # Process through NeMo input rails
@@ -261,39 +247,28 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             response_content = self._extract_response_content(result)
 
             if self._is_blocked_response(response_content):
-                return PolicyEvaluationResult(
-                    decision=PolicyDecision.DENY,
-                    violations=[
-                        PolicyViolation(
-                            name="nemo_input_blocked",
-                            severity="critical",
-                            message="Request blocked by NeMo input guardrails",
-                            metadata={
-                                "response": response_content[:200],
-                                "session_id": session_id,
-                            },
-                        )
-                    ],
-                    metadata={"nemo_response": response_content},
+                return EngineResult(
+                    decision=Decision.BLOCK,
+                    message="Request blocked by NeMo input guardrails",
+                    metadata={
+                        "nemo_response": response_content,
+                        "session_id": session_id,
+                    },
                 )
 
-            # Check if messages were modified
-            # NeMo may sanitize or modify input
+            # Check if messages were modified (NeMo may sanitize or modify input)
             modified = self._check_for_modifications(result, messages)
             if modified:
-                return PolicyEvaluationResult(
-                    decision=PolicyDecision.MODIFY,
-                    violations=[],
-                    modified_request={
-                        **request_data,
-                        "messages": modified,
+                return EngineResult(
+                    decision=Decision.INTERVENE,
+                    metadata={
+                        "sanitized_messages": modified,
+                        "modification_type": "nemo_input_sanitization",
                     },
-                    metadata={"modification_type": "nemo_input_sanitization"},
                 )
 
-            return PolicyEvaluationResult(
-                decision=PolicyDecision.ALLOW,
-                violations=[],
+            return EngineResult(
+                decision=Decision.ALLOW,
                 metadata={"nemo_processed": True},
             )
 
@@ -301,27 +276,15 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             logger.error(f"NeMo input rail evaluation failed: {e}", exc_info=True)
 
             if self._fail_closed:
-                return PolicyEvaluationResult(
-                    decision=PolicyDecision.DENY,
-                    violations=[
-                        PolicyViolation(
-                            name="nemo_evaluation_error",
-                            severity="error",
-                            message=f"NeMo evaluation failed: {str(e)}",
-                        )
-                    ],
+                return EngineResult(
+                    decision=Decision.BLOCK,
+                    message=f"NeMo evaluation failed: {str(e)}",
                 )
 
-            # Fail open - allow but log warning
-            return PolicyEvaluationResult(
-                decision=PolicyDecision.WARN,
-                violations=[
-                    PolicyViolation(
-                        name="nemo_evaluation_error",
-                        severity="warning",
-                        message=f"NeMo evaluation failed (failing open): {str(e)}",
-                    )
-                ],
+            # Fail open
+            return EngineResult(
+                decision=Decision.ALLOW,
+                metadata={"error": str(e)},
             )
 
     @require_initialized
@@ -331,7 +294,7 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         response_data: Any,
         request_data: Dict[str, Any],
         context: Optional[Dict[str, Any]] = None,
-    ) -> PolicyEvaluationResult:
+    ) -> EngineResult:
         """
         Evaluate response using NeMo output rails.
 
@@ -340,31 +303,18 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         - Unsafe content
         - Policy violations
         - PII leakage
-
-        Args:
-            session_id: Unique session identifier
-            response_data: The LLM response
-            request_data: Original request data
-            context: Additional context
-
-        Returns:
-            PolicyEvaluationResult with decision
         """
 
         if "output" not in self._enabled_rails:
-            return PolicyEvaluationResult(
-                decision=PolicyDecision.ALLOW,
-                violations=[],
+            return EngineResult(
+                decision=Decision.ALLOW,
                 metadata={"rails_skipped": "output not enabled"},
             )
 
         # Extract response content
         content = self._extract_response_content(response_data)
         if not content:
-            return PolicyEvaluationResult(
-                decision=PolicyDecision.ALLOW,
-                violations=[],
-            )
+            return EngineResult(decision=Decision.ALLOW)
 
         messages = request_data.get("messages", [])
         messages_with_response = messages + [
@@ -384,27 +334,18 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             response_content = self._extract_response_content(result)
 
             if self._is_blocked_response(response_content):
-                return PolicyEvaluationResult(
-                    decision=PolicyDecision.DENY,
-                    violations=[
-                        PolicyViolation(
-                            name="nemo_output_blocked",
-                            severity="critical",
-                            message="Response blocked by NeMo output guardrails",
-                            intervention="nemo_output_blocked",
-                            metadata={
-                                "original_response": content[:200],
-                                "nemo_response": response_content[:200],
-                            },
-                        )
-                    ],
-                    intervention_needed="nemo_output_blocked",
-                    metadata={"nemo_blocked": True},
+                return EngineResult(
+                    decision=Decision.BLOCK,
+                    message="Response blocked by NeMo output guardrails",
+                    metadata={
+                        "original_response": content[:200],
+                        "nemo_response": response_content[:200],
+                        "nemo_blocked": True,
+                    },
                 )
 
-            return PolicyEvaluationResult(
-                decision=PolicyDecision.ALLOW,
-                violations=[],
+            return EngineResult(
+                decision=Decision.ALLOW,
                 metadata={"nemo_output_verified": True},
             )
 
@@ -412,26 +353,14 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             logger.error(f"NeMo output rail evaluation failed: {e}", exc_info=True)
 
             if self._fail_closed:
-                return PolicyEvaluationResult(
-                    decision=PolicyDecision.DENY,
-                    violations=[
-                        PolicyViolation(
-                            name="nemo_output_evaluation_error",
-                            severity="error",
-                            message=f"NeMo output evaluation failed: {str(e)}",
-                        )
-                    ],
+                return EngineResult(
+                    decision=Decision.BLOCK,
+                    message=f"NeMo output evaluation failed: {str(e)}",
                 )
 
-            return PolicyEvaluationResult(
-                decision=PolicyDecision.WARN,
-                violations=[
-                    PolicyViolation(
-                        name="nemo_output_evaluation_error",
-                        severity="warning",
-                        message=f"NeMo output evaluation failed (failing open): {str(e)}",
-                    )
-                ],
+            return EngineResult(
+                decision=Decision.ALLOW,
+                metadata={"error": str(e)},
             )
 
     def _is_blocked_response(self, content: str) -> bool:
@@ -519,32 +448,6 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         if base_url:
             kwargs["base_url"] = base_url
         return NemoCompiler(**kwargs)
-
-    def resolve_intervention(
-        self,
-        name: str,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> Optional["InterventionConfig"]:
-        """Resolve NeMo intervention names to configs.
-
-        NeMo uses simple intervention names like 'nemo_output_blocked'
-        that map directly to HARD_BLOCK with the blocked response message.
-        """
-        from opensentinel.core.intervention.strategies import InterventionConfig, StrategyType
-        if name == "nemo_output_blocked":
-            message = "Response blocked by NeMo output guardrails"
-            if context and "nemo_response" in context:
-                message = context["nemo_response"]
-            return InterventionConfig(
-                strategy_type=StrategyType.HARD_BLOCK,
-                message_template=message,
-            )
-        if name == "nemo_input_blocked":
-            return InterventionConfig(
-                strategy_type=StrategyType.HARD_BLOCK,
-                message_template="Request blocked by NeMo input guardrails",
-            )
-        return None
 
     async def shutdown(self) -> None:
         """Cleanup resources."""
