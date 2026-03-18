@@ -551,8 +551,38 @@ class SentinelCallback(CustomLogger):
                     span.set_attribute("output.value", output_json)
                     span.set_attribute("langfuse.span.output", output_json)
 
-            # With async POST_CALL, results are deferred to next PRE_CALL.
-            # run_post_call only starts async checkers; no sync gates here.
+            # Handle sync POST_CALL results
+            if not result.allowed:
+                message = result.message or "Response blocked by policy"
+                logger.warning(
+                    f"Response blocked for session {session_id}: {message}"
+                )
+                raise WorkflowViolationError(
+                    message, context=result.metadata
+                )
+
+            if result.modified_data and "_interventions" in result.modified_data:
+                from opensentinel.core.intervention.strategies import (
+                    ResponseModificationStrategy,
+                )
+
+                for intervention in result.modified_data["_interventions"]:
+                    response = ResponseModificationStrategy.apply_to_response(
+                        response,
+                        message=intervention.get("message"),
+                        modified_messages=intervention.get("modified_messages"),
+                    )
+                    logger.info(
+                        f"Applied POST_CALL intervention from "
+                        f"'{intervention.get('checker')}' for session {session_id}"
+                    )
+
+                if self.tracer:
+                    self.tracer.log_intervention(
+                        session_id=session_id,
+                        intervention_name="post_call_intervention",
+                        context=result.metadata,
+                    )
 
         return response
 
