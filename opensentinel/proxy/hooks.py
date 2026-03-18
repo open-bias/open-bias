@@ -252,6 +252,14 @@ class SentinelCallback(CustomLogger):
 
         return self._policy_engine
 
+    async def cleanup_session(self, session_id: str) -> None:
+        """Clean up all state for a session (interceptor tasks + engine session)."""
+        if self._interceptor is not None:
+            await self._interceptor.cleanup_session(session_id)
+        if self._policy_engine is not None and hasattr(self._policy_engine, "reset_session"):
+            await self._policy_engine.reset_session(session_id)
+        logger.debug(f"Cleaned up session {session_id} from hooks")
+
     async def shutdown(self) -> None:
         """
         Shutdown the callback, cleaning up interceptor and policy engine.
