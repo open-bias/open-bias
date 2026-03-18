@@ -7,6 +7,8 @@ handles async checker task management, and applies interventions.
 
 import asyncio
 import logging
+import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
@@ -45,10 +47,18 @@ class Interceptor:
     - Modification merging for deferred INTERVENE decisions
     """
 
+    # Defaults for session memory management
+    DEFAULT_SESSION_TTL = 3600  # 1 hour
+    DEFAULT_MAX_SESSIONS = 10_000
+    DEFAULT_MAX_ASYNC_TASKS_PER_SESSION = 5
+
     def __init__(
         self,
         checkers: list[PolicyEngineChecker],
         default_strategy: str = "system_prompt_append",
+        session_ttl: int | None = None,
+        max_sessions: int | None = None,
+        max_async_tasks_per_session: int | None = None,
     ):
         self._sync_pre_call: list[PolicyEngineChecker] = []
         self._sync_post_call: list[PolicyEngineChecker] = []
@@ -69,8 +79,19 @@ class Interceptor:
         # Intervention strategy
         self._default_strategy = default_strategy
 
-        # session_id -> running async tasks
-        self._running_tasks: dict[str, list[asyncio.Task[_PendingResult]]] = {}
+        # Session memory management
+        self._session_ttl = session_ttl if session_ttl is not None else self.DEFAULT_SESSION_TTL
+        self._max_sessions = max_sessions if max_sessions is not None else self.DEFAULT_MAX_SESSIONS
+        self._max_async_tasks = (
+            max_async_tasks_per_session
+            if max_async_tasks_per_session is not None
+            else self.DEFAULT_MAX_ASYNC_TASKS_PER_SESSION
+        )
+
+        # session_id -> running async tasks (OrderedDict for LRU eviction)
+        self._running_tasks: OrderedDict[str, list[asyncio.Task[_PendingResult]]] = OrderedDict()
+        # session_id -> last access monotonic timestamp
+        self._session_timestamps: OrderedDict[str, float] = OrderedDict()
 
         logger.info(
             f"Interceptor initialized: {len(self._sync_pre_call)} sync pre-call, "
@@ -95,6 +116,9 @@ class Interceptor:
         3. Start async PRE_CALL checkers in background
         4. Return result with possibly modified request_data
         """
+        self._touch_session(session_id)
+        self._evict_stale_sessions()
+
         modified_data = dict(request_data)
         all_metadata: dict[str, Any] = {"results": []}
 
@@ -203,6 +227,8 @@ class Interceptor:
         2. Start async POST_CALL checkers in background (don't wait)
         3. Return result with optional modified_data for response modification
         """
+        self._touch_session(session_id)
+
         all_metadata: dict[str, Any] = {"results": [], "interventions": []}
         modified_data: dict[str, Any] | None = None
 
@@ -372,13 +398,52 @@ class Interceptor:
 
         return result
 
-    async def cleanup_session(self, session_id: str) -> None:
-        """Cancel running async tasks and clear pending results for a session."""
+    def _touch_session(self, session_id: str) -> None:
+        """Update the last-access timestamp for a session (LRU tracking)."""
+        self._session_timestamps[session_id] = time.monotonic()
+        # Move to end for LRU ordering
+        self._session_timestamps.move_to_end(session_id)
+
+    def _evict_stale_sessions(self) -> None:
+        """Remove sessions that have exceeded their TTL or breach the max cap."""
+        now = time.monotonic()
+
+        # TTL eviction (oldest-first)
+        stale_ids: list[str] = []
+        for sid, ts in self._session_timestamps.items():
+            if now - ts > self._session_ttl:
+                stale_ids.append(sid)
+            else:
+                break
+
+        for sid in stale_ids:
+            self._cancel_session_tasks(sid)
+            self._session_timestamps.pop(sid, None)
+
+        if stale_ids:
+            logger.debug("Evicted %d stale interceptor sessions (TTL=%ds)", len(stale_ids), self._session_ttl)
+
+        # Hard cap eviction
+        overflow = len(self._session_timestamps) - self._max_sessions
+        if overflow > 0:
+            oldest = list(self._session_timestamps.keys())[:overflow]
+            for sid in oldest:
+                self._cancel_session_tasks(sid)
+                self._session_timestamps.pop(sid, None)
+            logger.debug("Evicted %d interceptor sessions (max=%d)", overflow, self._max_sessions)
+
+    def _cancel_session_tasks(self, session_id: str) -> None:
+        """Cancel and remove all async tasks for a session."""
         if session_id in self._running_tasks:
             for task in self._running_tasks[session_id]:
                 if not task.done():
                     task.cancel()
             del self._running_tasks[session_id]
+
+    async def cleanup_session(self, session_id: str) -> None:
+        """Cancel running async tasks and clear pending results for a session."""
+        self._cancel_session_tasks(session_id)
+        self._session_timestamps.pop(session_id, None)
 
         logger.debug(f"Cleaned up session {session_id}")
 

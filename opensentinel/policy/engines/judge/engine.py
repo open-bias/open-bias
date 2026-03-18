@@ -7,6 +7,8 @@ policy engine infrastructure via PolicyEngine ABC.
 """
 
 import logging
+import time
+from collections import OrderedDict
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -54,13 +56,22 @@ class JudgePolicyEngine(PolicyEngine):
     configurable rubrics. Works with single or multiple judge models.
     """
 
+    # Defaults for session memory management
+    DEFAULT_SESSION_TTL = 3600  # 1 hour
+    DEFAULT_MAX_SESSIONS = 10_000
+
     def __init__(self) -> None:
         self._initialized = False
         self._client: Optional[JudgeClient] = None
         self._evaluator: Optional[JudgeEvaluator] = None
         self._ensemble: Optional["JudgeEnsemble"] = None
-        self._sessions: Dict[str, JudgeSessionContext] = {}
+        self._sessions: OrderedDict[str, JudgeSessionContext] = OrderedDict()
+        self._session_timestamps: OrderedDict[str, float] = OrderedDict()
         self._tracer: Optional[Any] = None
+
+        # Session memory config (can be overridden in initialize())
+        self._session_ttl = self.DEFAULT_SESSION_TTL
+        self._max_sessions = self.DEFAULT_MAX_SESSIONS
 
         # Config
         self._default_rubric: str = "agent_behavior"
@@ -147,6 +158,12 @@ class JudgePolicyEngine(PolicyEngine):
                 min_agreement=min_agreement,
             )
             logger.info(f"Ensemble enabled: strategy={strategy}, min_agreement={min_agreement}")
+
+        # Session memory management
+        if "session_ttl" in config:
+            self._session_ttl = int(config["session_ttl"])
+        if "max_sessions" in config:
+            self._max_sessions = int(config["max_sessions"])
 
         # Load custom rubrics if configured
         custom_path = config.get("custom_rubrics_path")
@@ -332,6 +349,7 @@ class JudgePolicyEngine(PolicyEngine):
     async def reset_session(self, session_id: str) -> None:
         """Reset session state."""
         self._sessions.pop(session_id, None)
+        self._session_timestamps.pop(session_id, None)
 
     def get_compiler(
         self,
@@ -353,6 +371,7 @@ class JudgePolicyEngine(PolicyEngine):
     async def shutdown(self) -> None:
         """Cleanup resources."""
         self._sessions.clear()
+        self._session_timestamps.clear()
         logger.info("JudgePolicyEngine shut down")
 
     # =========================================================================
@@ -471,8 +490,41 @@ class JudgePolicyEngine(PolicyEngine):
 
     def _get_or_create_session(self, session_id: str) -> JudgeSessionContext:
         if session_id not in self._sessions:
+            self._evict_stale_sessions()
             self._sessions[session_id] = JudgeSessionContext(session_id=session_id)
+        # Touch for LRU tracking
+        self._session_timestamps[session_id] = time.monotonic()
+        self._session_timestamps.move_to_end(session_id)
+        self._sessions.move_to_end(session_id)
         return self._sessions[session_id]
+
+    def _evict_stale_sessions(self) -> None:
+        """Remove sessions that have exceeded their TTL or breach the max cap."""
+        now = time.monotonic()
+
+        # TTL eviction (oldest-first)
+        stale_ids: list[str] = []
+        for sid, ts in self._session_timestamps.items():
+            if now - ts > self._session_ttl:
+                stale_ids.append(sid)
+            else:
+                break
+
+        for sid in stale_ids:
+            self._sessions.pop(sid, None)
+            self._session_timestamps.pop(sid, None)
+
+        if stale_ids:
+            logger.debug("Evicted %d stale judge sessions (TTL=%ds)", len(stale_ids), self._session_ttl)
+
+        # Hard cap eviction
+        overflow = len(self._sessions) - self._max_sessions
+        if overflow > 0:
+            oldest = list(self._sessions.keys())[:overflow]
+            for sid in oldest:
+                self._sessions.pop(sid, None)
+                self._session_timestamps.pop(sid, None)
+            logger.debug("Evicted %d judge sessions (max=%d)", overflow, self._max_sessions)
 
     def _should_run_conversation_eval(
         self,
