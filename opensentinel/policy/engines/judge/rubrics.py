@@ -102,12 +102,20 @@ def _parse_rubric_dict(data: dict) -> Rubric:
     )
 
 
+def _slugify_rule(index: int, rule: str) -> str:
+    """Convert a rule string into a criterion name like ``rule_1_no_financial_advice``."""
+    # Take first few words, lowercase, replace non-alnum with underscore
+    slug = rule.lower().strip().rstrip(".")
+    slug = "".join(c if c.isalnum() or c == " " else "" for c in slug)
+    words = slug.split()[:6]
+    return f"rule_{index}_{'_'.join(words)}"
+
+
 def create_rules_rubric(rules: List[str], name: str = "inline_policy") -> Rubric:
     """Convert a list of plain-text policy rules into a Rubric.
 
-    Creates a single binary criterion ``policy_compliance`` and injects
-    the rules as ``additional_instructions`` in ``prompt_overrides`` so
-    the judge LLM sees them directly.
+    Creates one binary criterion per rule so that the judge evaluates
+    each rule independently and violations cite the specific rule.
 
     Args:
         rules: Plain-text policy rules, e.g. ``["Never provide financial advice"]``.
@@ -116,26 +124,28 @@ def create_rules_rubric(rules: List[str], name: str = "inline_policy") -> Rubric
     Returns:
         A Rubric ready for registration.
     """
-    instructions = "Evaluate the response against these policy rules:\n"
+    criteria = []
+    instructions = "Evaluate the response against each policy rule independently.\n"
+    instructions += "For each rule, score 1 if the rule is followed, 0 if violated.\n\n"
+
     for i, rule in enumerate(rules, 1):
-        instructions += f"{i}. {rule}\n"
-    instructions += "\nScore 1 if ALL rules are followed, 0 if ANY rule is violated."
+        criterion_name = _slugify_rule(i, rule)
+        criteria.append(RubricCriterion(
+            name=criterion_name,
+            description=f"Rule {i}: {rule}",
+            scale=ScoreScale.BINARY,
+            weight=1.0,
+            fail_threshold=0.5,
+        ))
+        instructions += f"- Criterion `{criterion_name}`: {rule}\n"
 
     return Rubric(
         name=name,
         description="Auto-generated rubric from inline policy rules.",
-        criteria=[
-            RubricCriterion(
-                name="policy_compliance",
-                description="Does the response comply with all policy rules?",
-                scale=ScoreScale.BINARY,
-                weight=1.0,
-                fail_threshold=0.5,
-            )
-        ],
+        criteria=criteria,
         evaluation_type=EvaluationType.POINTWISE,
         scope=EvaluationScope.TURN,
-        pass_threshold=0.8,
+        pass_threshold=1.0,
         fail_action=VerdictAction.BLOCK,
         prompt_overrides={"additional_instructions": instructions},
     )

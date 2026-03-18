@@ -21,16 +21,25 @@ INLINE_POLICY = [
 ]
 
 
+def _get_inline_criteria_names() -> list[str]:
+    """Get criterion names that create_rules_rubric would generate for INLINE_POLICY."""
+    from opensentinel.policy.engines.judge.rubrics import create_rules_rubric
+    rubric = create_rules_rubric(INLINE_POLICY)
+    return [c.name for c in rubric.criteria]
+
+
 def _make_judge_response(score: int, reasoning: str = "", summary: str = "") -> dict:
-    """Build a mock judge response with binary policy_compliance criterion."""
+    """Build a mock judge response with per-rule criteria matching INLINE_POLICY."""
+    criteria_names = _get_inline_criteria_names()
     return {
         "scores": [
             {
-                "criterion": "policy_compliance",
+                "criterion": name,
                 "score": score,
                 "max_score": 1,
                 "reasoning": reasoning,
             }
+            for name in criteria_names
         ],
         "summary": summary,
     }

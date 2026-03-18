@@ -537,6 +537,7 @@ class JudgePolicyEngine(PolicyEngine):
         """Build EngineResult from judge verdicts.
 
         Takes the most restrictive action across all verdicts.
+        When criterion failures exist, the message cites the specific rules.
         """
         action_priority = {
             VerdictAction.PASS: 0,
@@ -552,7 +553,7 @@ class JudgePolicyEngine(PolicyEngine):
         # message = guidance for INTERVENE, reason for BLOCK
         message: Optional[str] = None
         if decision in (Decision.INTERVENE, Decision.BLOCK):
-            message = worst_verdict.summary
+            message = self._build_violation_message(worst_verdict)
 
         any_low_confidence = any(v.low_confidence for v in verdicts)
 
@@ -646,4 +647,29 @@ class JudgePolicyEngine(PolicyEngine):
     def _extract_conversation(self, request_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extract conversation messages from request data."""
         return request_data.get("messages", [])
+
+    def _build_violation_message(self, verdict: JudgeVerdict) -> str:
+        """Build an intervention message citing specific failed criteria.
+
+        When criterion failures exist (e.g. per-rule results), lists each
+        failed rule with the judge's reasoning. Falls back to the verdict
+        summary when no per-criterion failure data is available.
+        """
+        failed_criteria: List[str] = verdict.metadata.get("criterion_failures", [])
+        if not failed_criteria:
+            return verdict.summary or "Policy violation detected."
+
+        # Build a map from criterion name → JudgeScore for lookup
+        score_map = {s.criterion: s for s in verdict.scores}
+
+        parts: List[str] = ["POLICY VIOLATION:"]
+        for criterion_name in failed_criteria:
+            score = score_map.get(criterion_name)
+            if score:
+                desc = score.reasoning or criterion_name
+                parts.append(f"- {criterion_name}: {desc}")
+            else:
+                parts.append(f"- {criterion_name}")
+
+        return "\n".join(parts)
 

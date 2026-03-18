@@ -275,6 +275,99 @@ class TestConversationEvalTrigger:
         assert engine._client.call_judge.call_count >= 2
 
 
+class TestPerRuleCriteria:
+    """Tests for per-rule criteria in inline policies (Step 3)."""
+
+    @pytest.mark.asyncio
+    async def test_one_rule_violated_cites_specific_rule(self, engine, sample_request, sample_response):
+        """3 rules defined, 1 violated → result cites the specific rule."""
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "inline_policy": [
+                "Never provide financial advice",
+                "Be professional",
+                "Do not share personal opinions",
+            ],
+        }
+        await engine.initialize(config)
+
+        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
+        rubric = RubricRegistry.get("inline_policy")
+        criteria_names = [c.name for c in rubric.criteria]
+
+        # Simulate: first rule fails, others pass
+        judge_response = {
+            "scores": [
+                {"criterion": criteria_names[0], "score": 0, "reasoning": "Gave stock tips", "evidence": [], "confidence": 0.9},
+                {"criterion": criteria_names[1], "score": 1, "reasoning": "Professional tone", "evidence": [], "confidence": 0.9},
+                {"criterion": criteria_names[2], "score": 1, "reasoning": "No opinions", "evidence": [], "confidence": 0.9},
+            ],
+            "summary": "Rule violation detected.",
+        }
+        engine._client.call_judge = AsyncMock(return_value=judge_response)
+
+        result = await engine.evaluate_response("s1", sample_response, sample_request)
+        assert result.decision == Decision.BLOCK
+        assert criteria_names[0] in result.message
+        assert "Gave stock tips" in result.message
+
+    @pytest.mark.asyncio
+    async def test_all_rules_pass(self, engine, sample_request, sample_response):
+        """All rules pass → ALLOW."""
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "inline_policy": ["Be helpful", "Be safe"],
+        }
+        await engine.initialize(config)
+
+        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
+        rubric = RubricRegistry.get("inline_policy")
+        criteria_names = [c.name for c in rubric.criteria]
+
+        judge_response = {
+            "scores": [
+                {"criterion": criteria_names[0], "score": 1, "reasoning": "Helpful", "evidence": [], "confidence": 0.9},
+                {"criterion": criteria_names[1], "score": 1, "reasoning": "Safe", "evidence": [], "confidence": 0.9},
+            ],
+            "summary": "All good.",
+        }
+        engine._client.call_judge = AsyncMock(return_value=judge_response)
+
+        result = await engine.evaluate_response("s1", sample_response, sample_request)
+        assert result.decision == Decision.ALLOW
+
+    @pytest.mark.asyncio
+    async def test_multiple_rules_violated_all_listed(self, engine, sample_request, sample_response):
+        """Multiple rules violated → all are listed in the intervention message."""
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "inline_policy": ["No financial advice", "Be professional", "No personal opinions"],
+        }
+        await engine.initialize(config)
+
+        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
+        rubric = RubricRegistry.get("inline_policy")
+        criteria_names = [c.name for c in rubric.criteria]
+
+        judge_response = {
+            "scores": [
+                {"criterion": criteria_names[0], "score": 0, "reasoning": "Gave investment tips", "evidence": [], "confidence": 0.9},
+                {"criterion": criteria_names[1], "score": 1, "reasoning": "OK tone", "evidence": [], "confidence": 0.9},
+                {"criterion": criteria_names[2], "score": 0, "reasoning": "Shared personal view", "evidence": [], "confidence": 0.9},
+            ],
+            "summary": "Multiple violations.",
+        }
+        engine._client.call_judge = AsyncMock(return_value=judge_response)
+
+        result = await engine.evaluate_response("s1", sample_response, sample_request)
+        assert result.decision == Decision.BLOCK
+        # Both failed criteria should be cited
+        assert criteria_names[0] in result.message
+        assert criteria_names[2] in result.message
+        assert "Gave investment tips" in result.message
+        assert "Shared personal view" in result.message
+
+
 class TestInlinePolicy:
     @pytest.mark.asyncio
     async def test_initialize_with_inline_rules(self, engine):
