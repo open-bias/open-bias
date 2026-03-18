@@ -517,8 +517,8 @@ class JudgePolicyEngine(PolicyEngine):
         if stale_ids:
             logger.debug("Evicted %d stale judge sessions (TTL=%ds)", len(stale_ids), self._session_ttl)
 
-        # Hard cap eviction
-        overflow = len(self._sessions) - self._max_sessions
+        # Hard cap eviction (>= because a new session is about to be added)
+        overflow = len(self._sessions) - self._max_sessions + 1
         if overflow > 0:
             oldest = list(self._sessions.keys())[:overflow]
             for sid in oldest:

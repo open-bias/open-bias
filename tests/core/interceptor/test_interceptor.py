@@ -7,11 +7,15 @@ Covers:
 - Async checker lifecycle (fire, collect, cross-request handoff)
 - Async edge cases (task failure, still-running, cleanup, shutdown)
 - Interceptor init categorization (4 buckets)
+- Session TTL and LRU eviction
+- Async task cap enforcement
+- Context passing to async checkers
 """
 
 import asyncio
+import time
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from opensentinel.core.interceptor import (
     CheckerMode,
@@ -558,3 +562,183 @@ class TestInterceptorInit:
 
         assert pre.allowed is True
         assert post.allowed is True
+
+
+# ===========================================================================
+# Session TTL and LRU eviction tests
+# ===========================================================================
+
+
+class TestSessionEviction:
+
+    async def test_session_evicted_after_ttl(self):
+        """Sessions older than TTL are cleaned up on next run_pre_call."""
+        slow_checker = _mock_checker(
+            name="async_ttl",
+            phase=CheckPhase.POST_CALL,
+            mode=CheckerMode.ASYNC,
+            delay=0.01,
+        )
+        interceptor = Interceptor([slow_checker], session_ttl=1)
+
+        await interceptor.run_post_call("old-session", _request(), {"r": 1}, REQUEST_ID)
+        await asyncio.sleep(0.05)
+
+        # Backdate the timestamp to simulate TTL expiry
+        interceptor._session_timestamps["old-session"] = time.monotonic() - 2
+
+        # Next pre_call should evict the stale session
+        await interceptor.run_pre_call("new-session", _request(), REQUEST_ID)
+
+        assert "old-session" not in interceptor._running_tasks
+        assert "old-session" not in interceptor._session_timestamps
+
+    async def test_max_sessions_eviction(self):
+        """When max_sessions is exceeded, oldest sessions are evicted."""
+        interceptor = Interceptor([], max_sessions=2)
+
+        await interceptor.run_pre_call("session-1", _request(), REQUEST_ID)
+        await interceptor.run_pre_call("session-2", _request(), REQUEST_ID)
+        await interceptor.run_pre_call("session-3", _request(), REQUEST_ID)
+
+        assert len(interceptor._session_timestamps) <= 2
+        assert "session-3" in interceptor._session_timestamps
+
+    async def test_cleanup_session_removes_timestamp(self):
+        """cleanup_session removes both tasks and timestamp."""
+        slow_checker = _mock_checker(
+            name="cleanup_ts",
+            phase=CheckPhase.POST_CALL,
+            mode=CheckerMode.ASYNC,
+            delay=5.0,
+        )
+        interceptor = Interceptor([slow_checker])
+
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
+        assert SESSION in interceptor._session_timestamps
+
+        await interceptor.cleanup_session(SESSION)
+
+        assert SESSION not in interceptor._running_tasks
+        assert SESSION not in interceptor._session_timestamps
+
+
+# ===========================================================================
+# Async task cap tests
+# ===========================================================================
+
+
+class TestAsyncTaskCap:
+
+    async def test_task_cap_drops_oldest(self):
+        """When task cap is reached, oldest task is cancelled."""
+        slow_checker = _mock_checker(
+            name="capped",
+            phase=CheckPhase.POST_CALL,
+            mode=CheckerMode.ASYNC,
+            delay=5.0,
+        )
+        interceptor = Interceptor([slow_checker], max_async_tasks_per_session=2)
+
+        # Start 3 tasks — cap is 2, so first should be cancelled
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
+        await interceptor.run_post_call(SESSION, _request(), {"r": 2}, REQUEST_ID)
+        await interceptor.run_post_call(SESSION, _request(), {"r": 3}, REQUEST_ID)
+
+        tasks = interceptor._running_tasks[SESSION]
+        # Should have at most 2 active tasks
+        active = [t for t in tasks if not t.done()]
+        assert len(active) <= 2
+
+        await interceptor.shutdown()
+
+    async def test_completed_tasks_pruned_before_cap_check(self):
+        """Completed tasks are pruned before enforcing the cap."""
+        fast_checker = _mock_checker(
+            name="fast",
+            phase=CheckPhase.POST_CALL,
+            mode=CheckerMode.ASYNC,
+            delay=0.01,
+        )
+        interceptor = Interceptor([fast_checker], max_async_tasks_per_session=2)
+
+        # Start a task and let it complete
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
+        await asyncio.sleep(0.05)
+
+        # Start two more — the completed one should be pruned, so no drop needed
+        await interceptor.run_post_call(SESSION, _request(), {"r": 2}, REQUEST_ID)
+        await interceptor.run_post_call(SESSION, _request(), {"r": 3}, REQUEST_ID)
+
+        # Should not have exceeded cap since first task completed
+        tasks = interceptor._running_tasks.get(SESSION, [])
+        active = [t for t in tasks if not t.done()]
+        assert len(active) <= 2
+
+        await interceptor.shutdown()
+
+
+# ===========================================================================
+# Context passing to async checkers
+# ===========================================================================
+
+
+class TestAsyncContextPassing:
+
+    async def test_async_post_call_receives_context(self):
+        """Async POST_CALL checkers receive context with user_request_id."""
+        received_context: dict[str, Any] = {}
+
+        engine = MagicMock()
+        engine.name = "ctx_checker"
+
+        async def _evaluate(
+            session_id: str,
+            request_data: dict[str, Any],
+            response_data: Any = None,
+            context: dict[str, Any] | None = None,
+        ) -> EngineResult:
+            received_context.update(context or {})
+            return EngineResult(decision=Decision.ALLOW)
+
+        checker = PolicyEngineChecker(
+            engine=engine, phase=CheckPhase.POST_CALL, mode=CheckerMode.ASYNC
+        )
+        checker.evaluate = _evaluate  # type: ignore[assignment]
+        type(checker).name = property(lambda self: "ctx_checker_post_call")  # type: ignore[assignment]
+
+        interceptor = Interceptor([checker])
+
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, "req-ctx-001")
+        await asyncio.sleep(0.05)
+
+        assert received_context.get("user_request_id") == "req-ctx-001"
+
+    async def test_async_pre_call_receives_context(self):
+        """Async PRE_CALL checkers receive context with user_request_id."""
+        received_context: dict[str, Any] = {}
+
+        engine = MagicMock()
+        engine.name = "ctx_pre"
+
+        async def _evaluate(
+            session_id: str,
+            request_data: dict[str, Any],
+            response_data: Any = None,
+            context: dict[str, Any] | None = None,
+        ) -> EngineResult:
+            received_context.update(context or {})
+            return EngineResult(decision=Decision.ALLOW)
+
+        checker = PolicyEngineChecker(
+            engine=engine, phase=CheckPhase.PRE_CALL, mode=CheckerMode.ASYNC
+        )
+        checker.evaluate = _evaluate  # type: ignore[assignment]
+        type(checker).name = property(lambda self: "ctx_pre_pre_call")  # type: ignore[assignment]
+
+        interceptor = Interceptor([checker])
+
+        await interceptor.run_pre_call(SESSION, _request(), "req-ctx-002")
+        await asyncio.sleep(0.05)
+
+        assert received_context.get("user_request_id") == "req-ctx-002"

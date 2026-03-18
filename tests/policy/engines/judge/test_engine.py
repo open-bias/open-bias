@@ -2,6 +2,7 @@
 Tests for JudgePolicyEngine.
 """
 
+import time
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -740,4 +741,70 @@ class TestInterventionEscalation:
         assert session.intervention_count == 0
         assert session.last_intervention_criteria == []
         assert session.criterion_intervention_counts == {}
+
+
+class TestJudgeSessionEviction:
+    """Tests for judge engine session TTL and LRU eviction."""
+
+    def test_session_evicted_after_ttl(self, engine):
+        """Sessions older than TTL are evicted on next _get_or_create_session."""
+        engine._session_ttl = 1  # 1 second
+
+        # Create a session and backdate its timestamp
+        engine._get_or_create_session("old")
+        engine._session_timestamps["old"] = time.monotonic() - 2
+
+        # Creating a new session triggers eviction
+        engine._get_or_create_session("new")
+
+        assert "old" not in engine._sessions
+        assert "old" not in engine._session_timestamps
+        assert "new" in engine._sessions
+
+    def test_max_sessions_eviction(self, engine):
+        """When max_sessions is exceeded, oldest sessions are evicted."""
+        engine._max_sessions = 2
+
+        engine._get_or_create_session("s1")
+        engine._get_or_create_session("s2")
+        engine._get_or_create_session("s3")
+
+        assert len(engine._sessions) <= 2
+        assert "s3" in engine._sessions
+
+    @pytest.mark.asyncio
+    async def test_reset_session_clears_timestamp(self, engine):
+        """reset_session removes the session timestamp too."""
+        engine._get_or_create_session("s1")
+        assert "s1" in engine._session_timestamps
+
+        await engine.reset_session("s1")
+
+        assert "s1" not in engine._sessions
+        assert "s1" not in engine._session_timestamps
+
+    @pytest.mark.asyncio
+    async def test_shutdown_clears_timestamps(self, engine):
+        """shutdown clears all session timestamps."""
+        engine._get_or_create_session("s1")
+        engine._get_or_create_session("s2")
+
+        await engine.shutdown()
+
+        assert len(engine._sessions) == 0
+        assert len(engine._session_timestamps) == 0
+
+    @pytest.mark.asyncio
+    async def test_initialize_with_session_config(self):
+        """Session TTL and max can be configured via initialize()."""
+        engine = JudgePolicyEngine()
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "session_ttl": 300,
+            "max_sessions": 500,
+        }
+        await engine.initialize(config)
+
+        assert engine._session_ttl == 300
+        assert engine._max_sessions == 500
 
