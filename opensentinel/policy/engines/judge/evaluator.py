@@ -15,6 +15,7 @@ from opensentinel.policy.engines.judge.models import (
     RubricCriterion,
     JudgeScore,
     JudgeVerdict,
+    JudgeSessionContext,
     VerdictAction,
     EvaluationScope,
     EvaluationType,
@@ -37,6 +38,7 @@ from opensentinel.policy.engines.judge.prompts import (
     format_conversation_block,
     format_metadata_block,
     format_tool_calls_block,
+    format_session_context_block,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,6 +78,7 @@ class JudgeEvaluator:
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
         tool_calls: Optional[List[Dict[str, Any]]] = None,
+        session_context: Optional[JudgeSessionContext] = None,
     ) -> JudgeVerdict:
         """Evaluate a single turn (latest assistant response).
 
@@ -101,18 +104,21 @@ class JudgeEvaluator:
             return await self._evaluate_with_reference(
                 model_name, rubric, response_content, conversation,
                 reference, metadata, session_id=session_id,
+                session_context=session_context,
             )
 
         criteria_block = format_criteria_block(rubric.criteria)
         conversation_block = format_conversation_block(conversation)
         metadata_block = format_metadata_block(metadata or {})
         tool_calls_block = format_tool_calls_block(tool_calls or [])
+        session_block = format_session_context_block(session_context)
 
         system_prompt = (
             rubric.prompt_overrides.get("system")
             or TURN_POINTWISE_SYSTEM.format(
                 criteria_block=criteria_block,
                 additional_instructions=rubric.prompt_overrides.get("additional_instructions", ""),
+                session_context_block=session_block,
             )
         )
         user_prompt = (
@@ -177,6 +183,7 @@ class JudgeEvaluator:
         full_conversation: List[Dict[str, Any]],
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
+        session_context: Optional[JudgeSessionContext] = None,
     ) -> JudgeVerdict:
         """Evaluate the entire conversation trajectory.
 
@@ -188,6 +195,7 @@ class JudgeEvaluator:
             rubric: Conversation-scope rubric.
             full_conversation: Complete message history.
             metadata: Optional metadata.
+            session_context: Optional session state for evaluation history.
 
         Returns:
             JudgeVerdict with conversation-level scores.
@@ -195,6 +203,7 @@ class JudgeEvaluator:
         criteria_block = format_criteria_block(rubric.criteria)
         conversation_block = format_conversation_block(full_conversation)
         metadata_block = format_metadata_block(metadata or {})
+        session_block = format_session_context_block(session_context)
 
         # Count non-system turns
         turn_count = sum(
@@ -206,6 +215,7 @@ class JudgeEvaluator:
             or CONVERSATION_SYSTEM.format(
                 criteria_block=criteria_block,
                 additional_instructions=rubric.prompt_overrides.get("additional_instructions", ""),
+                session_context_block=session_block,
             )
         )
         user_prompt = (
@@ -358,11 +368,13 @@ class JudgeEvaluator:
         reference: str,
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
+        session_context: Optional[JudgeSessionContext] = None,
     ) -> JudgeVerdict:
         """Evaluate a response against a reference answer."""
         criteria_block = format_criteria_block(rubric.criteria)
         conversation_block = format_conversation_block(conversation)
         metadata_block = format_metadata_block(metadata or {})
+        session_block = format_session_context_block(session_context)
 
         system_prompt = (
             rubric.prompt_overrides.get("system")
@@ -370,6 +382,7 @@ class JudgeEvaluator:
                 criteria_block=criteria_block,
                 ref_scale="1-5",
                 additional_instructions=rubric.prompt_overrides.get("additional_instructions", ""),
+                session_context_block=session_block,
             )
         )
         user_prompt = (

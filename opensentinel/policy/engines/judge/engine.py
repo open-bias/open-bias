@@ -275,6 +275,7 @@ class JudgePolicyEngine(PolicyEngine):
                         metadata=metadata,
                         session_id=session_id,
                         tool_calls=tool_calls,
+                        session_context=session,
                     )
                     self._trace_verdict(session_id, turn_verdict, turn_rubric.name)
                 verdicts.append(turn_verdict)
@@ -319,6 +320,7 @@ class JudgePolicyEngine(PolicyEngine):
                             full_conversation=conversation,
                             metadata=metadata,
                             session_id=session_id,
+                            session_context=session,
                         )
                         self._trace_verdict(session_id, conv_verdict, conv_rubric.name)
                     verdicts.append(conv_verdict)

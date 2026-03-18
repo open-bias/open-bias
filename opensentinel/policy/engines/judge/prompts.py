@@ -11,6 +11,13 @@ All prompts require reasoning BEFORE scores (improves accuracy).
 Output is always structured JSON.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from opensentinel.policy.engines.judge.models import JudgeSessionContext
+
 # =============================================================================
 # TURN-LEVEL POINTWISE EVALUATION
 # =============================================================================
@@ -30,8 +37,11 @@ IMPORTANT:
 - Cite specific parts of the response as evidence
 - Be objective and consistent in your scoring
 - Reason step-by-step before assigning each score
+- If session history is provided, consider prior violations and whether the agent has improved
 
 {additional_instructions}
+
+{session_context_block}
 
 Return ONLY valid JSON in this exact format:
 {{
@@ -129,8 +139,11 @@ IMPORTANT:
 - Score how close the actual response is to the reference
 - A response can be good even if it differs from the reference in style
 - Focus on substance, accuracy, and completeness
+- If session history is provided, consider prior violations and whether the agent has improved
 
 {additional_instructions}
+
+{session_context_block}
 
 Return ONLY valid JSON in this exact format:
 {{
@@ -182,8 +195,11 @@ IMPORTANT:
 - Identify cumulative issues that individual turn evaluations might miss
 - Cite specific turn numbers as evidence (e.g., "In turn 3, the agent...")
 - Consider: goal progression, promise fulfillment, behavioral consistency
+- If session history is provided, consider prior violations and whether the agent has improved
 
 {additional_instructions}
+
+{session_context_block}
 
 Return ONLY valid JSON in this exact format:
 {{
@@ -313,3 +329,56 @@ def format_metadata_block(metadata: dict) -> str:
     for key, value in metadata.items():
         lines.append(f"- {key}: {value}")
     return "\n".join(lines) + "\n\n"
+
+
+def format_session_context_block(session: JudgeSessionContext | None) -> str:
+    """Format prior session evaluation history into a prompt block.
+
+    Gives the judge visibility into prior violations, interventions, and
+    score trends so it can make context-aware evaluations.
+
+    Args:
+        session: JudgeSessionContext with evaluation history, or None.
+
+    Returns:
+        Formatted session history string, or empty string if no history.
+    """
+    if session is None or not session.evaluation_history:
+        return ""
+
+    from opensentinel.policy.engines.judge.models import VerdictAction
+
+    # Cap to last 10 turns to avoid bloating the prompt
+    history = session.evaluation_history[-10:]
+    # Turn offset: if we capped, the first entry is not turn 1
+    offset = len(session.evaluation_history) - len(history)
+
+    lines: list[str] = [
+        f"Prior evaluation history (turn {session.turn_count + 1} of ongoing session):"
+    ]
+
+    for i, verdict in enumerate(history):
+        turn_num = offset + i + 1
+        action = verdict.action
+
+        if action == VerdictAction.PASS:
+            lines.append(f"- Turn {turn_num}: No violations")
+        else:
+            failed = verdict.metadata.get("criterion_failures", [])
+            criteria_desc = ", ".join(failed) if failed else verdict.scope.value
+            line = f"- Turn {turn_num}: {action.value.upper()} — {criteria_desc}"
+            if verdict.summary and action in (
+                VerdictAction.INTERVENE,
+                VerdictAction.BLOCK,
+            ):
+                line += f"\n  Intervention applied: \"{verdict.summary}\""
+            lines.append(line)
+
+    # Score trend
+    if session.score_trend:
+        trend_str = " → ".join(f"{s:.1f}" for s in session.score_trend[-10:])
+        lines.append(f"Score trend: {trend_str}")
+
+    lines.append(f"Active intervention count: {session.intervention_count}")
+
+    return "\n".join(lines)
