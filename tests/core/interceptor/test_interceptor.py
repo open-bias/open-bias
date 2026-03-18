@@ -15,7 +15,7 @@ Covers:
 import asyncio
 import time
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from opensentinel.core.interceptor import (
     CheckerMode,
