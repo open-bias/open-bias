@@ -69,9 +69,6 @@ class Interceptor:
         # Intervention strategy
         self._default_strategy = default_strategy
 
-        # session_id -> pending async results
-        self._pending_async: dict[str, list[_PendingResult]] = {}
-
         # session_id -> running async tasks
         self._running_tasks: dict[str, list[asyncio.Task[_PendingResult]]] = {}
 
@@ -128,6 +125,8 @@ class Interceptor:
                 modified_data = self._apply_intervention(modified_data, result.message, strategy)
 
         # Step 2: Run sync PRE_CALL checkers
+        # Note: INTERVENE results accumulate — each checker sees the already-modified
+        # request_data from prior checkers. Order in checkers list matters.
         for checker in self._sync_pre_call:
             try:
                 result = await checker.evaluate(
@@ -237,10 +236,6 @@ class Interceptor:
         """Collect results from completed async tasks for a session."""
         results: list[_PendingResult] = []
 
-        # Get pending results stored from previous collection
-        if session_id in self._pending_async:
-            results.extend(self._pending_async.pop(session_id))
-
         # Check running tasks
         if session_id in self._running_tasks:
             tasks = self._running_tasks[session_id]
@@ -344,9 +339,6 @@ class Interceptor:
                 if not task.done():
                     task.cancel()
             del self._running_tasks[session_id]
-
-        if session_id in self._pending_async:
-            del self._pending_async[session_id]
 
         logger.debug(f"Cleaned up session {session_id}")
 
