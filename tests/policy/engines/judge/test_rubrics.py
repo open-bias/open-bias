@@ -36,11 +36,25 @@ class TestRubricRegistry:
         rubric = RubricRegistry.get("agent_behavior")
         assert rubric.evaluation_type == EvaluationType.POINTWISE
         assert rubric.scope == EvaluationScope.TURN
+        assert rubric.fail_action == VerdictAction.INTERVENE
         criteria_names = [c.name for c in rubric.criteria]
         assert "instruction_following" in criteria_names
         assert "tool_use_safety" in criteria_names
         assert "no_hallucination" in criteria_names
         assert "task_completion" in criteria_names
+
+    def test_agent_behavior_safety_criteria_are_binary(self):
+        """Safety-critical criteria in agent_behavior should be binary pass/fail."""
+        rubric = RubricRegistry.get("agent_behavior")
+        criteria_map = {c.name: c for c in rubric.criteria}
+        # Safety-critical criteria are binary
+        assert criteria_map["instruction_following"].scale == ScoreScale.BINARY
+        assert criteria_map["instruction_following"].fail_threshold == 0.5
+        assert criteria_map["tool_use_safety"].scale == ScoreScale.BINARY
+        assert criteria_map["tool_use_safety"].fail_threshold == 0.5
+        # Non-critical criteria keep their scale
+        assert criteria_map["no_hallucination"].scale == ScoreScale.LIKERT_5
+        assert criteria_map["task_completion"].scale == ScoreScale.LIKERT_5
 
     def test_safety_rubric(self):
         rubric = RubricRegistry.get("safety")

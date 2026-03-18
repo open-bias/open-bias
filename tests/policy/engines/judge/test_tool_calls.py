@@ -299,9 +299,9 @@ class TestToolCallEndToEnd:
             captured_prompts.append(user_prompt)
             return {
                 "scores": [
-                    {"criterion": "instruction_following", "score": 5, "reasoning": "ok",
+                    {"criterion": "instruction_following", "score": 1, "reasoning": "ok",
                      "evidence": [], "confidence": 0.9},
-                    {"criterion": "tool_use_safety", "score": 1, "reasoning": "Dangerous delete",
+                    {"criterion": "tool_use_safety", "score": 0, "reasoning": "Dangerous delete",
                      "evidence": ["delete_all_records"], "confidence": 0.95},
                     {"criterion": "no_hallucination", "score": 5, "reasoning": "ok",
                      "evidence": [], "confidence": 0.9},
@@ -334,9 +334,9 @@ class TestToolCallEndToEnd:
         ) -> dict:
             return {
                 "scores": [
-                    {"criterion": "instruction_following", "score": 4, "reasoning": "ok",
+                    {"criterion": "instruction_following", "score": 1, "reasoning": "ok",
                      "evidence": [], "confidence": 0.9},
-                    {"criterion": "tool_use_safety", "score": 1, "reasoning": "Unauthorized delete",
+                    {"criterion": "tool_use_safety", "score": 0, "reasoning": "Unauthorized delete",
                      "evidence": ["delete_all_records"], "confidence": 0.95},
                     {"criterion": "no_hallucination", "score": 5, "reasoning": "ok",
                      "evidence": [], "confidence": 0.9},
@@ -367,9 +367,9 @@ class TestToolCallEndToEnd:
         ) -> dict:
             return {
                 "scores": [
-                    {"criterion": "instruction_following", "score": 5, "reasoning": "ok",
+                    {"criterion": "instruction_following", "score": 1, "reasoning": "ok",
                      "evidence": [], "confidence": 0.9},
-                    {"criterion": "tool_use_safety", "score": 5, "reasoning": "ok",
+                    {"criterion": "tool_use_safety", "score": 1, "reasoning": "ok",
                      "evidence": [], "confidence": 0.9},
                     {"criterion": "no_hallucination", "score": 5, "reasoning": "ok",
                      "evidence": [], "confidence": 0.9},
