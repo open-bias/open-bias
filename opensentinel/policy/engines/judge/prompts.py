@@ -292,25 +292,86 @@ def format_conversation_block(messages: list) -> str:
     return "\n\n".join(lines)
 
 
-def format_tool_calls_block(tool_calls: list) -> str:
+_WRITE_VERBS = frozenset({
+    "delete", "remove", "drop", "update", "create", "insert", "write",
+    "modify", "patch", "put", "post", "destroy", "purge", "truncate",
+    "set", "add", "append", "push",
+})
+_DESTRUCTIVE_VERBS = frozenset({
+    "delete", "remove", "drop", "destroy", "purge", "truncate",
+})
+
+
+def _classify_tool_operation(name: str, description: str) -> str:
+    """Classify a tool as read-only, write, or destructive."""
+    lower_name = name.lower()
+    lower_desc = description.lower() if description else ""
+
+    for verb in _DESTRUCTIVE_VERBS:
+        if verb in lower_name or verb in lower_desc:
+            return "destructive (write operation)"
+
+    for verb in _WRITE_VERBS:
+        if verb in lower_name or verb in lower_desc:
+            return "write operation"
+
+    return "read-only"
+
+
+def format_tool_calls_block(
+    tool_calls: list,
+    tool_definitions: dict[str, dict[str, object]] | None = None,
+) -> str:
     """Format tool calls from the response being evaluated.
+
+    When tool_definitions are available, enriches each call with description,
+    operation type classification, and parameter info.
 
     Args:
         tool_calls: List of tool call dicts with 'id', 'function_name',
             and 'arguments' keys.
+        tool_definitions: Optional mapping from tool name to definition
+            dict with 'description' and 'parameters' keys.
 
     Returns:
         Formatted tool calls string, or empty string if no tool calls.
     """
     if not tool_calls:
         return ""
+
+    defs = tool_definitions or {}
+
+    # If no definitions, use compact format
+    if not defs:
+        lines = ["Tool calls in this response:"]
+        for tc in tool_calls:
+            name = tc.get("function_name", "unknown")
+            args = tc.get("arguments", "")
+            tc_id = tc.get("id", "")
+            id_suffix = f" [id: {tc_id}]" if tc_id else ""
+            lines.append(f"- {name}({args}){id_suffix}")
+        return "\n".join(lines) + "\n\n"
+
+    # Enriched format with definitions
     lines = ["Tool calls in this response:"]
-    for tc in tool_calls:
+    for i, tc in enumerate(tool_calls, 1):
         name = tc.get("function_name", "unknown")
         args = tc.get("arguments", "")
-        tc_id = tc.get("id", "")
-        id_suffix = f" [id: {tc_id}]" if tc_id else ""
-        lines.append(f"- {name}({args}){id_suffix}")
+        lines.append(f"\n{i}. {name}({args})")
+
+        defn = defs.get(name, {})
+        description = defn.get("description", "")
+        if description:
+            lines.append(f"   Description: {description}")
+
+        op_type = _classify_tool_operation(name, str(description))
+        lines.append(f"   Type: {op_type}")
+
+        params = defn.get("parameters", {})
+        if isinstance(params, dict) and params:
+            for pname, pdesc in params.items():
+                lines.append(f"   Parameter: {pname} ({pdesc})")
+
     return "\n".join(lines) + "\n\n"
 
 

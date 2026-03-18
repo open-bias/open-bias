@@ -79,6 +79,7 @@ class JudgeEvaluator:
         session_id: Optional[str] = None,
         tool_calls: Optional[List[Dict[str, Any]]] = None,
         session_context: Optional[JudgeSessionContext] = None,
+        tool_definitions: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> JudgeVerdict:
         """Evaluate a single turn (latest assistant response).
 
@@ -93,6 +94,7 @@ class JudgeEvaluator:
             reference: Optional reference/ideal answer.
             metadata: Optional metadata (platform, session info, etc.).
             tool_calls: Optional tool calls from the response.
+            tool_definitions: Optional tool schemas from the request.
 
         Returns:
             JudgeVerdict with per-criterion scores and composite.
@@ -110,7 +112,7 @@ class JudgeEvaluator:
         criteria_block = format_criteria_block(rubric.criteria)
         conversation_block = format_conversation_block(conversation)
         metadata_block = format_metadata_block(metadata or {})
-        tool_calls_block = format_tool_calls_block(tool_calls or [])
+        tool_calls_block = format_tool_calls_block(tool_calls or [], tool_definitions)
         session_block = format_session_context_block(session_context)
 
         system_prompt = (

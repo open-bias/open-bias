@@ -8,6 +8,7 @@ from opensentinel.policy.engines.judge import JudgePolicyEngine
 from opensentinel.policy.engines.judge.prompts import (
     format_conversation_block,
     format_tool_calls_block,
+    _classify_tool_operation,
 )
 from opensentinel.policy.protocols import Decision
 
@@ -386,3 +387,143 @@ class TestToolCallEndToEnd:
             "s1", simple_response, request_with_tool_messages
         )
         assert result.decision == Decision.ALLOW
+
+
+class TestExtractToolDefinitions:
+    """Tests for JudgePolicyEngine._extract_tool_definitions()."""
+
+    @pytest.fixture
+    def engine(self):
+        return JudgePolicyEngine()
+
+    def test_extract_openai_format(self, engine):
+        request = {
+            "messages": [],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "delete_user",
+                        "description": "Permanently removes a user account and all associated data",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "integer", "description": "the user ID to delete"},
+                            },
+                            "required": ["id"],
+                        },
+                    },
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "search_users",
+                        "description": "Search for users by name or email",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {"type": "string", "description": "search term"},
+                            },
+                        },
+                    },
+                },
+            ],
+        }
+        result = engine._extract_tool_definitions(request)
+        assert "delete_user" in result
+        assert result["delete_user"]["description"] == "Permanently removes a user account and all associated data"
+        assert "id" in result["delete_user"]["parameters"]
+        assert "search_users" in result
+        assert "query" in result["search_users"]["parameters"]
+
+    def test_extract_no_tools(self, engine):
+        result = engine._extract_tool_definitions({"messages": []})
+        assert result == {}
+
+    def test_extract_tool_without_description(self, engine):
+        request = {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "do_thing",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "x": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+            ],
+        }
+        result = engine._extract_tool_definitions(request)
+        assert "do_thing" in result
+        assert "description" not in result["do_thing"]
+        assert result["do_thing"]["parameters"]["x"] == "string"
+
+
+class TestClassifyToolOperation:
+    """Tests for the read/write/destructive classification heuristic."""
+
+    def test_destructive_names(self):
+        assert "destructive" in _classify_tool_operation("delete_user", "")
+        assert "destructive" in _classify_tool_operation("remove_record", "")
+        assert "destructive" in _classify_tool_operation("drop_table", "")
+
+    def test_write_names(self):
+        assert "write" in _classify_tool_operation("create_user", "")
+        assert "write" in _classify_tool_operation("update_record", "")
+
+    def test_read_only_names(self):
+        assert _classify_tool_operation("get_user", "") == "read-only"
+        assert _classify_tool_operation("list_items", "") == "read-only"
+        assert _classify_tool_operation("search_docs", "") == "read-only"
+
+    def test_description_overrides_neutral_name(self):
+        assert "destructive" in _classify_tool_operation(
+            "manage_user", "Permanently deletes the user"
+        )
+
+
+class TestFormatToolCallsBlockWithDefinitions:
+    """Tests for format_tool_calls_block with tool definitions."""
+
+    def test_with_definitions(self):
+        tool_calls = [
+            {"function_name": "delete_user", "arguments": '{"id": 123}'},
+        ]
+        definitions = {
+            "delete_user": {
+                "description": "Permanently removes a user account",
+                "parameters": {"id": "integer — the user ID to delete"},
+            },
+        }
+        result = format_tool_calls_block(tool_calls, definitions)
+        assert "1. delete_user" in result
+        assert "Description: Permanently removes a user account" in result
+        assert "destructive" in result
+        assert "Parameter: id (integer — the user ID to delete)" in result
+
+    def test_without_definitions_uses_compact_format(self):
+        tool_calls = [
+            {"id": "c1", "function_name": "foo", "arguments": "{}"},
+        ]
+        result = format_tool_calls_block(tool_calls)
+        assert "- foo({}) [id: c1]" in result
+        assert "Description:" not in result
+
+    def test_mixed_known_and_unknown(self):
+        tool_calls = [
+            {"function_name": "known_tool", "arguments": "{}"},
+            {"function_name": "unknown_tool", "arguments": "{}"},
+        ]
+        definitions = {
+            "known_tool": {"description": "A known tool"},
+        }
+        result = format_tool_calls_block(tool_calls, definitions)
+        assert "Description: A known tool" in result
+        assert "2. unknown_tool" in result
+
+    def test_empty_tool_calls(self):
+        assert format_tool_calls_block([], {"foo": {}}) == ""

@@ -223,6 +223,7 @@ class JudgePolicyEngine(PolicyEngine):
         session = self._get_or_create_session(session_id)
         response_content = self._extract_response_content(response_data)
         tool_calls = self._extract_tool_calls(response_data)
+        tool_definitions = self._extract_tool_definitions(request_data)
         conversation = self._extract_conversation(request_data)
         metadata = (context or {}).get("metadata", {})
 
@@ -276,6 +277,7 @@ class JudgePolicyEngine(PolicyEngine):
                         session_id=session_id,
                         tool_calls=tool_calls,
                         session_context=session,
+                        tool_definitions=tool_definitions,
                     )
                     self._trace_verdict(session_id, turn_verdict, turn_rubric.name)
                 verdicts.append(turn_verdict)
@@ -782,6 +784,49 @@ class JudgePolicyEngine(PolicyEngine):
     def _extract_conversation(self, request_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extract conversation messages from request data."""
         return request_data.get("messages", [])
+
+    def _extract_tool_definitions(
+        self, request_data: Dict[str, Any]
+    ) -> Dict[str, Dict[str, Any]]:
+        """Extract tool schemas from request data (OpenAI API format).
+
+        Returns a dict mapping tool name to its definition summary:
+        {
+            "delete_user": {
+                "description": "Permanently removes a user account",
+                "parameters": {"id": "integer — the user ID to delete"},
+            }
+        }
+        """
+        tools = request_data.get("tools", [])
+        definitions: Dict[str, Dict[str, Any]] = {}
+
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            func = tool.get("function", {})
+            name = func.get("name")
+            if not name:
+                continue
+
+            definition: Dict[str, Any] = {}
+            if func.get("description"):
+                definition["description"] = func["description"]
+
+            params = func.get("parameters", {})
+            if isinstance(params, dict) and "properties" in params:
+                param_summaries: Dict[str, str] = {}
+                for pname, pdef in params["properties"].items():
+                    ptype = pdef.get("type", "any")
+                    pdesc = pdef.get("description", "")
+                    param_summaries[pname] = (
+                        f"{ptype} — {pdesc}" if pdesc else ptype
+                    )
+                definition["parameters"] = param_summaries
+
+            definitions[name] = definition
+
+        return definitions
 
     def _build_violation_message(self, verdict: JudgeVerdict) -> str:
         """Build a natural language intervention message from failed criteria.
