@@ -517,8 +517,10 @@ class SentinelCallback(CustomLogger):
         if interceptor:
             # Extract response content for tracing
             response_content_for_trace = None
-            # ... use the one we just extracted
-            response_content_for_trace = response_content
+            if hasattr(response, "choices") and response.choices:
+                first_choice = response.choices[0]
+                if hasattr(first_choice, "message") and first_choice.message:
+                    response_content_for_trace = first_choice.message.content
 
             if self.tracer:
                 cm = self.tracer.trace_block(

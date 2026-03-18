@@ -259,11 +259,13 @@ class ResponseModificationStrategy:
         if hasattr(response, "choices") and response.choices:
             choice = response.choices[0]
             if hasattr(choice, "message") and choice.message:
-                return getattr(choice.message, "content", None)
+                content: Optional[str] = getattr(choice.message, "content", None)
+                return content
         if isinstance(response, dict):
             choices = response.get("choices", [])
             if choices:
-                return choices[0].get("message", {}).get("content")
+                result: Optional[str] = choices[0].get("message", {}).get("content")
+                return result
         return None
 
     @staticmethod
