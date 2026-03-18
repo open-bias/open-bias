@@ -205,7 +205,10 @@ class Interceptor:
 
         # Step 3: Start async PRE_CALL checkers in background
         for checker in self._async_pre_call:
-            self._start_async_checker(checker, session_id, modified_data, None)
+            self._start_async_checker(
+                checker, session_id, modified_data, None,
+                context={"user_request_id": user_request_id},
+            )
 
         return InterceptionResult(
             allowed=True,
@@ -289,7 +292,8 @@ class Interceptor:
         # Step 2: Start async POST_CALL checkers in background
         for checker in self._async_post_call:
             self._start_async_checker(
-                checker, session_id, request_data, response_data
+                checker, session_id, request_data, response_data,
+                context={"user_request_id": user_request_id},
             )
 
         return InterceptionResult(
@@ -340,6 +344,7 @@ class Interceptor:
         session_id: str,
         request_data: dict[str, Any],
         response_data: Any,
+        context: dict[str, Any] | None = None,
     ) -> None:
         """Start an async checker task in the background."""
 
@@ -349,6 +354,7 @@ class Interceptor:
                     session_id=session_id,
                     request_data=request_data,
                     response_data=response_data,
+                    context=context,
                 )
                 return _PendingResult(checker_name=checker.name, result=result)
             except Exception as e:
