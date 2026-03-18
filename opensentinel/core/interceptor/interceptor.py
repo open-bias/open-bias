@@ -117,12 +117,20 @@ class Interceptor:
                     metadata=all_metadata,
                 )
 
-            if result.decision == Decision.INTERVENE and result.message:
-                logger.info(
-                    f"Applying async intervention from '{pending.checker_name}'"
-                )
-                strategy = result.metadata.get("strategy", self._default_strategy)
-                modified_data = self._apply_intervention(modified_data, result.message, strategy)
+            if result.decision == Decision.INTERVENE:
+                if result.modified_messages is not None:
+                    logger.info(
+                        f"Applying async message replacement from '{pending.checker_name}'"
+                    )
+                    modified_data = dict(modified_data)
+                    modified_data["messages"] = result.modified_messages
+                elif result.message:
+                    logger.info(
+                        f"Applying async intervention from '{pending.checker_name}'"
+                    )
+                    modified_data = self._apply_intervention(
+                        modified_data, result.message, self._default_strategy
+                    )
 
         # Step 2: Run sync PRE_CALL checkers
         # Note: INTERVENE results accumulate — each checker sees the already-modified
@@ -149,14 +157,20 @@ class Interceptor:
                         metadata=all_metadata,
                     )
 
-                if result.decision == Decision.INTERVENE and result.message:
-                    logger.info(
-                        f"Applying sync intervention from '{checker.name}'"
-                    )
-                    strategy = result.metadata.get("strategy", self._default_strategy)
-                    modified_data = self._apply_intervention(
-                        modified_data, result.message, strategy
-                    )
+                if result.decision == Decision.INTERVENE:
+                    if result.modified_messages is not None:
+                        logger.info(
+                            f"Applying sync message replacement from '{checker.name}'"
+                        )
+                        modified_data = dict(modified_data)
+                        modified_data["messages"] = result.modified_messages
+                    elif result.message:
+                        logger.info(
+                            f"Applying sync intervention from '{checker.name}'"
+                        )
+                        modified_data = self._apply_intervention(
+                            modified_data, result.message, self._default_strategy
+                        )
 
             except Exception as e:
                 logger.error(f"Checker '{checker.name}' failed: {e}")
@@ -213,6 +227,13 @@ class Interceptor:
                         allowed=False,
                         message=result.message,
                         metadata=all_metadata,
+                    )
+
+                if result.decision == Decision.INTERVENE:
+                    logger.warning(
+                        f"Sync POST_CALL checker '{checker.name}' returned INTERVENE "
+                        f"— not supported for sync post-call. "
+                        f"Use async mode for deferred interventions."
                     )
 
             except Exception as e:

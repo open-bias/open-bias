@@ -199,8 +199,6 @@ class SentinelProxy:
             logger.info("Running with NeMo Guardrails engine")
         elif engine_type == "fsm" and engine_conf.get("workflow_path"):
             logger.info(f"Running with FSM engine: {engine_conf.get('workflow_path')}")
-        elif engine_type == "composite" and engine_conf.get("engines"):
-            logger.info("Running with Composite policy engine")
         elif engine_type == "judge":
             logger.info("Running with Judge policy engine")
         else:

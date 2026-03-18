@@ -261,8 +261,8 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             if modified:
                 return EngineResult(
                     decision=Decision.INTERVENE,
+                    modified_messages=modified,
                     metadata={
-                        "sanitized_messages": modified,
                         "modification_type": "nemo_input_sanitization",
                     },
                 )

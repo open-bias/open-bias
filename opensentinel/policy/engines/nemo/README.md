@@ -254,32 +254,6 @@ await engine.shutdown()
 
 ---
 
-## Usage with Composite Engine
-
-The NeMo engine is commonly paired with the FSM or LLM engine via the Composite engine for defense-in-depth:
-
-```python
-from opensentinel.policy.engines.composite import CompositePolicyEngine
-
-engine = CompositePolicyEngine()
-await engine.initialize({
-    "engines": [
-        {
-            "type": "fsm",
-            "config": {"config_path": "./workflow.yaml"}
-        },
-        {
-            "type": "nemo",
-            "config": {"config_path": "./nemo_config/"}
-        }
-    ],
-    "strategy": "all"
-})
-# FSM enforces workflow; NeMo catches jailbreaks and unsafe content
-```
-
----
-
 ## Comparison with Other Engines
 
 | Feature | NeMo Engine | FSM Engine | LLM Engine |
