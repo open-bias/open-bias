@@ -11,7 +11,6 @@ from opensentinel.policy.engines.fsm.engine import FSMPolicyEngine
 from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
 from opensentinel.policy.engines.llm.engine import LLMPolicyEngine
 from opensentinel.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
-from opensentinel.policy.engines.composite.engine import CompositePolicyEngine
 from opensentinel.policy.compiler.protocol import PolicyCompiler
 
 
@@ -84,10 +83,3 @@ class TestNemoGetCompiler:
         assert isinstance(compiler, NemoCompiler)
 
 
-class TestCompositeGetCompiler:
-    """CompositePolicyEngine.get_compiler() returns None."""
-
-    def test_returns_none(self):
-        engine = CompositePolicyEngine()
-        compiler = engine.get_compiler()
-        assert compiler is None
