@@ -309,8 +309,8 @@ class TestPerRuleCriteria:
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
         assert result.decision == Decision.BLOCK
-        assert criteria_names[0] in result.message
         assert "Gave stock tips" in result.message
+        assert "Please adjust your response accordingly." in result.message
 
     @pytest.mark.asyncio
     async def test_all_rules_pass(self, engine, sample_request, sample_response):
@@ -362,19 +362,16 @@ class TestPerRuleCriteria:
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
         assert result.decision == Decision.BLOCK
-        # Both failed criteria should be cited
-        assert criteria_names[0] in result.message
-        assert criteria_names[2] in result.message
+        # Both failed criteria reasoning should be cited
         assert "Gave investment tips" in result.message
         assert "Shared personal view" in result.message
 
 
 class TestTargetedInterventionMessages:
-    """Tests for targeted intervention messages (Step 5)."""
+    """Tests for natural-language intervention messages."""
 
-    def test_message_includes_reasoning_evidence_corrective_actions(self, engine):
-        """Intervention message should include criterion name, reasoning,
-        evidence, and corrective action."""
+    def test_message_uses_corrective_actions_as_primary(self, engine):
+        """When corrective_actions is present, it leads the message."""
         verdict = JudgeVerdict(
             scores=[
                 JudgeScore(
@@ -402,13 +399,18 @@ class TestTargetedInterventionMessages:
         )
 
         message = engine._build_violation_message(verdict)
-        assert "tool_use_safety FAILED" in message
-        assert "delete_database()" in message
-        assert "Evidence: delete_database(table='users')" in message
-        assert "REQUIRED: Ask for explicit user confirmation" in message
+        # Natural language — no machine labels
+        assert "POLICY VIOLATION" not in message
+        assert "FAILED" not in message
+        # Corrective action leads
+        assert "Ask for explicit user confirmation" in message
+        # Evidence inlined as quotes
+        assert "delete_database(table='users')" in message
+        # Closing guidance
+        assert "Please adjust your response accordingly." in message
 
     def test_multiple_failures_all_included(self, engine):
-        """Multiple failures should all be included in the message."""
+        """Multiple failures should all be included as separate paragraphs."""
         verdict = JudgeVerdict(
             scores=[
                 JudgeScore(
@@ -438,13 +440,16 @@ class TestTargetedInterventionMessages:
         )
 
         message = engine._build_violation_message(verdict)
-        assert "tool_use_safety FAILED" in message
-        assert "instruction_following FAILED" in message
-        assert "REQUIRED: Do not call destructive APIs" in message
-        assert "REQUIRED: Stay on the assigned topic" in message
+        assert "Do not call destructive APIs" in message
+        assert "Stay on the assigned topic" in message
+        # Separated by paragraph breaks
+        assert "\n\n" in message
+        # No machine labels
+        assert "POLICY VIOLATION" not in message
+        assert "FAILED" not in message
 
-    def test_backward_compat_no_corrective_actions(self, engine):
-        """Old-format judge responses without corrective_actions should still work."""
+    def test_fallback_to_reasoning_without_corrective_actions(self, engine):
+        """Without corrective_actions, uses reasoning + evidence."""
         verdict = JudgeVerdict(
             scores=[
                 JudgeScore(
@@ -452,9 +457,8 @@ class TestTargetedInterventionMessages:
                     score=0,
                     max_score=1,
                     reasoning="Called dangerous API.",
-                    evidence=[],
+                    evidence=["drop_table()"],
                     confidence=0.95,
-                    # No corrective_actions
                 ),
             ],
             composite_score=0.2,
@@ -465,9 +469,10 @@ class TestTargetedInterventionMessages:
         )
 
         message = engine._build_violation_message(verdict)
-        assert "tool_use_safety FAILED" in message
-        assert "Called dangerous API" in message
-        assert "REQUIRED" not in message
+        assert "Called dangerous API." in message
+        assert '"drop_table()"' in message
+        assert "POLICY VIOLATION" not in message
+        assert "FAILED" not in message
 
     def test_no_criterion_failures_falls_back_to_summary(self, engine):
         """When no criterion failures exist, fall back to verdict summary."""
@@ -490,6 +495,33 @@ class TestTargetedInterventionMessages:
 
         message = engine._build_violation_message(verdict)
         assert message == "Minor issues with response quality."
+
+    def test_no_machine_slugs_in_output(self, engine):
+        """Output must not contain criterion slugs like rule_1_*."""
+        verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(
+                    criterion="rule_1_no_financial_advice",
+                    score=0,
+                    max_score=1,
+                    reasoning="The response provides stock recs.",
+                    evidence=["I recommend buying AAPL"],
+                    confidence=0.9,
+                    corrective_actions="Avoid providing financial advice. Suggest consulting a financial advisor.",
+                ),
+            ],
+            composite_score=0.0,
+            action=VerdictAction.INTERVENE,
+            summary="Financial advice violation",
+            judge_model="gpt-4o-mini",
+            metadata={"criterion_failures": ["rule_1_no_financial_advice"]},
+        )
+
+        message = engine._build_violation_message(verdict)
+        assert "rule_1_no_financial_advice" not in message
+        assert "POLICY VIOLATION" not in message
+        assert "FAILED" not in message
+        assert "Avoid providing financial advice" in message
 
 
 class TestInlinePolicy:

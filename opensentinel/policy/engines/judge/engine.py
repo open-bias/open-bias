@@ -782,12 +782,11 @@ class JudgePolicyEngine(PolicyEngine):
         return request_data.get("messages", [])
 
     def _build_violation_message(self, verdict: JudgeVerdict) -> str:
-        """Build an intervention message citing specific failed criteria.
+        """Build a natural language intervention message from failed criteria.
 
-        Constructs a targeted message from per-criterion data including:
-        - Which criteria failed
-        - The judge's reasoning and evidence for each failure
-        - Corrective actions (what the agent should do instead)
+        Prioritizes corrective_actions (judge-generated guidance) over raw
+        criterion data. Produces prose that LLMs can follow, not machine
+        labels.
 
         Falls back to the verdict summary when no per-criterion failure
         data is available.
@@ -796,30 +795,34 @@ class JudgePolicyEngine(PolicyEngine):
         if not failed_criteria:
             return verdict.summary or "Policy violation detected."
 
-        # Build a map from criterion name → JudgeScore for lookup
         score_map = {s.criterion: s for s in verdict.scores}
 
-        parts: List[str] = ["POLICY VIOLATION:"]
+        paragraphs: List[str] = []
         for criterion_name in failed_criteria:
             score = score_map.get(criterion_name)
             if not score:
-                parts.append(f"- {criterion_name}")
+                paragraphs.append(f"A policy criterion was not met ({criterion_name}).")
                 continue
 
-            # Criterion name + reasoning
-            line = f"- {criterion_name} FAILED."
-            if score.reasoning:
-                line += f" {score.reasoning}"
-            parts.append(line)
-
-            # Evidence citations
-            if score.evidence:
-                for e in score.evidence:
-                    parts.append(f"  Evidence: {e}")
-
-            # Corrective actions
             if score.corrective_actions:
-                parts.append(f"  REQUIRED: {score.corrective_actions}")
+                # Lead with the corrective action — this is the most useful signal
+                parts: List[str] = [score.corrective_actions]
+                if score.evidence:
+                    quotes = ", ".join(f'"{e}"' for e in score.evidence)
+                    parts.append(f"(Evidence from your response: {quotes})")
+                paragraphs.append(" ".join(parts))
+            else:
+                # Fall back to reasoning + criterion description
+                parts = []
+                if score.reasoning:
+                    parts.append(score.reasoning.rstrip(".") + ".")
+                if score.evidence:
+                    quotes = ", ".join(f'"{e}"' for e in score.evidence)
+                    parts.append(f"(Evidence: {quotes})")
+                paragraphs.append(" ".join(parts) if parts else
+                                  f"A policy criterion was not met ({criterion_name}).")
 
-        return "\n".join(parts)
+        message = "\n\n".join(paragraphs)
+        message += "\n\nPlease adjust your response accordingly."
+        return message
 
