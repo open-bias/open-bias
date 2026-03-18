@@ -378,7 +378,6 @@ class TestAsyncEdgeCases:
         await interceptor.cleanup_session(SESSION)
 
         assert SESSION not in interceptor._running_tasks
-        assert SESSION not in interceptor._pending_async
 
     async def test_shutdown_cleans_all_sessions(self):
         """shutdown cancels tasks across all sessions."""

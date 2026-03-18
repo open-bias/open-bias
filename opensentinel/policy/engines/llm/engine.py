@@ -254,9 +254,9 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                     })
 
             # 4. Decide intervention
-            intervention_config = None
+            intervention_message = None
             if self._intervention_engine:
-                intervention_config = self._intervention_engine.decide(
+                intervention_message = self._intervention_engine.decide(
                     session, constraint_evals, drift
                 )
 
@@ -278,7 +278,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             decision = Decision.ALLOW
             result_message: Optional[str] = None
 
-            if intervention_config:
+            if intervention_message:
                 from opensentinel.core.intervention.strategies import (
                     InterventionStrategy,
                 )
@@ -289,7 +289,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                     "drift_level": drift.level.value,
                 }
                 result_message = InterventionStrategy.format_message(
-                    intervention_config.message_template, template_context
+                    intervention_message, template_context
                 )
 
             # Critical violations override to BLOCK

@@ -10,7 +10,6 @@ from opensentinel.policy.engines.llm.models import (
     DriftScores,
     DriftLevel,
 )
-from opensentinel.core.intervention.strategies import StrategyType
 from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
 
@@ -83,7 +82,7 @@ class TestNoIntervention:
         """Cooldown should block non-critical interventions."""
         session.turn_count = 3
         session.last_intervention_turn = 2  # Only 1 turn since last
-        
+
         violations = [
             ConstraintEvaluation(
                 constraint_id="test",
@@ -93,20 +92,20 @@ class TestNoIntervention:
                 severity="warning",
             )
         ]
-        
+
         warning_drift = DriftScores(
             temporal=0.4, semantic=0.4, composite=0.4, level=DriftLevel.WARNING
         )
-        
+
         result = engine.decide(session, violations, warning_drift)
         assert result is None
 
 
-class TestViolationMapping:
-    """Tests for severity to strategy mapping."""
+class TestViolationIntervention:
+    """Tests for violation-triggered interventions."""
 
-    def test_warning_maps_to_system_prompt(self, engine, session, nominal_drift):
-        """Warning severity should map to SYSTEM_PROMPT_APPEND."""
+    def test_warning_returns_message(self, engine, session, nominal_drift):
+        """Warning violation returns a message template."""
         violations = [
             ConstraintEvaluation(
                 constraint_id="test",
@@ -116,14 +115,14 @@ class TestViolationMapping:
                 severity="warning",
             )
         ]
-        
-        result = engine.decide(session, violations, nominal_drift)
-        
-        assert result is not None
-        assert result.strategy_type == StrategyType.SYSTEM_PROMPT_APPEND
 
-    def test_error_maps_to_user_message(self, engine, session, nominal_drift):
-        """Error severity should map to USER_MESSAGE_INJECT."""
+        result = engine.decide(session, violations, nominal_drift)
+
+        assert result is not None
+        assert isinstance(result, str)
+
+    def test_error_returns_message(self, engine, session, nominal_drift):
+        """Error violation returns a message template."""
         violations = [
             ConstraintEvaluation(
                 constraint_id="test",
@@ -133,14 +132,14 @@ class TestViolationMapping:
                 severity="error",
             )
         ]
-        
-        result = engine.decide(session, violations, nominal_drift)
-        
-        assert result is not None
-        assert result.strategy_type == StrategyType.USER_MESSAGE_INJECT
 
-    def test_critical_maps_to_user_message_inject(self, engine, session, nominal_drift):
-        """Critical severity should map to USER_MESSAGE_INJECT."""
+        result = engine.decide(session, violations, nominal_drift)
+
+        assert result is not None
+        assert isinstance(result, str)
+
+    def test_critical_returns_message(self, engine, session, nominal_drift):
+        """Critical violation returns a message template."""
         violations = [
             ConstraintEvaluation(
                 constraint_id="test",
@@ -154,25 +153,25 @@ class TestViolationMapping:
         result = engine.decide(session, violations, nominal_drift)
 
         assert result is not None
-        assert result.strategy_type == StrategyType.USER_MESSAGE_INJECT
+        assert isinstance(result, str)
 
 
-class TestDriftMapping:
-    """Tests for drift level to strategy mapping."""
+class TestDriftIntervention:
+    """Tests for drift-triggered interventions."""
 
     def test_warning_drift(self, engine, session):
-        """Warning drift should map to SYSTEM_PROMPT_APPEND."""
+        """Warning drift returns a message template."""
         drift = DriftScores(
             temporal=0.4, semantic=0.5, composite=0.45, level=DriftLevel.WARNING
         )
-        
+
         result = engine.decide(session, [], drift)
-        
+
         assert result is not None
-        assert result.strategy_type == StrategyType.SYSTEM_PROMPT_APPEND
+        assert isinstance(result, str)
 
     def test_intervention_drift(self, engine, session):
-        """Intervention drift should map to USER_MESSAGE_INJECT."""
+        """Intervention drift returns a message template."""
         drift = DriftScores(
             temporal=0.7, semantic=0.7, composite=0.7, level=DriftLevel.INTERVENTION
         )
@@ -180,18 +179,18 @@ class TestDriftMapping:
         result = engine.decide(session, [], drift)
 
         assert result is not None
-        assert result.strategy_type == StrategyType.USER_MESSAGE_INJECT
+        assert isinstance(result, str)
 
     def test_critical_drift(self, engine, session):
-        """Critical drift should map to USER_MESSAGE_INJECT."""
+        """Critical drift returns a message template."""
         drift = DriftScores(
             temporal=0.9, semantic=0.9, composite=0.9, level=DriftLevel.CRITICAL
         )
-        
+
         result = engine.decide(session, [], drift)
 
         assert result is not None
-        assert result.strategy_type == StrategyType.USER_MESSAGE_INJECT
+        assert isinstance(result, str)
 
 
 class TestCriticalBypassCooldown:
@@ -201,7 +200,7 @@ class TestCriticalBypassCooldown:
         """Critical violations should bypass cooldown."""
         session.turn_count = 3
         session.last_intervention_turn = 2  # Cooldown active
-        
+
         violations = [
             ConstraintEvaluation(
                 constraint_id="test",
@@ -211,12 +210,12 @@ class TestCriticalBypassCooldown:
                 severity="critical",
             )
         ]
-        
+
         result = engine.decide(session, violations, DriftScores.from_scores(0.1, 0.1))
-        
+
         # Should NOT be None despite cooldown
         assert result is not None
-        assert result.strategy_type == StrategyType.USER_MESSAGE_INJECT
+        assert isinstance(result, str)
 
 
 class TestSelfCorrection:
@@ -247,7 +246,7 @@ class TestEscalation:
         drift = DriftScores(
             temporal=0.9, semantic=0.9, composite=0.9, level=DriftLevel.CRITICAL
         )
-        
+
         assert engine.should_escalate(drift) is True
 
     def test_should_not_escalate_lower(self, engine):
@@ -255,5 +254,5 @@ class TestEscalation:
         drift = DriftScores(
             temporal=0.5, semantic=0.5, composite=0.5, level=DriftLevel.WARNING
         )
-        
+
         assert engine.should_escalate(drift) is False

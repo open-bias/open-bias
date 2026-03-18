@@ -13,7 +13,7 @@ Strategies define HOW to modify LLM requests when deviation is detected:
 """
 
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Dict, Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
@@ -35,8 +35,7 @@ class InterventionConfig:
     strategy_type: StrategyType
     message_template: str
     priority: int = 0  # Higher = more important
-    max_applications: int = 3  # Max times to apply before escalating
-    escalation_strategy: Optional[StrategyType] = None
+    max_applications: int = 3  # Informational; used by engine handlers for config display
 
 
 class InterventionStrategy(ABC):
