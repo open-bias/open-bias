@@ -362,10 +362,25 @@ class Interceptor:
                     ),
                 )
 
-        task = asyncio.create_task(run_checker())
-
+        # Enforce per-session async task cap
         if session_id not in self._running_tasks:
             self._running_tasks[session_id] = []
+
+        tasks = self._running_tasks[session_id]
+        # Prune completed tasks before checking the cap
+        self._running_tasks[session_id] = [t for t in tasks if not t.done()]
+        tasks = self._running_tasks[session_id]
+
+        if len(tasks) >= self._max_async_tasks:
+            logger.warning(
+                f"Async task cap ({self._max_async_tasks}) reached for session "
+                f"{session_id}, dropping oldest task"
+            )
+            oldest = tasks.pop(0)
+            if not oldest.done():
+                oldest.cancel()
+
+        task = asyncio.create_task(run_checker())
         self._running_tasks[session_id].append(task)
 
         logger.debug(f"Started async checker '{checker.name}' for session {session_id}")
