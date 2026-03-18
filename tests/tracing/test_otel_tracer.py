@@ -71,10 +71,10 @@ def test_log_event(mock_otel):
 def test_log_llm_call(mock_otel):
     config = OTelConfig(enabled=True, exporter_type="otlp")
     tracer = SentinelTracer(config)
-    
+
     mock_span = MagicMock()
-    mock_otel["tracer"].start_as_current_span.return_value.__enter__.return_value = mock_span
-    
+    mock_otel["tracer"].start_span.return_value = mock_span
+
     tracer.log_llm_call(
         session_id="session-1",
         model="gpt-4",
@@ -82,22 +82,28 @@ def test_log_llm_call(mock_otel):
         response_content="hello",
         usage={"total_tokens": 100}
     )
-    
-    # Verify the span was created with correct name
-    mock_otel["tracer"].start_as_current_span.assert_called()
-    call_args = mock_otel["tracer"].start_as_current_span.call_args
-    assert call_args[0][0] == "llm-call"  # First positional arg is the name
-    
-    # Check that required attributes are present (we added GenAI semantic conventions)
-    attrs = call_args[1]["attributes"]
+
+    # log_llm_call uses start_span (not start_as_current_span)
+    # Find the "llm-call" start_span call (there may also be session span calls)
+    llm_call = None
+    for call in mock_otel["tracer"].start_span.call_args_list:
+        if call[0] and call[0][0] == "llm-call":
+            llm_call = call
+            break
+        elif call[1].get("name") == "llm-call":
+            llm_call = call
+            break
+    assert llm_call is not None, "start_span('llm-call', ...) not found"
+
+    # Check that required attributes are present (GenAI semantic conventions)
+    attrs = llm_call[1]["attributes"]
     assert attrs["opensentinel.session_id"] == "session-1"
     assert attrs["llm.model"] == "gpt-4"
     assert attrs["llm.requested_model"] == "gpt-4"
     assert attrs["llm.message_count"] == 1
-    # New GenAI semantic convention attributes
     assert attrs["gen_ai.request.model"] == "gpt-4"
     assert attrs["gen_ai.response.model"] == "gpt-4"
-    
+
     # Verify span attributes were set for response/usage
     mock_span.set_attribute.assert_any_call("llm.total_tokens", 100)
 

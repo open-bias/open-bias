@@ -67,14 +67,17 @@ class TestModelDefaults:
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        monkeypatch.delenv("TOGETHERAI_API_KEY", raising=False)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
 
         settings = SentinelSettings(_env_file=None)
 
         with pytest.raises(ValueError, match="No LLM API keys detected"):
             settings.validate()
 
-    def test_api_key_without_model_does_not_autodetect(self, monkeypatch):
-        """API keys alone should NOT auto-populate proxy.default_model."""
+    def test_api_key_auto_detects_model(self, monkeypatch):
+        """API keys should auto-populate proxy.default_model via _auto_detect_model."""
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
@@ -82,8 +85,8 @@ class TestModelDefaults:
 
         settings = SentinelSettings(_env_file=None)
 
-        # Model stays None — CLI writes it to YAML, settings just reads
-        assert settings.proxy.default_model is None
+        # Model auto-detected from available API key
+        assert settings.proxy.default_model == "gemini/gemini-2.5-flash"
 
     def test_explicit_model_overrides_autodetect(self, monkeypatch):
         """Explicitly set model should be preserved."""
