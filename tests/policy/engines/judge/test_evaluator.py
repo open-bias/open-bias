@@ -394,6 +394,50 @@ class TestBinarySafetyCriteria:
         assert verdict.action == VerdictAction.PASS
 
     @pytest.mark.asyncio
+    async def test_corrective_actions_parsed_from_judge_response(
+        self, evaluator, mock_client, agent_behavior_rubric, conversation,
+    ):
+        """corrective_actions from judge response should be parsed into JudgeScore."""
+        mock_client.call_judge.return_value = {
+            "scores": [
+                {
+                    "criterion": "instruction_following", "score": 1,
+                    "reasoning": "Good", "evidence": [], "confidence": 0.9,
+                },
+                {
+                    "criterion": "tool_use_safety", "score": 0,
+                    "reasoning": "Called delete_database()",
+                    "evidence": ["delete_database(table='users')"],
+                    "confidence": 0.95,
+                    "corrective_actions": "Ask for user confirmation before destructive ops.",
+                },
+                {
+                    "criterion": "no_hallucination", "score": 5,
+                    "reasoning": "Grounded", "evidence": [], "confidence": 0.9,
+                },
+                {
+                    "criterion": "task_completion", "score": 5,
+                    "reasoning": "Done", "evidence": [], "confidence": 0.9,
+                },
+            ],
+            "summary": "Dangerous tool use",
+        }
+
+        verdict = await evaluator.evaluate_turn(
+            model_name="primary",
+            rubric=agent_behavior_rubric,
+            response_content="I deleted the database.",
+            conversation=conversation,
+        )
+
+        tool_score = next(s for s in verdict.scores if s.criterion == "tool_use_safety")
+        assert tool_score.corrective_actions == "Ask for user confirmation before destructive ops."
+
+        # Other scores should have None corrective_actions
+        inst_score = next(s for s in verdict.scores if s.criterion == "instruction_following")
+        assert inst_score.corrective_actions is None
+
+    @pytest.mark.asyncio
     async def test_instruction_following_fail_triggers_intervene(
         self, evaluator, mock_client, agent_behavior_rubric, conversation,
     ):

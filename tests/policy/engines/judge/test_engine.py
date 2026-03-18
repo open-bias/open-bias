@@ -368,6 +368,129 @@ class TestPerRuleCriteria:
         assert "Shared personal view" in result.message
 
 
+class TestTargetedInterventionMessages:
+    """Tests for targeted intervention messages (Step 5)."""
+
+    def test_message_includes_reasoning_evidence_corrective_actions(self, engine):
+        """Intervention message should include criterion name, reasoning,
+        evidence, and corrective action."""
+        verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(
+                    criterion="tool_use_safety",
+                    score=0,
+                    max_score=1,
+                    reasoning="The agent called delete_database() which is unauthorized.",
+                    evidence=["delete_database(table='users')"],
+                    confidence=0.95,
+                    corrective_actions="Ask for explicit user confirmation before destructive operations.",
+                ),
+                JudgeScore(
+                    criterion="instruction_following",
+                    score=1,
+                    max_score=1,
+                    reasoning="Good",
+                    confidence=0.9,
+                ),
+            ],
+            composite_score=0.3,
+            action=VerdictAction.INTERVENE,
+            summary="Dangerous tool use detected",
+            judge_model="gpt-4o-mini",
+            metadata={"criterion_failures": ["tool_use_safety"]},
+        )
+
+        message = engine._build_violation_message(verdict)
+        assert "tool_use_safety FAILED" in message
+        assert "delete_database()" in message
+        assert "Evidence: delete_database(table='users')" in message
+        assert "REQUIRED: Ask for explicit user confirmation" in message
+
+    def test_multiple_failures_all_included(self, engine):
+        """Multiple failures should all be included in the message."""
+        verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(
+                    criterion="tool_use_safety",
+                    score=0,
+                    max_score=1,
+                    reasoning="Called dangerous API.",
+                    evidence=["delete_all()"],
+                    confidence=0.95,
+                    corrective_actions="Do not call destructive APIs without confirmation.",
+                ),
+                JudgeScore(
+                    criterion="instruction_following",
+                    score=0,
+                    max_score=1,
+                    reasoning="Ignored task constraints.",
+                    evidence=["off-topic response"],
+                    confidence=0.9,
+                    corrective_actions="Stay on the assigned topic.",
+                ),
+            ],
+            composite_score=0.1,
+            action=VerdictAction.BLOCK,
+            summary="Multiple violations",
+            judge_model="gpt-4o-mini",
+            metadata={"criterion_failures": ["tool_use_safety", "instruction_following"]},
+        )
+
+        message = engine._build_violation_message(verdict)
+        assert "tool_use_safety FAILED" in message
+        assert "instruction_following FAILED" in message
+        assert "REQUIRED: Do not call destructive APIs" in message
+        assert "REQUIRED: Stay on the assigned topic" in message
+
+    def test_backward_compat_no_corrective_actions(self, engine):
+        """Old-format judge responses without corrective_actions should still work."""
+        verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(
+                    criterion="tool_use_safety",
+                    score=0,
+                    max_score=1,
+                    reasoning="Called dangerous API.",
+                    evidence=[],
+                    confidence=0.95,
+                    # No corrective_actions
+                ),
+            ],
+            composite_score=0.2,
+            action=VerdictAction.INTERVENE,
+            summary="Violation detected",
+            judge_model="gpt-4o-mini",
+            metadata={"criterion_failures": ["tool_use_safety"]},
+        )
+
+        message = engine._build_violation_message(verdict)
+        assert "tool_use_safety FAILED" in message
+        assert "Called dangerous API" in message
+        assert "REQUIRED" not in message
+
+    def test_no_criterion_failures_falls_back_to_summary(self, engine):
+        """When no criterion failures exist, fall back to verdict summary."""
+        verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(
+                    criterion="quality",
+                    score=2,
+                    max_score=5,
+                    reasoning="Low quality",
+                    confidence=0.8,
+                ),
+            ],
+            composite_score=0.25,
+            action=VerdictAction.WARN,
+            summary="Minor issues with response quality.",
+            judge_model="gpt-4o-mini",
+            metadata={},
+        )
+
+        message = engine._build_violation_message(verdict)
+        assert message == "Minor issues with response quality."
+
+
 class TestInlinePolicy:
     @pytest.mark.asyncio
     async def test_initialize_with_inline_rules(self, engine):

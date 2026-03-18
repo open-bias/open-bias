@@ -90,6 +90,7 @@ class JudgeScore:
     reasoning: str
     evidence: List[str] = field(default_factory=list)
     confidence: float = 1.0
+    corrective_actions: Optional[str] = None
 
     @property
     def normalized(self) -> float:
@@ -129,6 +130,7 @@ class JudgeVerdict:
                     "reasoning": s.reasoning,
                     "evidence": s.evidence,
                     "confidence": s.confidence,
+                    "corrective_actions": s.corrective_actions,
                 }
                 for s in self.scores
             ],

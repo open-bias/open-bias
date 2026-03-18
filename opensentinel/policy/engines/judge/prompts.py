@@ -41,7 +41,8 @@ Return ONLY valid JSON in this exact format:
       "reasoning": "<your step-by-step analysis>",
       "evidence": ["<quote or reference from the response>"],
       "score": <integer>,
-      "confidence": <float 0.0-1.0>
+      "confidence": <float 0.0-1.0>,
+      "corrective_actions": "<what the agent should do instead, if the score indicates a failure; omit or null if passing>"
     }}
   ],
   "summary": "<1-2 sentence overall assessment>"
@@ -139,7 +140,8 @@ Return ONLY valid JSON in this exact format:
       "reasoning": "<your step-by-step analysis>",
       "evidence": ["<quote or reference from the response>"],
       "score": <integer>,
-      "confidence": <float 0.0-1.0>
+      "confidence": <float 0.0-1.0>,
+      "corrective_actions": "<what the agent should do instead, if the score indicates a failure; omit or null if passing>"
     }}
   ],
   "summary": "<1-2 sentence overall assessment>"
@@ -191,7 +193,8 @@ Return ONLY valid JSON in this exact format:
       "reasoning": "<analysis across the full conversation>",
       "evidence": ["<turn N: specific observation>"],
       "score": <integer>,
-      "confidence": <float 0.0-1.0>
+      "confidence": <float 0.0-1.0>,
+      "corrective_actions": "<what the agent should do instead, if the score indicates a failure; omit or null if passing>"
     }}
   ],
   "summary": "<1-2 sentence trajectory assessment>"

@@ -448,6 +448,7 @@ class JudgeEvaluator:
                 reasoning=raw_score.get("reasoning", ""),
                 evidence=raw_score.get("evidence", []),
                 confidence=float(raw_score.get("confidence", 1.0)),
+                corrective_actions=raw_score.get("corrective_actions"),
             ))
 
         # Fill in missing criteria with minimum scores
@@ -494,6 +495,7 @@ class JudgeEvaluator:
                 reasoning=raw_score.get("reasoning", ""),
                 evidence=raw_score.get("evidence", []),
                 confidence=float(raw_score.get("confidence", 1.0)),
+                corrective_actions=raw_score.get("corrective_actions"),
             ))
 
         return scores

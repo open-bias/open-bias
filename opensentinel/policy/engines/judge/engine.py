@@ -450,6 +450,7 @@ class JudgePolicyEngine(PolicyEngine):
                         "normalized": s.normalized,
                         "confidence": s.confidence,
                         "reasoning": s.reasoning,
+                        "corrective_actions": s.corrective_actions,
                     }
                     for s in verdict.scores
                 ],
@@ -651,9 +652,13 @@ class JudgePolicyEngine(PolicyEngine):
     def _build_violation_message(self, verdict: JudgeVerdict) -> str:
         """Build an intervention message citing specific failed criteria.
 
-        When criterion failures exist (e.g. per-rule results), lists each
-        failed rule with the judge's reasoning. Falls back to the verdict
-        summary when no per-criterion failure data is available.
+        Constructs a targeted message from per-criterion data including:
+        - Which criteria failed
+        - The judge's reasoning and evidence for each failure
+        - Corrective actions (what the agent should do instead)
+
+        Falls back to the verdict summary when no per-criterion failure
+        data is available.
         """
         failed_criteria: List[str] = verdict.metadata.get("criterion_failures", [])
         if not failed_criteria:
@@ -665,11 +670,24 @@ class JudgePolicyEngine(PolicyEngine):
         parts: List[str] = ["POLICY VIOLATION:"]
         for criterion_name in failed_criteria:
             score = score_map.get(criterion_name)
-            if score:
-                desc = score.reasoning or criterion_name
-                parts.append(f"- {criterion_name}: {desc}")
-            else:
+            if not score:
                 parts.append(f"- {criterion_name}")
+                continue
+
+            # Criterion name + reasoning
+            line = f"- {criterion_name} FAILED."
+            if score.reasoning:
+                line += f" {score.reasoning}"
+            parts.append(line)
+
+            # Evidence citations
+            if score.evidence:
+                for e in score.evidence:
+                    parts.append(f"  Evidence: {e}")
+
+            # Corrective actions
+            if score.corrective_actions:
+                parts.append(f"  REQUIRED: {score.corrective_actions}")
 
         return "\n".join(parts)
 
