@@ -561,3 +561,183 @@ class TestInlinePolicy:
         from opensentinel.policy.engines.judge.rubrics import RubricRegistry
         assert RubricRegistry.get("agent_behavior") is not None
 
+
+class TestInterventionEscalation:
+    """Tests for intervention tracking and escalation (Step 6)."""
+
+    @pytest.mark.asyncio
+    async def test_first_violation_intervene_second_same_violation_block(
+        self, engine, sample_request, sample_response
+    ):
+        """First violation → INTERVENE, second same criterion violation → BLOCK."""
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "inline_policy": ["Never delete user data"],
+            "conversation_rubric": None,
+        }
+        await engine.initialize(config)
+
+        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
+        rubric = RubricRegistry.get("inline_policy")
+        criteria_names = [c.name for c in rubric.criteria]
+
+        # First violation: should be BLOCK (inline policy fail_action)
+        # but the escalation shouldn't trigger yet
+        fail_response = {
+            "scores": [
+                {
+                    "criterion": criteria_names[0],
+                    "score": 0,
+                    "reasoning": "Deleted user records",
+                    "evidence": [],
+                    "confidence": 0.9,
+                },
+            ],
+            "summary": "Policy violation.",
+        }
+        engine._client.call_judge = AsyncMock(return_value=fail_response)
+
+        result1 = await engine.evaluate_response("s1", sample_response, sample_request)
+        # First violation — inline policy defaults to BLOCK on fail, so decision is BLOCK
+        # but no escalation metadata
+        assert result1.decision == Decision.BLOCK
+        assert result1.metadata.get("escalated") is not True
+
+        # Second violation on same criterion → should escalate
+        result2 = await engine.evaluate_response("s1", sample_response, sample_request)
+        assert result2.decision == Decision.BLOCK
+        assert result2.metadata.get("escalated") is True
+        assert "repeat" in result2.metadata.get("escalation_reason", "").lower()
+        assert "ESCALATED" in result2.message
+
+    @pytest.mark.asyncio
+    async def test_different_criteria_violations_no_cross_escalation(
+        self, engine, sample_request, sample_response
+    ):
+        """Different criteria violations don't cross-escalate."""
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "inline_policy": ["No financial advice", "Be professional"],
+            "conversation_rubric": None,
+        }
+        await engine.initialize(config)
+
+        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
+        rubric = RubricRegistry.get("inline_policy")
+        criteria_names = [c.name for c in rubric.criteria]
+
+        # First violation: criterion 0 fails
+        fail_response_1 = {
+            "scores": [
+                {"criterion": criteria_names[0], "score": 0, "reasoning": "Gave tips", "evidence": [], "confidence": 0.9},
+                {"criterion": criteria_names[1], "score": 1, "reasoning": "OK", "evidence": [], "confidence": 0.9},
+            ],
+            "summary": "Violation.",
+        }
+        engine._client.call_judge = AsyncMock(return_value=fail_response_1)
+        result1 = await engine.evaluate_response("s1", sample_response, sample_request)
+        assert result1.decision == Decision.BLOCK
+
+        # Second violation: different criterion (1) fails, criterion 0 passes
+        fail_response_2 = {
+            "scores": [
+                {"criterion": criteria_names[0], "score": 1, "reasoning": "OK now", "evidence": [], "confidence": 0.9},
+                {"criterion": criteria_names[1], "score": 0, "reasoning": "Rude", "evidence": [], "confidence": 0.9},
+            ],
+            "summary": "Different violation.",
+        }
+        engine._client.call_judge = AsyncMock(return_value=fail_response_2)
+        result2 = await engine.evaluate_response("s1", sample_response, sample_request)
+        # Should NOT escalate — different criterion
+        assert result2.metadata.get("escalated") is not True
+
+    @pytest.mark.asyncio
+    async def test_intervention_count_cap_triggers_block(
+        self, engine, sample_request, sample_response
+    ):
+        """Total intervention count exceeding cap (3) triggers BLOCK."""
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "inline_policy": [
+                "Rule A",
+                "Rule B",
+                "Rule C",
+                "Rule D",
+                "Rule E",
+            ],
+            "conversation_rubric": None,
+        }
+        await engine.initialize(config)
+
+        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
+        rubric = RubricRegistry.get("inline_policy")
+        criteria_names = [c.name for c in rubric.criteria]
+
+        # Simulate 4 different criterion violations (each unique, no repeat escalation)
+        for i in range(4):
+            scores = []
+            for j, name in enumerate(criteria_names):
+                scores.append({
+                    "criterion": name,
+                    "score": 0 if j == i else 1,
+                    "reasoning": f"{'Fail' if j == i else 'Pass'}",
+                    "evidence": [],
+                    "confidence": 0.9,
+                })
+            response = {"scores": scores, "summary": f"Violation {i+1}."}
+            engine._client.call_judge = AsyncMock(return_value=response)
+            result = await engine.evaluate_response("s1", sample_response, sample_request)
+
+        # 4th violation should have triggered the count cap (>3)
+        assert result.decision == Decision.BLOCK
+        assert result.metadata.get("escalated") is True
+        assert "intervention_count_exceeded" in result.metadata.get("escalation_reason", "")
+
+    def test_session_context_tracks_intervention_criteria(self):
+        """JudgeSessionContext correctly tracks intervention criteria."""
+        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+        session = JudgeSessionContext(session_id="test")
+
+        # Record a verdict with criterion failures
+        verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(criterion="safety", score=0, max_score=1, reasoning="Bad"),
+            ],
+            composite_score=0.0,
+            action=VerdictAction.INTERVENE,
+            summary="Unsafe",
+            judge_model="test",
+            metadata={"criterion_failures": ["safety"]},
+        )
+        session.record_verdict(verdict)
+
+        assert session.intervention_count == 1
+        assert session.last_intervention_criteria == ["safety"]
+        assert session.criterion_intervention_counts == {"safety": 1}
+
+        # Record a second intervention on the same criterion
+        session.record_verdict(verdict)
+        assert session.intervention_count == 2
+        assert session.criterion_intervention_counts == {"safety": 2}
+
+    def test_session_context_no_tracking_on_pass(self):
+        """Passing verdicts should not affect intervention tracking."""
+        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+        session = JudgeSessionContext(session_id="test")
+
+        verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(criterion="safety", score=1, max_score=1, reasoning="Good"),
+            ],
+            composite_score=1.0,
+            action=VerdictAction.PASS,
+            summary="OK",
+            judge_model="test",
+            metadata={},
+        )
+        session.record_verdict(verdict)
+
+        assert session.intervention_count == 0
+        assert session.last_intervention_criteria == []
+        assert session.criterion_intervention_counts == {}
+

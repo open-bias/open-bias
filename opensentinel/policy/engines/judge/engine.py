@@ -261,7 +261,6 @@ class JudgePolicyEngine(PolicyEngine):
                     )
                     self._trace_verdict(session_id, turn_verdict, turn_rubric.name)
                 verdicts.append(turn_verdict)
-                session.record_verdict(turn_verdict)
             except Exception as e:
                 logger.error(f"Turn evaluation failed: {e}")
         else:
@@ -306,7 +305,6 @@ class JudgePolicyEngine(PolicyEngine):
                         )
                         self._trace_verdict(session_id, conv_verdict, conv_rubric.name)
                     verdicts.append(conv_verdict)
-                    session.record_verdict(conv_verdict)
                 except Exception as e:
                     logger.error(f"Conversation evaluation failed: {e}")
 
@@ -314,7 +312,15 @@ class JudgePolicyEngine(PolicyEngine):
         if not verdicts:
             return EngineResult(decision=Decision.ALLOW)
 
-        return self._build_result(verdicts, session)
+        # Build result before recording verdicts so escalation checks
+        # compare against prior session state, not the current turn's own data
+        result = self._build_result(verdicts, session)
+
+        # 4. Record verdicts to session after result is built
+        for v in verdicts:
+            session.record_verdict(v)
+
+        return result
 
     async def get_session_state(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get current session state for debugging/tracing."""
@@ -538,7 +544,9 @@ class JudgePolicyEngine(PolicyEngine):
         """Build EngineResult from judge verdicts.
 
         Takes the most restrictive action across all verdicts.
-        When criterion failures exist, the message cites the specific rules.
+        Applies escalation when repeat violations are detected:
+        - Same criterion fails after prior intervention → escalate to BLOCK
+        - Total intervention count exceeds cap (3) → auto-block
         """
         action_priority = {
             VerdictAction.PASS: 0,
@@ -551,10 +559,18 @@ class JudgePolicyEngine(PolicyEngine):
         worst_verdict = max(verdicts, key=lambda v: action_priority.get(v.action, 0))
         decision = _VERDICT_MAP[worst_verdict.action]
 
+        # Check for escalation conditions
+        escalation_info = self._check_escalation(worst_verdict, session)
+
+        if escalation_info["should_escalate"] and decision != Decision.BLOCK:
+            decision = Decision.BLOCK
+
         # message = guidance for INTERVENE, reason for BLOCK
         message: Optional[str] = None
         if decision in (Decision.INTERVENE, Decision.BLOCK):
             message = self._build_violation_message(worst_verdict)
+            if escalation_info["should_escalate"]:
+                message = escalation_info["escalation_prefix"] + "\n" + message
 
         any_low_confidence = any(v.low_confidence for v in verdicts)
 
@@ -580,6 +596,10 @@ class JudgePolicyEngine(PolicyEngine):
         if worst_verdict.action == VerdictAction.ESCALATE:
             metadata["escalate"] = True
 
+        if escalation_info["should_escalate"]:
+            metadata["escalated"] = True
+            metadata["escalation_reason"] = escalation_info["reason"]
+
         if any_low_confidence:
             metadata["judge"]["confidence_warning"] = (
                 "One or more judge evaluations had low confidence. "
@@ -591,6 +611,66 @@ class JudgePolicyEngine(PolicyEngine):
             message=message,
             metadata=metadata,
         )
+
+    def _check_escalation(
+        self,
+        verdict: JudgeVerdict,
+        session: JudgeSessionContext,
+    ) -> Dict[str, Any]:
+        """Check if the current violation should be escalated.
+
+        Escalation triggers:
+        1. Same criterion fails after a prior intervention was applied
+        2. Total intervention count exceeds cap (3)
+
+        Returns dict with should_escalate, reason, and escalation_prefix.
+        """
+        result: Dict[str, Any] = {
+            "should_escalate": False,
+            "reason": "",
+            "escalation_prefix": "",
+        }
+
+        if verdict.action in (VerdictAction.PASS, VerdictAction.WARN):
+            return result
+
+        failed_criteria = verdict.metadata.get("criterion_failures", [])
+
+        # Check 1: repeat criterion violation after prior intervention
+        repeat_criteria = [
+            c for c in failed_criteria
+            if c in session.last_intervention_criteria
+        ]
+        if repeat_criteria:
+            counts = {
+                c: session.criterion_intervention_counts.get(c, 0) + 1
+                for c in repeat_criteria
+            }
+            detail = ", ".join(
+                f"{c} (violation #{counts[c]})" for c in repeat_criteria
+            )
+            result["should_escalate"] = True
+            result["reason"] = f"repeat_criterion_violation: {detail}"
+            result["escalation_prefix"] = (
+                f"ESCALATED — repeat violation after prior intervention: {detail}."
+            )
+            return result
+
+        # Check 2: total intervention count cap (3)
+        # +1 because session hasn't recorded this verdict yet
+        pending_count = session.intervention_count + 1
+        if pending_count > 3:
+            result["should_escalate"] = True
+            result["reason"] = (
+                f"intervention_count_exceeded: {pending_count} interventions in session"
+            )
+            result["escalation_prefix"] = (
+                f"ESCALATED — intervention limit exceeded "
+                f"({pending_count} violations in this session)."
+            )
+            return result
+
+        return result
 
     def _extract_response_content(self, response_data: Any) -> str:
         """Extract text content from response data."""
