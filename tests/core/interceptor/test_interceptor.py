@@ -266,6 +266,83 @@ class TestSyncPostCall:
         assert result.allowed is False
         assert result.message == "toxic content"
 
+    async def test_intervene_returns_intervention_data(self):
+        """INTERVENE checker — modified_data contains intervention info."""
+        checker = _mock_checker(
+            phase=CheckPhase.POST_CALL,
+            decision=Decision.INTERVENE,
+            message="Dangerous tool call detected",
+        )
+        interceptor = Interceptor([checker])
+
+        result = await interceptor.run_post_call(
+            SESSION, _request(), {"answer": "bad"}, REQUEST_ID
+        )
+
+        assert result.allowed is True
+        assert result.modified_data is not None
+        interventions = result.modified_data["_interventions"]
+        assert len(interventions) == 1
+        assert interventions[0]["message"] == "Dangerous tool call detected"
+
+    async def test_intervene_with_modified_messages(self):
+        """INTERVENE with modified_messages passes them through."""
+        sanitized = [{"role": "assistant", "content": "I cannot do that."}]
+        checker = _mock_checker(
+            phase=CheckPhase.POST_CALL,
+            decision=Decision.INTERVENE,
+            message="Replaced dangerous response",
+            modified_messages=sanitized,
+        )
+        interceptor = Interceptor([checker])
+
+        result = await interceptor.run_post_call(
+            SESSION, _request(), {"answer": "bad"}, REQUEST_ID
+        )
+
+        assert result.allowed is True
+        assert result.modified_data is not None
+        interventions = result.modified_data["_interventions"]
+        assert interventions[0]["modified_messages"] == sanitized
+
+    async def test_multiple_intervene_checkers_accumulate(self):
+        """Multiple INTERVENE checkers — all interventions are collected."""
+        c1 = _mock_checker(
+            name="checker1",
+            phase=CheckPhase.POST_CALL,
+            decision=Decision.INTERVENE,
+            message="Issue 1",
+        )
+        c2 = _mock_checker(
+            name="checker2",
+            phase=CheckPhase.POST_CALL,
+            decision=Decision.INTERVENE,
+            message="Issue 2",
+        )
+        interceptor = Interceptor([c1, c2])
+
+        result = await interceptor.run_post_call(
+            SESSION, _request(), {"answer": "bad"}, REQUEST_ID
+        )
+
+        assert result.allowed is True
+        interventions = result.modified_data["_interventions"]
+        assert len(interventions) == 2
+
+    async def test_checker_exception_fails_open(self):
+        """Exception in sync POST_CALL checker fails open."""
+        checker = _mock_checker(
+            phase=CheckPhase.POST_CALL,
+            raise_on_evaluate=RuntimeError("kaboom"),
+        )
+        interceptor = Interceptor([checker])
+
+        result = await interceptor.run_post_call(
+            SESSION, _request(), {"answer": "hi"}, REQUEST_ID
+        )
+
+        assert result.allowed is True
+
 
 # ===========================================================================
 # Async checker lifecycle tests

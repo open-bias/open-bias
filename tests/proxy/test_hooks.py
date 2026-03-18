@@ -235,6 +235,31 @@ async def test_pre_call_hook_returns_exception_on_block(
 
 
 @pytest.mark.asyncio
+async def test_post_call_hook_block_raises_workflow_violation(
+    callback, mock_api_key
+):
+    """When sync POST_CALL checker blocks, WorkflowViolationError propagates."""
+    from opensentinel.core.interceptor.types import InterceptionResult
+
+    data = {"messages": [{"role": "user", "content": "hello"}]}
+    response = MagicMock()
+    response.choices = []
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(
+            allowed=False, message="dangerous tool call blocked"
+        )
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._get_policy_engine = AsyncMock(return_value=None)
+    callback._interceptor_initialized = True
+
+    with pytest.raises(WorkflowViolationError, match="dangerous tool call blocked"):
+        await callback.async_post_call_success_hook(data, mock_api_key, response)
+
+
+@pytest.mark.asyncio
 async def test_post_call_failure_hook_exception_is_swallowed(
     callback, mock_api_key
 ):
