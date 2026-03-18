@@ -36,6 +36,7 @@ from opensentinel.policy.engines.judge.prompts import (
     format_criteria_block,
     format_conversation_block,
     format_metadata_block,
+    format_tool_calls_block,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,7 @@ class JudgeEvaluator:
         reference: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
+        tool_calls: Optional[List[Dict[str, Any]]] = None,
     ) -> JudgeVerdict:
         """Evaluate a single turn (latest assistant response).
 
@@ -87,6 +89,7 @@ class JudgeEvaluator:
             conversation: Full conversation history for context.
             reference: Optional reference/ideal answer.
             metadata: Optional metadata (platform, session info, etc.).
+            tool_calls: Optional tool calls from the response.
 
         Returns:
             JudgeVerdict with per-criterion scores and composite.
@@ -103,6 +106,7 @@ class JudgeEvaluator:
         criteria_block = format_criteria_block(rubric.criteria)
         conversation_block = format_conversation_block(conversation)
         metadata_block = format_metadata_block(metadata or {})
+        tool_calls_block = format_tool_calls_block(tool_calls or [])
 
         system_prompt = (
             rubric.prompt_overrides.get("system")
@@ -116,6 +120,7 @@ class JudgeEvaluator:
             or TURN_POINTWISE_USER.format(
                 conversation_block=conversation_block,
                 response_content=response_content,
+                tool_calls_block=tool_calls_block,
                 metadata_block=metadata_block,
             )
         )

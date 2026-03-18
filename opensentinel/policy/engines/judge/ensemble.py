@@ -77,6 +77,7 @@ class JudgeEnsemble:
         reference: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
+        tool_calls: Optional[List[Dict[str, Any]]] = None,
     ) -> EnsembleVerdict:
         """Run turn evaluation across multiple judges and aggregate.
 
@@ -87,6 +88,7 @@ class JudgeEnsemble:
             conversation: Full conversation history.
             reference: Optional reference answer.
             metadata: Optional metadata.
+            tool_calls: Optional tool calls from the response.
 
         Returns:
             EnsembleVerdict with aggregated scores and agreement info.
@@ -101,6 +103,7 @@ class JudgeEnsemble:
                 reference=reference,
                 metadata=metadata,
                 session_id=session_id,
+                tool_calls=tool_calls,
             ),
         )
         return self._aggregate(verdicts, rubric)

@@ -205,6 +205,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         session = self._get_or_create_session(session_id)
         response_content = self._extract_response_content(response_data)
+        tool_calls = self._extract_tool_calls(response_data)
         conversation = self._extract_conversation(request_data)
         metadata = (context or {}).get("metadata", {})
 
@@ -227,6 +228,7 @@ class JudgePolicyEngine(PolicyEngine):
                         conversation=conversation,
                         metadata=metadata,
                         session_id=session_id,
+                        tool_calls=tool_calls,
                     )
                     # Use ensemble's final verdict as a JudgeVerdict
                     turn_verdict = JudgeVerdict(
@@ -255,6 +257,7 @@ class JudgePolicyEngine(PolicyEngine):
                         conversation=conversation,
                         metadata=metadata,
                         session_id=session_id,
+                        tool_calls=tool_calls,
                     )
                     self._trace_verdict(session_id, turn_verdict, turn_rubric.name)
                 verdicts.append(turn_verdict)
@@ -599,6 +602,46 @@ class JudgePolicyEngine(PolicyEngine):
                 return message.get("content", "")
             return response_data.get("content", "")
         return str(response_data)
+
+    def _extract_tool_calls(self, response_data: Any) -> List[Dict[str, Any]]:
+        """Extract tool calls from response data.
+
+        Handles OpenAI dict format and object format responses.
+        Returns a list of tool call dicts with 'id', 'function_name', and 'arguments'.
+        """
+        tool_calls: List[Dict[str, Any]] = []
+
+        if isinstance(response_data, dict):
+            # OpenAI dict format: choices[0].message.tool_calls
+            choices = response_data.get("choices", [])
+            if choices:
+                message = choices[0].get("message", {})
+                raw_calls = message.get("tool_calls", [])
+            else:
+                raw_calls = response_data.get("tool_calls", [])
+
+            for tc in raw_calls:
+                if isinstance(tc, dict):
+                    func = tc.get("function", {})
+                    tool_calls.append({
+                        "id": tc.get("id", ""),
+                        "function_name": func.get("name", ""),
+                        "arguments": func.get("arguments", ""),
+                    })
+
+        elif hasattr(response_data, "choices") and response_data.choices:
+            choice = response_data.choices[0]
+            if hasattr(choice, "message") and choice.message:
+                raw_calls = getattr(choice.message, "tool_calls", None) or []
+                for tc in raw_calls:
+                    if hasattr(tc, "function") and tc.function:
+                        tool_calls.append({
+                            "id": getattr(tc, "id", ""),
+                            "function_name": getattr(tc.function, "name", ""),
+                            "arguments": getattr(tc.function, "arguments", ""),
+                        })
+
+        return tool_calls
 
     def _extract_conversation(self, request_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extract conversation messages from request data."""

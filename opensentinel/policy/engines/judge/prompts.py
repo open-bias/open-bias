@@ -56,6 +56,7 @@ Conversation:
 Latest assistant response to evaluate:
 {response_content}
 
+{tool_calls_block}\
 {metadata_block}\
 Score each criterion and return JSON."""
 
@@ -235,6 +236,8 @@ def format_conversation_block(messages: list) -> str:
 
     Args:
         messages: List of message dicts with 'role' and 'content' keys.
+            Assistant messages may include 'tool_calls' (list of tool call dicts).
+            Tool-result messages have role='tool' and optionally 'tool_call_id'.
 
     Returns:
         Formatted conversation string with turn numbers.
@@ -244,12 +247,52 @@ def format_conversation_block(messages: list) -> str:
     for msg in messages:
         role = msg.get("role", "unknown")
         content = msg.get("content", "")
+
         if role == "system":
             lines.append(f"[System]: {content}")
+        elif role == "tool":
+            # Tool result message — link back to the tool call
+            tool_call_id = msg.get("tool_call_id", "unknown")
+            lines.append(f"[Tool Result ({tool_call_id})]: {content}")
         else:
             turn += 1
-            lines.append(f"[Turn {turn} - {role}]: {content}")
+            parts = [f"[Turn {turn} - {role}]: {content}"]
+
+            # Render tool calls on assistant messages
+            if role == "assistant":
+                for tc in msg.get("tool_calls", []):
+                    func = tc.get("function", {})
+                    name = func.get("name", "unknown")
+                    args = func.get("arguments", "")
+                    tc_id = tc.get("id", "")
+                    id_suffix = f" [id: {tc_id}]" if tc_id else ""
+                    parts.append(f"[Tool Call]: {name}({args}){id_suffix}")
+
+            lines.append("\n".join(parts))
+
     return "\n\n".join(lines)
+
+
+def format_tool_calls_block(tool_calls: list) -> str:
+    """Format tool calls from the response being evaluated.
+
+    Args:
+        tool_calls: List of tool call dicts with 'id', 'function_name',
+            and 'arguments' keys.
+
+    Returns:
+        Formatted tool calls string, or empty string if no tool calls.
+    """
+    if not tool_calls:
+        return ""
+    lines = ["Tool calls in this response:"]
+    for tc in tool_calls:
+        name = tc.get("function_name", "unknown")
+        args = tc.get("arguments", "")
+        tc_id = tc.get("id", "")
+        id_suffix = f" [id: {tc_id}]" if tc_id else ""
+        lines.append(f"- {name}({args}){id_suffix}")
+    return "\n".join(lines) + "\n\n"
 
 
 def format_metadata_block(metadata: dict) -> str:
