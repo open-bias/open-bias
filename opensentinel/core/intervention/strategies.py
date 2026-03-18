@@ -1,15 +1,19 @@
 """
 Intervention strategies for workflow correction.
 
-Strategies define HOW to modify LLM requests when deviation is detected:
+Strategies define HOW to modify LLM requests or responses when deviation is detected:
 
-1. SYSTEM_PROMPT_APPEND: Add correction to system message
+1. SYSTEM_PROMPT_APPEND: Add correction to system message (request)
    - Least disruptive, preserves conversation flow
    - Best for gentle guidance
 
-2. USER_MESSAGE_INJECT: Add user message with guidance
+2. USER_MESSAGE_INJECT: Add user message with guidance (request)
    - More visible to the model
    - Good for important corrections
+
+3. RESPONSE_MODIFICATION: Modify the current LLM response (response)
+   - Strips tool calls, replaces content, or appends warnings
+   - Used by sync POST_CALL checkers for real-time enforcement
 """
 
 import logging
@@ -26,6 +30,7 @@ class StrategyType(Enum):
 
     SYSTEM_PROMPT_APPEND = "system_prompt_append"
     USER_MESSAGE_INJECT = "user_message_inject"
+    RESPONSE_MODIFICATION = "response_modification"
 
 
 @dataclass
@@ -192,6 +197,101 @@ class UserMessageInjectStrategy(InterventionStrategy):
         data["messages"] = self.merge(data.get("messages", []), correction)
         logger.debug("Applied user_message_inject intervention")
         return data
+
+
+class ResponseModificationStrategy:
+    """
+    Modify an LLM response after POST_CALL evaluation.
+
+    Unlike request-modifying strategies (SystemPromptAppend, UserMessageInject),
+    this operates on the *current response* — stripping tool calls, replacing
+    content, or appending warnings.
+
+    Works with LiteLLM response objects (ModelResponse / dict).
+    """
+
+    @staticmethod
+    def apply_to_response(
+        response: Any,
+        message: Optional[str] = None,
+        modified_messages: Optional[List[Dict[str, Any]]] = None,
+    ) -> Any:
+        """
+        Apply intervention to an LLM response.
+
+        Args:
+            response: The LLM response object (LiteLLM ModelResponse or dict).
+            message: Warning/guidance text to append to the response content.
+            modified_messages: If provided, replace the response content entirely.
+
+        Returns:
+            The modified response object.
+        """
+        if modified_messages is not None:
+            # Full replacement — use the first modified message's content
+            replacement_content = ""
+            for msg in modified_messages:
+                if msg.get("role") == "assistant":
+                    replacement_content = msg.get("content", "")
+                    break
+            if not replacement_content and modified_messages:
+                replacement_content = modified_messages[0].get("content", "")
+            ResponseModificationStrategy._set_response_content(
+                response, replacement_content
+            )
+            # Strip tool calls when replacing content
+            ResponseModificationStrategy._strip_tool_calls(response)
+            logger.debug("Applied response modification: full replacement")
+        elif message:
+            # Append warning to existing content
+            current = ResponseModificationStrategy._get_response_content(response)
+            warning = f"\n\n[POLICY WARNING]: {message}"
+            ResponseModificationStrategy._set_response_content(
+                response, (current or "") + warning
+            )
+            logger.debug("Applied response modification: appended warning")
+
+        return response
+
+    @staticmethod
+    def _get_response_content(response: Any) -> Optional[str]:
+        """Extract text content from a response object."""
+        if hasattr(response, "choices") and response.choices:
+            choice = response.choices[0]
+            if hasattr(choice, "message") and choice.message:
+                return getattr(choice.message, "content", None)
+        if isinstance(response, dict):
+            choices = response.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content")
+        return None
+
+    @staticmethod
+    def _set_response_content(response: Any, content: str) -> None:
+        """Set text content on a response object."""
+        if hasattr(response, "choices") and response.choices:
+            choice = response.choices[0]
+            if hasattr(choice, "message") and choice.message:
+                choice.message.content = content
+                return
+        if isinstance(response, dict):
+            choices = response.get("choices", [])
+            if choices and "message" in choices[0]:
+                choices[0]["message"]["content"] = content
+
+    @staticmethod
+    def _strip_tool_calls(response: Any) -> None:
+        """Remove tool calls from a response."""
+        if hasattr(response, "choices") and response.choices:
+            choice = response.choices[0]
+            if hasattr(choice, "message") and choice.message:
+                if hasattr(choice.message, "tool_calls"):
+                    choice.message.tool_calls = None
+                return
+        if isinstance(response, dict):
+            choices = response.get("choices", [])
+            if choices and "message" in choices[0]:
+                choices[0]["message"].pop("tool_calls", None)
 
 
 class WorkflowViolationError(Exception):
