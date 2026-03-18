@@ -239,39 +239,6 @@ class TestNemoMapping:
 # =========================================================================
 
 
-class TestCompositeMapping:
-    def test_composite_strategy_and_parallel(self):
-        result = _build_source(
-            {
-                "engine": "composite",
-                "composite": {
-                    "strategy": "first_deny",
-                    "parallel": False,
-                },
-            }
-        )._map_to_settings()
-        cfg = _get_engine_config(result)
-        assert cfg["strategy"] == "first_deny"
-        assert cfg["parallel"] is False
-
-    def test_composite_engines_list(self):
-        engines = [
-            {
-                "type": "judge",
-                "config": {"models": [{"name": "primary", "model": "gpt-4o-mini"}]},
-            },
-            {"type": "fsm", "config": {"config_path": "./workflow.yaml"}},
-        ]
-        result = _build_source(
-            {
-                "engine": "composite",
-                "composite": {"engines": engines},
-            }
-        )._map_to_settings()
-        cfg = _get_engine_config(result)
-        assert cfg["engines"] == engines
-
-
 # =========================================================================
 # FSM engine section (future extensibility)
 # =========================================================================

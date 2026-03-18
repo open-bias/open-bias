@@ -92,9 +92,8 @@ class TestDeferredInterventionIntegration:
         """Async checker returns INTERVENE with user_message_inject strategy."""
         checker = _mock_async_checker(
             message="Please verify identity.",
-            metadata={"strategy": "user_message_inject"},
         )
-        interceptor = Interceptor([checker])
+        interceptor = Interceptor([checker], default_strategy="user_message_inject")
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, "req-001")
         await asyncio.sleep(0.05)

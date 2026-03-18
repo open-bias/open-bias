@@ -42,6 +42,7 @@ def _mock_checker(
     decision: Decision = Decision.ALLOW,
     message: str | None = None,
     metadata: dict[str, Any] | None = None,
+    modified_messages: list[dict[str, Any]] | None = None,
     delay: float = 0,
     raise_on_evaluate: Exception | None = None,
 ) -> PolicyEngineChecker:
@@ -63,6 +64,7 @@ def _mock_checker(
             decision=decision,
             message=message,
             metadata=metadata or {},
+            modified_messages=modified_messages,
         )
 
     checker = PolicyEngineChecker(engine=engine, phase=phase, mode=mode)
@@ -193,6 +195,41 @@ class TestSyncPreCall:
 
         assert result.allowed is True
         assert result.modified_data is None
+
+    async def test_intervene_modified_messages_replaces_messages(self):
+        """INTERVENE with modified_messages replaces request messages directly."""
+        sanitized = [{"role": "user", "content": "sanitized hello"}]
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            decision=Decision.INTERVENE,
+            modified_messages=sanitized,
+        )
+        interceptor = Interceptor([checker])
+        req = _request()
+
+        result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
+
+        assert result.allowed is True
+        assert result.modified_data is not None
+        assert result.modified_data["messages"] == sanitized
+
+    async def test_intervene_modified_messages_takes_precedence_over_message(self):
+        """modified_messages takes precedence over message text."""
+        sanitized = [{"role": "user", "content": "sanitized"}]
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            decision=Decision.INTERVENE,
+            message="This should be ignored",
+            modified_messages=sanitized,
+        )
+        interceptor = Interceptor([checker])
+        req = _request()
+
+        result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
+
+        assert result.allowed is True
+        assert result.modified_data is not None
+        assert result.modified_data["messages"] == sanitized
 
 
 # ===========================================================================
