@@ -199,11 +199,12 @@ class Interceptor:
         """
         Run POST_CALL phase.
 
-        1. Run sync POST_CALL checkers (gate only: ALLOW or BLOCK)
+        1. Run sync POST_CALL checkers (ALLOW, BLOCK, or INTERVENE)
         2. Start async POST_CALL checkers in background (don't wait)
-        3. Return result
+        3. Return result with optional modified_data for response modification
         """
-        all_metadata: dict[str, Any] = {"results": []}
+        all_metadata: dict[str, Any] = {"results": [], "interventions": []}
+        modified_data: dict[str, Any] | None = None
 
         # Step 1: Run sync POST_CALL checkers
         for checker in self._sync_post_call:
@@ -230,10 +231,27 @@ class Interceptor:
                     )
 
                 if result.decision == Decision.INTERVENE:
-                    logger.warning(
-                        f"Sync POST_CALL checker '{checker.name}' returned INTERVENE "
-                        f"— not supported for sync post-call. "
-                        f"Use async mode for deferred interventions."
+                    logger.info(
+                        f"Sync POST_CALL checker '{checker.name}' returned INTERVENE: "
+                        f"{result.message}"
+                    )
+                    intervention_info: dict[str, Any] = {
+                        "checker": checker.name,
+                        "message": result.message,
+                    }
+                    if result.modified_messages is not None:
+                        intervention_info["has_modified_messages"] = True
+                    all_metadata["interventions"].append(intervention_info)
+                    # Store the engine result for the hooks layer to act on
+                    if modified_data is None:
+                        modified_data = {}
+                    modified_data.setdefault("_interventions", []).append(
+                        {
+                            "checker": checker.name,
+                            "message": result.message,
+                            "modified_messages": result.modified_messages,
+                            "metadata": result.metadata,
+                        }
                     )
 
             except Exception as e:
@@ -250,6 +268,7 @@ class Interceptor:
 
         return InterceptionResult(
             allowed=True,
+            modified_data=modified_data,
             metadata=all_metadata,
         )
 
