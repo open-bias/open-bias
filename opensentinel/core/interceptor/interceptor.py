@@ -50,7 +50,7 @@ class Interceptor:
     # Defaults for session memory management
     DEFAULT_SESSION_TTL = 3600  # 1 hour
     DEFAULT_MAX_SESSIONS = 10_000
-    DEFAULT_MAX_ASYNC_TASKS_PER_SESSION = 5
+    DEFAULT_MAX_ASYNC_TASKS_PER_SESSION = 50
 
     def __init__(
         self,
