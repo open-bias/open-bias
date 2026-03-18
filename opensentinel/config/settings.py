@@ -182,6 +182,13 @@ class PolicyConfig(BaseModel):
     # Set generously since interceptor checks may involve LLM calls.
     hook_timeout_seconds: float = 30.0
 
+    # POST_CALL checker execution mode.
+    # "async" (default): checkers run in background, results deferred to next request.
+    #   Zero latency impact but cannot enforce on the current response.
+    # "sync": checkers block the response, enabling BLOCK/INTERVENE on current response.
+    #   Adds latency (depends on engine) but enables real-time enforcement.
+    post_call_mode: Literal["sync", "async"] = "async"
+
 
 class YamlConfigSource(PydanticBaseSettingsSource):
     """Custom settings source that reads from a osentinel.yaml config file.
@@ -272,6 +279,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             "model",
             "tracing",
             "eval",
+            "post_call_mode",
             # Engine-specific sections are handled below
             "judge",
             "llm",
@@ -323,6 +331,12 @@ class YamlConfigSource(PydanticBaseSettingsSource):
                     .setdefault("config", {})
                 )
                 engine_config["inline_policy"] = policy_val
+
+        # post_call_mode -> policy.post_call_mode
+        if "post_call_mode" in data:
+            result.setdefault("policy", {})["post_call_mode"] = data[
+                "post_call_mode"
+            ]
 
         # port -> proxy.port
         if "port" in data:

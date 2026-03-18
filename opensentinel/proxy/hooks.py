@@ -179,15 +179,22 @@ class SentinelCallback(CustomLogger):
                 )
             )
 
-            # Async POST_CALL checker for response evaluation
-            # Results deferred to next PRE_CALL via interceptor
+            # POST_CALL checker — mode is configurable:
+            #   async (default): results deferred to next PRE_CALL, zero latency
+            #   sync: blocks response, enables real-time BLOCK/INTERVENE
+            post_call_mode = (
+                CheckerMode.SYNC
+                if self.settings.policy.post_call_mode == "sync"
+                else CheckerMode.ASYNC
+            )
             checkers.append(
                 PolicyEngineChecker(
                     engine=policy_engine,
                     phase=CheckPhase.POST_CALL,
-                    mode=CheckerMode.ASYNC,
+                    mode=post_call_mode,
                 )
             )
+            logger.info(f"POST_CALL checker mode: {post_call_mode.value}")
 
             self._interceptor = Interceptor(
                 checkers,
