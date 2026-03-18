@@ -10,6 +10,12 @@ sys.modules["nemoguardrails"] = mock_nemo
 from opensentinel.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
 from opensentinel.policy.protocols import Decision
 
+@pytest.fixture(autouse=True)
+def _reset_nemo_mock():
+    """Reset module-level mock state between tests to avoid cross-test pollution."""
+    mock_nemo.reset_mock()
+    yield
+
 @pytest.fixture
 def engine():
     return NemoGuardrailsPolicyEngine()
