@@ -75,7 +75,7 @@ class TestDeferredInterventionIntegration:
             message="Always verify identity first.",
             metadata={"strategy": "system_prompt_append"},
         )
-        interceptor = Interceptor([checker])
+        interceptor = Interceptor([checker], default_strategy="system_prompt_append")
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, "req-001")
         await asyncio.sleep(0.05)
@@ -109,8 +109,8 @@ class TestDeferredInterventionIntegration:
         ]
         assert len(injected_msgs) == 1
 
-    async def test_default_strategy_is_system_prompt_append(self):
-        """Without strategy in metadata, defaults to system_prompt_append."""
+    async def test_default_strategy_is_user_message_inject(self):
+        """Without strategy in metadata, defaults to user_message_inject."""
         checker = _mock_async_checker(message="Be safe.")
         interceptor = Interceptor([checker])
 
@@ -121,5 +121,8 @@ class TestDeferredInterventionIntegration:
 
         assert result.allowed is True
         assert result.modified_data is not None
-        system_msg = result.modified_data["messages"][0]
-        assert "Be safe." in system_msg["content"]
+        injected_msgs = [
+            m for m in result.modified_data["messages"]
+            if m["role"] == "user" and "Be safe." in m.get("content", "")
+        ]
+        assert len(injected_msgs) == 1

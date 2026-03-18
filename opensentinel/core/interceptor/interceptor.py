@@ -55,7 +55,7 @@ class Interceptor:
     def __init__(
         self,
         checkers: list[PolicyEngineChecker],
-        default_strategy: str = "system_prompt_append",
+        default_strategy: str = "user_message_inject",
         session_ttl: int | None = None,
         max_sessions: int | None = None,
         max_async_tasks_per_session: int | None = None,

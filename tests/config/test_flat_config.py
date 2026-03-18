@@ -69,6 +69,15 @@ class TestInlinePolicyMapping:
                "inline_policy" not in result["policy"]["engine"].get("config", {})
 
 
+class TestInterventionDefaults:
+
+    def test_default_strategy_is_user_message_inject(self):
+        """InterventionConfig defaults to user_message_inject strategy."""
+        from opensentinel.config.settings import InterventionConfig
+        config = InterventionConfig()
+        assert config.default_strategy == "user_message_inject"
+
+
 if __name__ == "__main__":
     import sys
     sys.exit(pytest.main([__file__]))

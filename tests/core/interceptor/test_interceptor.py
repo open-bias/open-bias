@@ -149,8 +149,8 @@ class TestSyncPreCall:
         assert result.allowed is True
 
 
-    async def test_intervene_modifies_request_system_prompt(self):
-        """INTERVENE checker appends guidance to system prompt by default."""
+    async def test_intervene_injects_user_message_by_default(self):
+        """INTERVENE checker injects a user message by default."""
         checker = _mock_checker(
             phase=CheckPhase.PRE_CALL,
             decision=Decision.INTERVENE,
@@ -163,9 +163,26 @@ class TestSyncPreCall:
 
         assert result.allowed is True
         assert result.modified_data is not None
+        contents = [m["content"] for m in result.modified_data["messages"]]
+        assert any("Stay on topic" in c for c in contents)
+
+    async def test_intervene_system_prompt_append_strategy(self):
+        """INTERVENE with system_prompt_append strategy appends to system prompt."""
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            decision=Decision.INTERVENE,
+            message="Verify identity first",
+        )
+        interceptor = Interceptor([checker], default_strategy="system_prompt_append")
+        req = _request()
+
+        result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
+
+        assert result.allowed is True
+        assert result.modified_data is not None
         system_msg = result.modified_data["messages"][0]
         assert system_msg["role"] == "system"
-        assert "Stay on topic" in system_msg["content"]
+        assert "Verify identity first" in system_msg["content"]
 
     async def test_intervene_user_message_inject_strategy(self):
         """INTERVENE with user_message_inject strategy injects a user message."""
