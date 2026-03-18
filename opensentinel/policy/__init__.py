@@ -8,7 +8,6 @@ supporting multiple policy mechanisms including:
 - NeMo Guardrails: NVIDIA's guardrails for input/output filtering
 - Judge: LLM-as-a-Judge evaluating responses against rubrics
 - LLM: Semantic state tracking and drift detection
-- Composite: Combine multiple engines together
 
 Usage:
     ```python
@@ -26,17 +25,6 @@ Usage:
 
     if result.decision == Decision.BLOCK:
         print("Request blocked:", result.message)
-    ```
-
-For composite engines:
-    ```python
-    engine = PolicyEngineRegistry.create("composite")
-    await engine.initialize({
-        "engines": [
-            {"type": "fsm", "config": {"workflow_path": "..."}},
-            {"type": "nemo", "config": {"config_path": "..."}}
-        ]
-    })
     ```
 """
 
@@ -73,11 +61,6 @@ except ImportError:
     NemoGuardrailsPolicyEngine = None  # type: ignore
 
 try:
-    from opensentinel.policy.engines.composite import CompositePolicyEngine
-except ImportError:
-    CompositePolicyEngine = None  # type: ignore
-
-try:
     from opensentinel.policy.engines.judge import JudgePolicyEngine
 except ImportError:
     JudgePolicyEngine = None  # type: ignore
@@ -98,7 +81,6 @@ __all__ = [
     # Engines (may be None if not available)
     "FSMPolicyEngine",
     "NemoGuardrailsPolicyEngine",
-    "CompositePolicyEngine",
     "JudgePolicyEngine",
     # Compiler protocol
     "PolicyCompiler",

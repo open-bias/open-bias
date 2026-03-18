@@ -187,7 +187,7 @@ def run_interactive_init() -> None:
         "Policy engine",
         [
             {
-                "name": "judge      \u2500 LLM-based evaluation (behavioral checks)",
+                "name": "judge      \u2500 LLM-based evaluation",
                 "value": "judge",
             },
             {
@@ -197,10 +197,6 @@ def run_interactive_init() -> None:
             {
                 "name": "nemo       \u2500 NeMo Guardrails (topical rails, safety)",
                 "value": "nemo",
-            },
-            {
-                "name": "composite  \u2500 Multiple engines in parallel",
-                "value": "composite",
             },
         ],
     )
@@ -304,18 +300,6 @@ def run_interactive_init() -> None:
             """)
         )
         success(f"Created starter NeMo config: {policy_file}/")
-
-    elif engine_type == "composite":
-        config_data["composite"] = {
-            "strategy": "all",
-            "engines": [
-                {
-                    "type": "judge",
-                    "config": {"mode": "balanced", "inline_policy": ["Be nice"]},
-                }
-            ],
-        }
-        dim("Created a basic composite config. Edit osentinel.yaml to add more engines.")
 
     # -----------------------------------------------------------------------
     # 4. Observability & Tracing

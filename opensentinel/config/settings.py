@@ -115,7 +115,7 @@ class PolicyEngineConfig(BaseModel):
     The 'type' field accepts any engine registered via @register_engine
     in the PolicyEngineRegistry (see opensentinel/policy/registry.py).
 
-    Built-in engine types include: fsm, nemo, llm, composite.
+    Built-in engine types include: fsm, nemo, llm, judge.
     Custom engines are automatically supported once registered.
 
     The 'config' field contains engine-specific configuration.
@@ -144,13 +144,13 @@ class PolicyConfig(BaseModel):
     Supports multiple policy engines with different mechanisms:
     - FSM for workflow enforcement
     - NeMo Guardrails for content moderation
-    - Composite to combine multiple engines
+    - Judge for LLM-based evaluation
 
     Examples:
-        # NeMo only (default)
+        # Judge (default)
         policy:
           engine:
-            type: nemo
+            type: judge
 
         # FSM only
         policy:
@@ -159,24 +159,16 @@ class PolicyConfig(BaseModel):
             config:
               workflow_path: ./workflow.yaml
 
-        # Combined FSM + NeMo
+        # NeMo only
         policy:
           engine:
-            type: composite
-          engines:
-            - type: fsm
-              config:
-                workflow_path: ./workflow.yaml
-            - type: nemo
-              config:
-                config_path: ./nemo_config/
+            type: nemo
+            config:
+              config_path: ./nemo_config/
     """
 
     # Primary engine configuration
     engine: PolicyEngineConfig = Field(default_factory=PolicyEngineConfig)
-
-    # For composite engine: list of child engines
-    engines: List[PolicyEngineConfig] = Field(default_factory=list)
 
     # Intervention configuration
     intervention: InterventionConfig = Field(default_factory=InterventionConfig)
@@ -285,7 +277,6 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             "llm",
             "fsm",
             "nemo",
-            "composite",
         }
     )
 
@@ -415,17 +406,6 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             for k, v in nemo_cfg.items():
                 if k == "config_path":
                     v = self._resolve_path(v)
-                engine_config[k] = v
-
-        # composite.* -> policy config
-        composite_cfg = data.get("composite", {})
-        if isinstance(composite_cfg, dict) and composite_cfg:
-            engine_config = (
-                result.setdefault("policy", {})
-                .setdefault("engine", {})
-                .setdefault("config", {})
-            )
-            for k, v in composite_cfg.items():
                 engine_config[k] = v
 
         # fsm.* -> policy.engine.config.* (future extensibility)
@@ -627,14 +607,6 @@ class SentinelSettings(BaseSettings):
         # This allows engines to use the same 'autodetect' model as the proxy.
         if "default_model" not in engine_config["config"]:
             engine_config["config"]["default_model"] = self.proxy.default_model
-
-        # Handle composite engine
-        if engine_config["type"] == "composite":
-            # Use engines list from policy config
-            if self.policy.engines:
-                engine_config["config"]["engines"] = [
-                    e.model_dump() for e in self.policy.engines
-                ]
 
         return engine_config
 

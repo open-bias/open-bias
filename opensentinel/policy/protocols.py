@@ -31,6 +31,7 @@ class EngineResult:
     decision: Decision
     message: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    modified_messages: Optional[List[Dict[str, Any]]] = None
 
 
 
@@ -63,7 +64,7 @@ class PolicyEngine(ABC):
     @property
     @abstractmethod
     def engine_type(self) -> str:
-        """Type identifier (e.g., 'fsm', 'nemo', 'composite')."""
+        """Type identifier (e.g., 'fsm', 'nemo', 'judge')."""
         ...
 
     @abstractmethod

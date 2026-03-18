@@ -20,7 +20,7 @@
 # ---------------------------------------------------------------------------
 
 # REQUIRED. Policy engine type.
-# Built-in: judge | llm | fsm | nemo | composite
+# Built-in: judge | llm | fsm | nemo
 engine: judge
 
 # Optional. Global default LLM model for engines that need one.
@@ -169,25 +169,6 @@ nemo:
   # rails:
   #   - input
   #   - output
-
-# ---------------------------------------------------------------------------
-# Composite Engine — engine: composite
-# ---------------------------------------------------------------------------
-# Combines multiple engines. Requires sub-engine definitions.
-composite:
-  strategy: all                  # all | first_deny (default: all)
-  parallel: true                 # run engines concurrently (default: true)
-  engines:
-    - type: judge
-      config:
-        models:
-          - name: primary
-            model: anthropic/claude-sonnet-4-5
-        inline_policy:
-          - "No financial advice"
-    - type: fsm
-      config:
-        config_path: ./workflow.yaml
 
 # ---------------------------------------------------------------------------
 # Tracing / Observability
