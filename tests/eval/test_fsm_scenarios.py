@@ -56,7 +56,7 @@ async def test_skip_verification_detected(engine, runner):
     """Violation: agent skips identity_verification and jumps to account_action.
 
     The change_subscription tool call should trigger the
-    verify_before_account_action constraint, producing an INTERVENE or BLOCK.
+    verify_identity_before_take_account_action constraint, producing an INTERVENE or BLOCK.
     """
     messages = json.loads((EVALS_DIR / "skip_verification.json").read_text())
     result = await runner.run(engine, messages)
@@ -78,8 +78,8 @@ async def test_skip_verification_detected(engine, runner):
         for t in result.turns
         for v in t.response_eval.metadata.get("violations", [])
     ]
-    assert "verify_before_account_action" in all_violation_names, (
-        f"Expected 'verify_before_account_action' in violations, got: {all_violation_names}"
+    assert "verify_identity_before_take_account_action" in all_violation_names, (
+        f"Expected 'verify_identity_before_take_account_action' in violations, got: {all_violation_names}"
     )
 
 
@@ -121,7 +121,7 @@ async def test_direct_account_action_detected(engine, runner):
     """Violation: agent jumps to account_action without identity verification.
 
     The update_billing tool call should trigger the
-    verify_before_account_action constraint, producing an INTERVENE or BLOCK.
+    verify_identity_before_take_account_action constraint, producing an INTERVENE or BLOCK.
     """
     messages = json.loads((EVALS_DIR / "direct_account_action.json").read_text())
     result = await runner.run(engine, messages)
@@ -143,6 +143,6 @@ async def test_direct_account_action_detected(engine, runner):
         for t in result.turns
         for v in t.response_eval.metadata.get("violations", [])
     ]
-    assert "verify_before_account_action" in all_violation_names, (
-        f"Expected 'verify_before_account_action' in violations, got: {all_violation_names}"
+    assert "verify_identity_before_take_account_action" in all_violation_names, (
+        f"Expected 'verify_identity_before_take_account_action' in violations, got: {all_violation_names}"
     )

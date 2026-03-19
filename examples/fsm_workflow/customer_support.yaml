@@ -14,7 +14,8 @@ steps:
   - greet the customer
   - understand their issue
   - verify identity (if account action needed)
-  - look up information or take account action
+  - look up information
+  - take account action (if account action needed)
   - resolve and close
 
 rules:
