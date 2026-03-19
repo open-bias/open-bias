@@ -30,12 +30,7 @@ def mock_client():
 
 @pytest.fixture
 def evaluator(mock_client):
-    return JudgeEvaluator(
-        client=mock_client,
-        pass_threshold=0.6,
-        warn_threshold=0.4,
-        block_threshold=0.2,
-    )
+    return JudgeEvaluator(client=mock_client)
 
 
 @pytest.fixture
@@ -58,7 +53,7 @@ def simple_rubric():
             ),
         ],
         pass_threshold=0.6,
-        fail_action=VerdictAction.WARN,
+        fail_action=VerdictAction.INTERVENE,
     )
 
 
@@ -112,11 +107,11 @@ class TestEvaluateTurn:
             conversation=conversation,
         )
 
-        assert verdict.action == VerdictAction.BLOCK
+        assert verdict.action == VerdictAction.INTERVENE
         assert verdict.composite_score == 0.0
 
     @pytest.mark.asyncio
-    async def test_warning_verdict(self, evaluator, mock_client, simple_rubric, conversation):
+    async def test_below_threshold_verdict(self, evaluator, mock_client, simple_rubric, conversation):
         mock_client.call_judge.return_value = {
             "scores": [
                 {"criterion": "quality", "score": 3, "reasoning": "OK", "evidence": [], "confidence": 0.8},
@@ -132,8 +127,8 @@ class TestEvaluateTurn:
             conversation=conversation,
         )
 
-        # 3/5 -> normalized 0.5, below pass_threshold 0.6, above warn_threshold 0.4
-        assert verdict.action == VerdictAction.WARN
+        # 3/5 -> normalized 0.5, below pass_threshold 0.6 -> fail_action = INTERVENE
+        assert verdict.action == VerdictAction.INTERVENE
 
     @pytest.mark.asyncio
     async def test_missing_criterion_filled(self, evaluator, mock_client, simple_rubric, conversation):
@@ -266,15 +261,8 @@ class TestActionMapping:
     def test_pass(self, evaluator, simple_rubric):
         assert evaluator._map_action(0.8, simple_rubric) == VerdictAction.PASS
 
-    def test_warn(self, evaluator, simple_rubric):
-        assert evaluator._map_action(0.5, simple_rubric) == VerdictAction.WARN
-
-    def test_fail_action(self, evaluator, simple_rubric):
-        # Between block_threshold and warn_threshold -> rubric's fail_action
-        assert evaluator._map_action(0.3, simple_rubric) == VerdictAction.WARN
-
-    def test_block(self, evaluator, simple_rubric):
-        assert evaluator._map_action(0.1, simple_rubric) == VerdictAction.BLOCK
+    def test_fail(self, evaluator, simple_rubric):
+        assert evaluator._map_action(0.5, simple_rubric) == VerdictAction.INTERVENE
 
 
 class TestBinarySafetyCriteria:

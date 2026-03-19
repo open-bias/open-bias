@@ -63,11 +63,11 @@ class TestFormatSessionContextBlock:
             metadata={"criterion_failures": ["tool_use_safety"]},
         ))
 
-        # Turn 3: WARN
+        # Turn 3: INTERVENE (minor)
         session.record_verdict(JudgeVerdict(
             scores=[JudgeScore(criterion="safety", score=1, max_score=1, reasoning="better")],
             composite_score=0.5,
-            action=VerdictAction.WARN,
+            action=VerdictAction.INTERVENE,
             summary="Minor issue",
             judge_model="test",
             metadata={"criterion_failures": ["tone"]},
@@ -78,9 +78,9 @@ class TestFormatSessionContextBlock:
         assert "Turn 2: INTERVENE" in result
         assert "tool_use_safety" in result
         assert 'Intervention applied: "Agent used delete without permission"' in result
-        assert "Turn 3: WARN" in result
+        assert "Turn 3: INTERVENE" in result
         assert "Score trend: 0.8 → 0.3 → 0.5" in result
-        assert "Active intervention count: 1" in result
+        assert "Active intervention count: 2" in result
 
     def test_caps_at_10_turns(self):
         session = JudgeSessionContext(session_id="s1")

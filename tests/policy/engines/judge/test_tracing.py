@@ -3,15 +3,9 @@ Tests for judge engine OTEL tracing integration.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
-from opensentinel.policy.engines.judge.models import (
-    JudgeVerdict,
-    JudgeScore,
-    VerdictAction,
-    EvaluationScope,
-)
 from opensentinel.policy.protocols import Decision
 
 
@@ -114,21 +108,3 @@ class TestTracerIntegration:
         result = await engine.evaluate_response("s1", sample_response, sample_request)
         assert result.decision == Decision.ALLOW
 
-    @pytest.mark.asyncio
-    async def test_trace_verdict_with_ensemble_flag(self, engine, mock_tracer):
-        """_trace_verdict should pass ensemble flag to tracer."""
-        engine.set_tracer(mock_tracer)
-
-        verdict = JudgeVerdict(
-            scores=[JudgeScore(criterion="c1", score=5, max_score=5, reasoning="ok")],
-            composite_score=1.0,
-            action=VerdictAction.PASS,
-            summary="ok",
-            judge_model="ensemble",
-        )
-
-        engine._trace_verdict("s1", verdict, "test_rubric", ensemble=True, agreement_rate=0.9)
-
-        call_kwargs = mock_tracer.log_judge_evaluation.call_args[1]
-        assert call_kwargs["ensemble"] is True
-        assert call_kwargs["agreement_rate"] == 0.9

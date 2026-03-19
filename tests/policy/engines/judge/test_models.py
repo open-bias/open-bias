@@ -86,7 +86,7 @@ class TestRubric:
         assert rubric.evaluation_type == EvaluationType.POINTWISE
         assert rubric.scope == EvaluationScope.TURN
         assert rubric.pass_threshold == 0.6
-        assert rubric.fail_action == VerdictAction.WARN
+        assert rubric.fail_action == VerdictAction.INTERVENE
         assert rubric.prompt_overrides == {}
 
 
@@ -113,14 +113,14 @@ class TestJudgeSessionContext:
     def test_record_violation_counts(self):
         session = JudgeSessionContext(session_id="s1")
 
-        warn_verdict = JudgeVerdict(
-            scores=[], composite_score=0.3, action=VerdictAction.WARN,
-            summary="warning", judge_model="test",
+        intervene_verdict = JudgeVerdict(
+            scores=[], composite_score=0.3, action=VerdictAction.INTERVENE,
+            summary="intervention", judge_model="test",
         )
-        session.record_verdict(warn_verdict)
-        session.record_verdict(warn_verdict)
+        session.record_verdict(intervene_verdict)
+        session.record_verdict(intervene_verdict)
 
-        assert session.violation_counts["warn"] == 2
+        assert session.violation_counts["intervene"] == 2
 
     def test_to_dict(self):
         session = JudgeSessionContext(session_id="s1")
