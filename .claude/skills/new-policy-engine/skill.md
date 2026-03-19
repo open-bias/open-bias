@@ -26,6 +26,8 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
 2. **Implement the engine class** in `engine.py`
 
    ```python
+   from typing import Any, Dict, Optional
+
    from opensentinel.policy.protocols import (
        Decision,
        EngineResult,
@@ -38,8 +40,8 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
    class MyPolicyEngine(PolicyEngine):
        def __init__(self) -> None:
            self._initialized = False
-           self._config: dict[str, Any] = {}
-           self._session_data: dict[str, dict[str, Any]] = {}
+           self._config: Dict[str, Any] = {}
+           self._session_data: Dict[str, Dict[str, Any]] = {}
 
        @property
        def name(self) -> str:
@@ -49,7 +51,7 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
        def engine_type(self) -> str:
            return "<name>"
 
-       async def initialize(self, config: dict[str, Any]) -> None:
+       async def initialize(self, config: Dict[str, Any]) -> None:
            self._config = config
            # Setup resources, load models, etc.
            self._initialized = True  # CRITICAL: must set this
@@ -58,8 +60,8 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
        async def evaluate_request(
            self,
            session_id: str,
-           request_data: dict[str, Any],
-           context: dict[str, Any] | None = None,
+           request_data: Dict[str, Any],
+           context: Optional[Dict[str, Any]] = None,
        ) -> EngineResult:
            # Return EngineResult(decision=Decision.ALLOW, message="...")
            ...
@@ -69,13 +71,13 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
            self,
            session_id: str,
            response_data: Any,
-           request_data: dict[str, Any],
-           context: dict[str, Any] | None = None,
+           request_data: Dict[str, Any],
+           context: Optional[Dict[str, Any]] = None,
        ) -> EngineResult:
            # This is where most evaluation logic lives
            ...
 
-       async def get_session_state(self, session_id: str) -> dict[str, Any] | None:
+       async def get_session_state(self, session_id: str) -> Optional[Dict[str, Any]]:
            return self._session_data.get(session_id)
 
        async def reset_session(self, session_id: str) -> None:
@@ -130,5 +132,6 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
 | `opensentinel/policy/protocols.py` | `PolicyEngine` ABC, `Decision` enum, `EngineResult` dataclass |
 | `opensentinel/policy/registry.py` | `@register_engine` decorator, `PolicyEngineRegistry` |
 | `opensentinel/policy/engines/__init__.py` | Where to add your import |
-| `opensentinel/policy/engines/nemo/` | Minimal engine example (good starting point) |
-| `opensentinel/policy/engines/judge/` | More complex example with LLM calls |
+| `opensentinel/policy/engines/fsm/` | Stateful engine example (smallest engine at ~340 lines) |
+| `opensentinel/policy/engines/nemo/` | Stateless engine wrapping an external library |
+| `opensentinel/policy/engines/judge/` | Complex example with LLM calls and rubric scoring |
