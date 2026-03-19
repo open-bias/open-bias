@@ -116,21 +116,10 @@ class TestInitialization:
         assert engine._conversation_eval_interval == 5
 
     @pytest.mark.asyncio
-    async def test_initialize_uses_default_model_from_config(self, engine):
-        """Test that engine uses default_model from config when no models list provided."""
-        await engine.initialize({"default_model": "gpt-4o-mini"})
-        assert engine._initialized
-        assert engine._client.primary_model == "primary"
-        assert engine._client.get_model_id("primary") == "gpt-4o-mini"
-
-    @pytest.mark.asyncio
-    async def test_initialize_without_model_still_succeeds(self, engine):
-        """Test that engine initializes even without a model (error deferred to call time)."""
-        await engine.initialize({})
-        assert engine._initialized
-        assert engine._client.primary_model == "primary"
-        # Model is None — will error when an actual LLM call is made
-        assert engine._client.get_model_id("primary") is None
+    async def test_initialize_raises_without_models(self, engine):
+        """Test that engine raises ValueError when no models provided."""
+        with pytest.raises(ValueError, match="Judge engine requires a model"):
+            await engine.initialize({})
 
 
 class TestEvaluateRequest:

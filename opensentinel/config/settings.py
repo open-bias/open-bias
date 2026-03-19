@@ -583,10 +583,16 @@ class SentinelSettings(BaseSettings):
         """
         engine_config = self.policy.engine.model_dump()
 
-        # Inject default model if not explicitly set in engine config.
-        # This allows engines to use the same 'autodetect' model as the proxy.
-        if "default_model" not in engine_config["config"]:
-            engine_config["config"]["default_model"] = self.proxy.default_model
+        # For judge engines: ensure models list is populated from global default_model
+        # if no explicit judge.model was configured. Engine should never resolve models itself.
+        if (
+            engine_config.get("type") == "judge"
+            and not engine_config["config"].get("models")
+            and self.proxy.default_model
+        ):
+            engine_config["config"]["models"] = [
+                {"name": "primary", "model": self.proxy.default_model}
+            ]
 
         return engine_config
 

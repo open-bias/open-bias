@@ -78,6 +78,56 @@ class TestInterventionDefaults:
         assert config.default_strategy == "user_message_inject"
 
 
+class TestGetPolicyConfig:
+    """Tests for SentinelSettings.get_policy_config() model injection."""
+
+    def test_injects_models_from_global_default_model(self):
+        """When judge engine has no explicit model, inject from proxy.default_model."""
+        settings = SentinelSettings()
+        settings.proxy.default_model = "gpt-4o"
+        settings.policy.engine.type = "judge"
+        settings.policy.engine.config = {}
+
+        result = settings.get_policy_config()
+        assert result["config"]["models"] == [
+            {"name": "primary", "model": "gpt-4o"}
+        ]
+
+    def test_no_injection_when_models_already_set(self):
+        """When judge engine already has models, don't override."""
+        settings = SentinelSettings()
+        settings.proxy.default_model = "gpt-4o"
+        settings.policy.engine.type = "judge"
+        settings.policy.engine.config = {
+            "models": [{"name": "primary", "model": "claude-sonnet-4-6"}]
+        }
+
+        result = settings.get_policy_config()
+        assert result["config"]["models"] == [
+            {"name": "primary", "model": "claude-sonnet-4-6"}
+        ]
+
+    def test_no_injection_for_non_judge_engine(self):
+        """Non-judge engines should not get models injected."""
+        settings = SentinelSettings()
+        settings.proxy.default_model = "gpt-4o"
+        settings.policy.engine.type = "fsm"
+        settings.policy.engine.config = {}
+
+        result = settings.get_policy_config()
+        assert "models" not in result["config"]
+
+    def test_no_injection_when_no_default_model(self):
+        """When there's no global default_model, don't inject."""
+        settings = SentinelSettings()
+        settings.proxy.default_model = None
+        settings.policy.engine.type = "judge"
+        settings.policy.engine.config = {}
+
+        result = settings.get_policy_config()
+        assert "models" not in result["config"]
+
+
 if __name__ == "__main__":
     import sys
     sys.exit(pytest.main([__file__]))
