@@ -209,11 +209,10 @@ def validate(config_path: Path) -> None:
             "\u2713 Valid Workflow",
             {
                 "Name": workflow.name,
-                "Version": workflow.version,
+                "Mode": workflow.mode,
                 "States": str(len(workflow.states)),
                 "Transitions": str(len(workflow.transitions)),
                 "Constraints": str(len(workflow.constraints)),
-                "Interventions": str(len(workflow.interventions)),
             },
         )
 
@@ -253,7 +252,7 @@ def info(config_path: Path, verbose: bool) -> None:
         console.print(
             Text.assemble(
                 (workflow.name, "bold"),
-                (f"  v{workflow.version}", "dim"),
+                (f"  [{workflow.mode}]", "dim"),
             )
         )
         if workflow.description:
@@ -287,36 +286,17 @@ def info(config_path: Path, verbose: bool) -> None:
 
         # Constraints table
         if workflow.constraints:
-            severity_markup = {
-                "warning": "[yellow]warning[/]",
-                "error": "[red]error[/]",
-                "critical": "[magenta]critical[/]",
-            }
-            c_rows = []
+            c_rows: list[list[str]] = []
             for c in workflow.constraints:
-                sev = severity_markup.get(c.severity, c.severity)
-                row = [c.name, f"[cyan]{c.type.value}[/]", sev]
-                if verbose and c.description:
-                    row.append(c.description)
-                elif verbose:
-                    row.append("")
+                row = [c.name, f"[cyan]{c.type.value}[/]"]
+                if verbose:
+                    row.append(c.message or c.description or "")
                 c_rows.append(row)
 
-            cols = ["Name", "Type", "Severity"]
+            cols = ["Name", "Type"]
             if verbose:
-                cols.append("Description")
+                cols.append("Message")
             make_table("Constraints", cols, c_rows)
-
-        # Interventions
-        if workflow.interventions:
-            console.print()
-            console.print("[bold]Interventions:[/]")
-            for name, template in workflow.interventions.items():
-                if verbose:
-                    preview = template[:80] + "..." if len(template) > 80 else template
-                    key_value(name, f"[dim]{preview}[/]", indent=2)
-                else:
-                    console.print(f"  {name}")
 
         console.print()
 

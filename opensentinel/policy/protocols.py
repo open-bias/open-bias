@@ -147,7 +147,7 @@ class PolicyEngine(ABC):
         """
         pass
 
-    def get_compiler(self) -> Optional["PolicyCompiler"]:
+    def get_compiler(self, **kwargs: Any) -> Optional["PolicyCompiler"]:
         """Get the compiler for this engine type.
 
         Override in subclasses that have a dedicated compiler.
