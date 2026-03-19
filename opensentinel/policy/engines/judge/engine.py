@@ -312,12 +312,12 @@ class JudgePolicyEngine(PolicyEngine):
     def _load_inline_policy(self, policy_data: Any) -> None:
         """Load inline policy definitions from config.
 
-        Handles several shapes:
-        - List of strings: plain-text rules → auto-generated binary rubric
-        - Multiline string: split into rules
-        - Dict with 'rules' key: extract rules list
-        - Dict with 'rubrics' key: parse each as formal rubric
-        - List of dicts: parse each as formal rubric
+        Supported shapes:
+        - str: multiline string split into rules
+        - list[str]: plain-text rules → auto-generated binary rubric
+        - list[dict]: formal rubric definitions
+
+        Raises ValueError for dict input or unrecognized formats.
         """
         if isinstance(policy_data, str):
             # Multiline string → split into rules

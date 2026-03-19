@@ -19,6 +19,7 @@ from opensentinel.policy.engines.judge.models import (
     VerdictAction,
     EvaluationScope,
     EvaluationType,
+    ScoreScale,
 )
 from opensentinel.policy.engines.judge.client import JudgeClient
 from opensentinel.policy.engines.judge.bias import (
@@ -146,18 +147,9 @@ class JudgeEvaluator:
         self._validate_judge_response(raw, rubric.criteria)
         scores = self._parse_pointwise_scores(raw, rubric.criteria)
         model_id = self._client.get_model_id(model_name)
-
-        if self._is_all_binary(rubric.criteria):
-            failed = [s for s in scores if s.score == 0 and s.confidence > 0.0]
-            action = fail_action if failed else VerdictAction.PASS
-            composite = 0.0 if failed else 1.0
-            failed_criteria = [s.criterion for s in failed]
-        else:
-            failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
-            composite = self._compute_composite(scores, rubric.criteria)
-            action = self._map_action(composite, rubric, fail_action)
-            if failed_criteria and action != VerdictAction.BLOCK:
-                action = fail_action
+        action, composite, failed_criteria = self._resolve_verdict(
+            scores, rubric, fail_action,
+        )
 
         return JudgeVerdict(
             scores=scores,
@@ -241,18 +233,9 @@ class JudgeEvaluator:
         self._validate_judge_response(raw, rubric.criteria)
         scores = self._parse_pointwise_scores(raw, rubric.criteria)
         model_id = self._client.get_model_id(model_name)
-
-        if self._is_all_binary(rubric.criteria):
-            failed = [s for s in scores if s.score == 0 and s.confidence > 0.0]
-            action = fail_action if failed else VerdictAction.PASS
-            composite = 0.0 if failed else 1.0
-            failed_criteria = [s.criterion for s in failed]
-        else:
-            failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
-            composite = self._compute_composite(scores, rubric.criteria)
-            action = self._map_action(composite, rubric, fail_action)
-            if failed_criteria and action != VerdictAction.BLOCK:
-                action = fail_action
+        action, composite, failed_criteria = self._resolve_verdict(
+            scores, rubric, fail_action,
+        )
 
         return JudgeVerdict(
             scores=scores,
@@ -421,13 +404,39 @@ class JudgeEvaluator:
         )
 
     # =========================================================================
-    # Binary evaluation
+    # Verdict resolution
     # =========================================================================
+
+    def _resolve_verdict(
+        self,
+        scores: List[JudgeScore],
+        rubric: Rubric,
+        fail_action: VerdictAction,
+    ) -> tuple[VerdictAction, float, List[str]]:
+        """Resolve action, composite score, and failed criteria from scores.
+
+        Uses a fast binary path when all criteria are binary (0/1),
+        otherwise falls through to the threshold-based path.
+
+        Returns:
+            (action, composite, failed_criteria) tuple.
+        """
+        if self._is_all_binary(rubric.criteria):
+            failed = [s for s in scores if s.score == 0 and s.confidence > 0.0]
+            action = fail_action if failed else VerdictAction.PASS
+            composite = 0.0 if failed else 1.0
+            failed_criteria = [s.criterion for s in failed]
+        else:
+            failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
+            composite = self._compute_composite(scores, rubric.criteria)
+            action = self._map_action(composite, rubric, fail_action)
+            if failed_criteria and action != VerdictAction.BLOCK:
+                action = fail_action
+        return action, composite, failed_criteria
 
     @staticmethod
     def _is_all_binary(criteria: List[RubricCriterion]) -> bool:
         """Return True if every criterion uses the BINARY scale."""
-        from opensentinel.policy.engines.judge.models import ScoreScale
         return all(c.scale == ScoreScale.BINARY for c in criteria)
 
     # =========================================================================
