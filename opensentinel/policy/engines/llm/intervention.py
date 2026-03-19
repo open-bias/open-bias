@@ -109,13 +109,16 @@ class InterventionHandler:
 
         return self._select_template(first_violation, drift, session)
 
-    def get_template(self, intervention_name: str) -> Optional[str]:
-        """Get intervention message template by name from workflow interventions."""
-        return self.workflow.interventions.get(intervention_name)
+    def get_template(self, constraint_name: str) -> Optional[str]:
+        """Get intervention message by constraint name from workflow constraints."""
+        for c in self.workflow.constraints:
+            if c.name == constraint_name:
+                return c.message if c.message else None
+        return None
 
     def list_interventions(self) -> List[str]:
-        """List all available intervention names from workflow."""
-        return list(self.workflow.interventions.keys())
+        """List all constraint names from workflow."""
+        return [c.name for c in self.workflow.constraints]
 
     def should_escalate(self, drift: DriftScores) -> bool:
         """Check if situation requires escalation (human review).
@@ -135,13 +138,12 @@ class InterventionHandler:
         session: SessionContext,
     ) -> str:
         """Select appropriate template for intervention."""
-        # Check workflow-defined interventions first
+        # Check workflow-defined constraint messages first
         if violation and violation.constraint_id:
-            # Look up constraint to get intervention name
+            # Look up constraint to get its message
             for c in self.workflow.constraints:
-                if c.name == violation.constraint_id and c.intervention:
-                    if c.intervention in self.workflow.interventions:
-                        return self.workflow.interventions[c.intervention]
+                if c.name == violation.constraint_id and c.message:
+                    return c.message
 
         # Fall back to default templates
         if violation and violation.violated:

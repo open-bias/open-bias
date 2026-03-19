@@ -18,7 +18,6 @@ def sample_workflow():
     """Sample workflow for testing."""
     return WorkflowDefinition(
         name="test-workflow",
-        version="1.0",
         states=[
             {"name": "greeting", "is_initial": True, "description": "Initial greeting"},
             {"name": "resolution", "is_terminal": True},
@@ -28,16 +27,12 @@ def sample_workflow():
         ],
         constraints=[
             {
-                "name": "be_polite",
-                "type": "always",
-                "condition": "agent is polite",
-                "severity": "warning",
-                "intervention": "politeness_reminder",
+                "name": "no_rude_behavior",
+                "type": "never",
+                "target": "rude_behavior",
+                "message": "Please maintain a polite and professional tone.",
             }
         ],
-        interventions={
-            "politeness_reminder": "Please maintain a polite and professional tone.",
-        },
     )
 
 

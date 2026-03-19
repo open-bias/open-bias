@@ -16,7 +16,6 @@ def sample_workflow():
     """Sample workflow with constraints."""
     return WorkflowDefinition(
         name="test-workflow",
-        version="1.0",
         states=[
             {"name": "greeting", "is_initial": True},
             {"name": "verify_identity"},
@@ -34,19 +33,19 @@ def sample_workflow():
                 "type": "precedence",
                 "trigger": "account_action",
                 "target": "verify_identity",
-                "severity": "error",
+                "message": "You must verify identity before account actions.",
             },
             {
                 "name": "no_share_password",
                 "type": "never",
                 "target": "share_credentials",
-                "severity": "critical",
+                "message": "Never share credentials with the customer.",
             },
             {
-                "name": "be_polite",
-                "type": "always",
-                "condition": "agent is polite",
-                "severity": "warning",
+                "name": "no_rude_behavior",
+                "type": "never",
+                "target": "rude_behavior",
+                "message": "The agent must always remain polite and professional.",
             },
         ],
     )
@@ -81,13 +80,13 @@ class TestConstraintSelection:
         never_constraint = next(c for c in active if c.name == "no_share_password")
         assert never_constraint is not None
 
-    def test_always_constraints_always_active(self, sample_workflow, mock_llm_client, session):
-        """ALWAYS constraints should always be active."""
+    def test_never_constraints_always_active_for_any_state(self, sample_workflow, mock_llm_client, session):
+        """NEVER constraints should always be active regardless of current state."""
         evaluator = LLMConstraintEvaluator(mock_llm_client, sample_workflow)
         active = evaluator._select_active_constraints(session)
-        
-        always_constraint = next(c for c in active if c.name == "be_polite")
-        assert always_constraint is not None
+
+        never_constraint = next(c for c in active if c.name == "no_rude_behavior")
+        assert never_constraint is not None
 
     def test_precedence_active_near_trigger(self, sample_workflow, mock_llm_client, session):
         """PRECEDENCE constraints should be active when trigger is current."""
@@ -110,13 +109,13 @@ class TestEvaluation:
     async def test_no_violations(self, sample_workflow, mock_llm_client, session):
         """Test evaluation with no violations."""
         mock_llm_client.complete_json.return_value = [
-            {"constraint_id": "be_polite", "violated": False, "confidence": 0.9, "evidence": "", "severity": "warning"},
+            {"constraint_id": "no_rude_behavior", "violated": False, "confidence": 0.9, "evidence": "", "severity": "warning"},
             {"constraint_id": "no_share_password", "violated": False, "confidence": 0.95, "evidence": "", "severity": "critical"},
         ]
-        
+
         evaluator = LLMConstraintEvaluator(mock_llm_client, sample_workflow)
         evals = await evaluator.evaluate(session, "Hello, how are you?", [])
-        
+
         assert all(not e.violated for e in evals)
 
     @pytest.mark.asyncio
@@ -124,17 +123,17 @@ class TestEvaluation:
         """Test evaluation with a violation."""
         mock_llm_client.complete_json.return_value = [
             {
-                "constraint_id": "be_polite",
+                "constraint_id": "no_rude_behavior",
                 "violated": True,
                 "confidence": 0.85,
                 "evidence": "Rude language detected",
                 "severity": "warning",
             },
         ]
-        
+
         evaluator = LLMConstraintEvaluator(mock_llm_client, sample_workflow)
         evals = await evaluator.evaluate(session, "Get lost!", [])
-        
+
         violations = [e for e in evals if e.violated]
         assert len(violations) > 0
         assert violations[0].evidence == "Rude language detected"
@@ -148,39 +147,39 @@ class TestEvidenceMemory:
         """Test that evidence is accumulated in session memory."""
         mock_llm_client.complete_json.return_value = [
             {
-                "constraint_id": "be_polite",
+                "constraint_id": "no_rude_behavior",
                 "violated": False,
                 "confidence": 0.8,
                 "evidence": "Agent greeted politely",
                 "severity": "warning",
             },
         ]
-        
+
         evaluator = LLMConstraintEvaluator(mock_llm_client, sample_workflow)
         await evaluator.evaluate(session, "Hello!", [])
-        
+
         # Evidence should be stored
-        assert "be_polite" in session.constraint_memory
-        assert "Agent greeted politely" in session.constraint_memory["be_polite"]
+        assert "no_rude_behavior" in session.constraint_memory
+        assert "Agent greeted politely" in session.constraint_memory["no_rude_behavior"]
 
     @pytest.mark.asyncio
     async def test_low_confidence_not_stored(self, sample_workflow, mock_llm_client, session):
         """Test that low-confidence evidence is not stored."""
         mock_llm_client.complete_json.return_value = [
             {
-                "constraint_id": "be_polite",
+                "constraint_id": "no_rude_behavior",
                 "violated": False,
                 "confidence": 0.2,  # Below threshold
                 "evidence": "Unclear",
                 "severity": "warning",
             },
         ]
-        
+
         evaluator = LLMConstraintEvaluator(mock_llm_client, sample_workflow)
         await evaluator.evaluate(session, "...", [])
-        
+
         # Evidence should not be stored
-        assert "be_polite" not in session.constraint_memory or len(session.constraint_memory["be_polite"]) == 0
+        assert "no_rude_behavior" not in session.constraint_memory or len(session.constraint_memory["no_rude_behavior"]) == 0
 
 
 class TestBatching:
@@ -192,14 +191,13 @@ class TestBatching:
         # Create workflow with many constraints
         workflow = WorkflowDefinition(
             name="test",
-            version="1.0",
             states=[{"name": "initial", "is_initial": True}],
             constraints=[
                 {
                     "name": f"constraint_{i}",
-                    "type": "always",
-                    "condition": f"condition {i}",
-                    "severity": "warning",
+                    "type": "never",
+                    "target": f"forbidden_state_{i}",
+                    "message": f"Condition {i} must never be violated.",
                 }
                 for i in range(10)
             ],

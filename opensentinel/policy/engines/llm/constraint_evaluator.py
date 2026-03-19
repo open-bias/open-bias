@@ -111,43 +111,36 @@ class LLMConstraintEvaluator:
         session: SessionContext,
     ) -> List[Constraint]:
         """Select constraints that are active for evaluation.
-        
+
         Constraint selection rules:
         - NEVER: Always active
-        - ALWAYS: Always active  
-        - PRECEDENCE: Active when trigger is current/proposed
-        - EVENTUALLY: Active if unsatisfied
-        - RESPONSE: Active after trigger has occurred
-        - UNTIL: Active between trigger and target
-        - NEXT: Active for immediate next state
+        - PRECEDENCE: Active when trigger is current or recent
+        - EVENTUALLY: Active if target not yet reached
+        - RESPONSE: Active after trigger has occurred, until target is reached
         """
         active = []
         state_history = session.get_state_sequence()
         current_state = session.current_state
-        
+
         for constraint in self.workflow.constraints:
             should_include = False
-            
+
             if constraint.type == ConstraintType.NEVER:
                 # Never constraints are always checked
                 should_include = True
-                
-            elif constraint.type == ConstraintType.ALWAYS:
-                # Always constraints are always checked
-                should_include = True
-                
+
             elif constraint.type == ConstraintType.PRECEDENCE:
                 # Check when trigger state is current or recent
                 if constraint.trigger == current_state:
                     should_include = True
                 elif constraint.trigger in state_history[-3:]:
                     should_include = True
-                    
+
             elif constraint.type == ConstraintType.EVENTUALLY:
                 # Active if target not yet reached
                 if constraint.target not in state_history:
                     should_include = True
-                    
+
             elif constraint.type == ConstraintType.RESPONSE:
                 # Active after trigger has occurred
                 if constraint.trigger in state_history:
@@ -158,24 +151,10 @@ class LLMConstraintEvaluator:
                         for s in state_history[trigger_idx:]
                     )
                     should_include = not target_after
-                    
-            elif constraint.type == ConstraintType.UNTIL:
-                # Active in trigger state until target reached
-                if constraint.trigger in state_history:
-                    trigger_idx = state_history.index(constraint.trigger)
-                    if constraint.target not in state_history[trigger_idx:]:
-                        should_include = True
-                        
-            elif constraint.type == ConstraintType.NEXT:
-                # Only active for immediate transitions
-                if len(state_history) >= 2:
-                    prev_state = state_history[-2]
-                    if constraint.trigger == prev_state:
-                        should_include = True
-            
+
             if should_include:
                 active.append(constraint)
-        
+
         logger.debug(f"Selected {len(active)} active constraints")
         return active
 
@@ -228,9 +207,8 @@ class LLMConstraintEvaluator:
                 lines.append(f"  Trigger: {c.trigger}")
             if c.target:
                 lines.append(f"  Target: {c.target}")
-            if c.condition:
-                lines.append(f"  Condition: {c.condition}")
-            lines.append(f"  Severity: {c.severity}")
+            if c.message:
+                lines.append(f"  Message: {c.message}")
             lines.append("")
         return "\n".join(lines)
 
