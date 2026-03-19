@@ -84,7 +84,12 @@ Thumbs.db
 # Project specific
 *.log
 .panoptes/
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/new-policy-engine/
+!.claude/skills/new-intervention-strategy/
+!.claude/skills/writing-eval-scenarios/
 CLAUDE.md
 .cursor/
 .worktrees/

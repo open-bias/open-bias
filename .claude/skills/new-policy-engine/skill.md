@@ -1,0 +1,134 @@
+---
+name: new-policy-engine
+description: Guide for creating a new policy engine under opensentinel/policy/engines/
+---
+
+# Creating a New Policy Engine
+
+## Decision: PolicyEngine vs StatefulPolicyEngine
+
+- **`PolicyEngine`** — Use when each request/response is evaluated independently against policy. No state transitions between turns. Examples: Judge (rubric scoring), NeMo (guardrails).
+- **`StatefulPolicyEngine`** — Use when you need to track state transitions across turns (e.g., FSM workflows). Adds `classify_response`, `get_current_state`, `get_state_history`, `get_valid_next_states`.
+
+If you're unsure, start with `PolicyEngine`. You can always extend later.
+
+## Checklist
+
+1. **Create the engine package**
+
+   ```
+   opensentinel/policy/engines/<name>/
+   ├── __init__.py    # Export engine class
+   ├── engine.py      # Engine implementation
+   └── compiler.py    # (Optional) NL-to-config compiler
+   ```
+
+2. **Implement the engine class** in `engine.py`
+
+   ```python
+   from opensentinel.policy.protocols import (
+       Decision,
+       EngineResult,
+       PolicyEngine,
+       require_initialized,
+   )
+   from opensentinel.policy.registry import register_engine
+
+   @register_engine("<name>")
+   class MyPolicyEngine(PolicyEngine):
+       def __init__(self) -> None:
+           self._initialized = False
+           self._config: dict[str, Any] = {}
+           self._session_data: dict[str, dict[str, Any]] = {}
+
+       @property
+       def name(self) -> str:
+           return "<name>:<variant>"
+
+       @property
+       def engine_type(self) -> str:
+           return "<name>"
+
+       async def initialize(self, config: dict[str, Any]) -> None:
+           self._config = config
+           # Setup resources, load models, etc.
+           self._initialized = True  # CRITICAL: must set this
+
+       @require_initialized
+       async def evaluate_request(
+           self,
+           session_id: str,
+           request_data: dict[str, Any],
+           context: dict[str, Any] | None = None,
+       ) -> EngineResult:
+           # Return EngineResult(decision=Decision.ALLOW, message="...")
+           ...
+
+       @require_initialized
+       async def evaluate_response(
+           self,
+           session_id: str,
+           response_data: Any,
+           request_data: dict[str, Any],
+           context: dict[str, Any] | None = None,
+       ) -> EngineResult:
+           # This is where most evaluation logic lives
+           ...
+
+       async def get_session_state(self, session_id: str) -> dict[str, Any] | None:
+           return self._session_data.get(session_id)
+
+       async def reset_session(self, session_id: str) -> None:
+           self._session_data.pop(session_id, None)
+
+       async def shutdown(self) -> None:
+           self._session_data.clear()
+           self._initialized = False
+   ```
+
+3. **Export in the engine's `__init__.py`**
+
+   ```python
+   from opensentinel.policy.engines.<name>.engine import MyPolicyEngine
+
+   __all__ = ["MyPolicyEngine"]
+   ```
+
+4. **Register the import** in `opensentinel/policy/engines/__init__.py`
+
+   Add a line alongside existing imports:
+   ```python
+   from opensentinel.policy.engines import fsm, nemo, llm, judge, <name>
+   ```
+
+5. **(Optional) Create a compiler** — see `opensentinel/policy/compiler/` for the `PolicyCompiler` ABC and `LLMPolicyCompiler` base class. Use `@register_compiler("<name>")`. Wire it via `get_compiler()` on your engine.
+
+6. **Add a config example** for `osentinel.yaml`
+
+   ```yaml
+   engine: <name>
+   <name>:
+     some_option: value
+   ```
+
+7. **Write tests** in `tests/policy/engines/<name>/`
+
+   At minimum: initialization, evaluate_request with ALLOW result, evaluate_response with INTERVENE/BLOCK result, session reset.
+
+## Anti-patterns
+
+- **Forgetting `self._initialized = True`** in `initialize()` — the `@require_initialized` decorator will reject all evaluate calls.
+- **Blocking in evaluate methods** — All evaluate methods are `async`. Use `await` for I/O. Never block the event loop.
+- **Not cleaning up sessions** — Implement `reset_session` properly. The interceptor calls this for TTL-expired sessions.
+- **Mutating `request_data`** — Always work on copies. The interceptor may retry with the original.
+- **Returning bare strings instead of `EngineResult`** — Always return `EngineResult(decision=..., message=...)`.
+
+## Reference Files
+
+| File | What to look at |
+|------|----------------|
+| `opensentinel/policy/protocols.py` | `PolicyEngine` ABC, `Decision` enum, `EngineResult` dataclass |
+| `opensentinel/policy/registry.py` | `@register_engine` decorator, `PolicyEngineRegistry` |
+| `opensentinel/policy/engines/__init__.py` | Where to add your import |
+| `opensentinel/policy/engines/nemo/` | Minimal engine example (good starting point) |
+| `opensentinel/policy/engines/judge/` | More complex example with LLM calls |
