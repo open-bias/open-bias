@@ -98,7 +98,6 @@ def _parse_rubric_dict(data: dict) -> Rubric:
         evaluation_type=EvaluationType(data.get("evaluation_type", "pointwise")),
         scope=EvaluationScope(data.get("scope", "turn")),
         pass_threshold=data.get("pass_threshold", 0.6),
-        fail_action=VerdictAction(data.get("fail_action", "intervene")),
         prompt_overrides=data.get("prompt_overrides") or {},
     )
 
@@ -136,7 +135,6 @@ def create_rules_rubric(rules: List[str], name: str = "inline_policy") -> Rubric
             description=f"Rule {i}: {rule}",
             scale=ScoreScale.BINARY,
             weight=1.0,
-            fail_threshold=0.5,
         ))
         instructions += f"- Criterion `{criterion_name}`: {rule}\n"
 
@@ -146,8 +144,6 @@ def create_rules_rubric(rules: List[str], name: str = "inline_policy") -> Rubric
         criteria=criteria,
         evaluation_type=EvaluationType.POINTWISE,
         scope=EvaluationScope.TURN,
-        pass_threshold=1.0,
-        fail_action=VerdictAction.BLOCK,
         prompt_overrides={"additional_instructions": instructions},
     )
 

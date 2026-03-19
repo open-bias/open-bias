@@ -74,6 +74,7 @@ class JudgePolicyEngine(PolicyEngine):
         self._pre_call_enabled: bool = False
         self._pre_call_rubric: str = "safety"
         self._conversation_eval_interval: int = 5
+        self._fail_action: VerdictAction = VerdictAction.BLOCK
 
     @property
     def name(self) -> str:
@@ -127,6 +128,7 @@ class JudgePolicyEngine(PolicyEngine):
         )
 
         # Config
+        self._fail_action = VerdictAction(config.get("fail_action", "block"))
         self._default_rubric = config.get("default_rubric", "agent_behavior")
         self._conversation_rubric = config.get("conversation_rubric", "conversation_policy")
         self._pre_call_enabled = config.get("pre_call_enabled", False)
@@ -222,6 +224,7 @@ class JudgePolicyEngine(PolicyEngine):
                     tool_calls=tool_calls,
                     session_context=session,
                     tool_definitions=tool_definitions,
+                    fail_action=self._fail_action,
                 )
                 self._trace_verdict(session_id, turn_verdict, turn_rubric.name)
                 verdicts.append(turn_verdict)
@@ -245,6 +248,7 @@ class JudgePolicyEngine(PolicyEngine):
                         metadata=metadata,
                         session_id=session_id,
                         session_context=session,
+                        fail_action=self._fail_action,
                     )
                     self._trace_verdict(session_id, conv_verdict, conv_rubric.name)
                     verdicts.append(conv_verdict)
@@ -350,30 +354,12 @@ class JudgePolicyEngine(PolicyEngine):
             return
 
         if isinstance(policy_data, dict):
-            if "rules" in policy_data:
-                rules = policy_data["rules"]
-                if isinstance(rules, list):
-                    rubric = create_rules_rubric(rules)
-                    self._registry.register(rubric)
-                    self._default_rubric = rubric.name
-                    logger.info(f"Loaded {len(rules)} inline policy rules as '{rubric.name}'")
-                return
-            if "rubrics" in policy_data:
-                for rubric_def in policy_data["rubrics"]:
-                    try:
-                        rubric = _parse_rubric_dict(rubric_def)
-                        self._registry.register(rubric)
-                        logger.info(f"Loaded inline rubric '{rubric.name}'")
-                    except Exception as e:
-                        logger.error(f"Failed to parse inline rubric: {e}")
-                # Set first rubric as default
-                if policy_data["rubrics"]:
-                    first = policy_data["rubrics"][0]
-                    if isinstance(first, dict) and "name" in first:
-                        self._default_rubric = first["name"]
-                return
+            raise ValueError(
+                "Dict-format inline policy is no longer supported. "
+                "Use a list of rule strings or a list of rubric dicts instead."
+            )
 
-        logger.warning(f"Unrecognized inline_policy format: {type(policy_data)}")
+        raise ValueError(f"Unrecognized inline_policy format: {type(policy_data)}")
 
     def _trace_verdict(
         self,
@@ -476,6 +462,7 @@ class JudgePolicyEngine(PolicyEngine):
                 conversation=messages,
                 metadata=(context or {}).get("metadata", {}),
                 session_id=session_id,
+                fail_action=self._fail_action,
             )
             return self._build_result([verdict], self._get_or_create_session(session_id))
         except Exception as e:

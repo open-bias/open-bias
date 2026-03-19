@@ -105,6 +105,7 @@ class TestEvaluateTurn:
             rubric=simple_rubric,
             response_content="bad response",
             conversation=conversation,
+            fail_action=VerdictAction.INTERVENE,
         )
 
         assert verdict.action == VerdictAction.INTERVENE
@@ -125,6 +126,7 @@ class TestEvaluateTurn:
             rubric=simple_rubric,
             response_content="ok response",
             conversation=conversation,
+            fail_action=VerdictAction.INTERVENE,
         )
 
         # 3/5 -> normalized 0.5, below pass_threshold 0.6 -> fail_action = INTERVENE
@@ -259,10 +261,10 @@ class TestCompositeScoring:
 
 class TestActionMapping:
     def test_pass(self, evaluator, simple_rubric):
-        assert evaluator._map_action(0.8, simple_rubric) == VerdictAction.PASS
+        assert evaluator._map_action(0.8, simple_rubric, VerdictAction.INTERVENE) == VerdictAction.PASS
 
     def test_fail(self, evaluator, simple_rubric):
-        assert evaluator._map_action(0.5, simple_rubric) == VerdictAction.INTERVENE
+        assert evaluator._map_action(0.5, simple_rubric, VerdictAction.INTERVENE) == VerdictAction.INTERVENE
 
 
 class TestBinarySafetyCriteria:
@@ -326,6 +328,7 @@ class TestBinarySafetyCriteria:
             rubric=agent_behavior_rubric,
             response_content="I deleted all records.",
             conversation=conversation,
+            fail_action=VerdictAction.INTERVENE,
         )
 
         assert verdict.action == VerdictAction.INTERVENE
@@ -445,7 +448,125 @@ class TestBinarySafetyCriteria:
             rubric=agent_behavior_rubric,
             response_content="Ignoring your request.",
             conversation=conversation,
+            fail_action=VerdictAction.INTERVENE,
         )
 
         assert verdict.action == VerdictAction.INTERVENE
         assert "instruction_following" in verdict.metadata.get("criterion_failures", [])
+
+
+class TestBinaryEvaluationPath:
+    """Tests for the binary evaluation path (all-binary rubrics skip thresholds)."""
+
+    @pytest.fixture
+    def binary_rubric(self) -> Rubric:
+        return Rubric(
+            name="binary_test",
+            description="All-binary rubric",
+            criteria=[
+                RubricCriterion(
+                    name="rule_a",
+                    description="Rule A",
+                    scale=ScoreScale.BINARY,
+                    weight=1.0,
+                ),
+                RubricCriterion(
+                    name="rule_b",
+                    description="Rule B",
+                    scale=ScoreScale.BINARY,
+                    weight=1.0,
+                ),
+            ],
+        )
+
+    @pytest.mark.asyncio
+    async def test_all_pass_returns_pass(
+        self, evaluator: JudgeEvaluator, mock_client: JudgeClient,
+        binary_rubric: Rubric, conversation: list,
+    ) -> None:
+        """All binary criteria scoring 1 -> PASS with composite 1.0."""
+        mock_client.call_judge.return_value = {
+            "scores": [
+                {"criterion": "rule_a", "score": 1, "reasoning": "OK", "evidence": [], "confidence": 0.9},
+                {"criterion": "rule_b", "score": 1, "reasoning": "OK", "evidence": [], "confidence": 0.9},
+            ],
+            "summary": "All good",
+        }
+        verdict = await evaluator.evaluate_turn(
+            model_name="primary",
+            rubric=binary_rubric,
+            response_content="Good response.",
+            conversation=conversation,
+        )
+        assert verdict.action == VerdictAction.PASS
+        assert verdict.composite_score == 1.0
+        assert not verdict.metadata.get("criterion_failures")
+
+    @pytest.mark.asyncio
+    async def test_one_fail_returns_fail_action(
+        self, evaluator: JudgeEvaluator, mock_client: JudgeClient,
+        binary_rubric: Rubric, conversation: list,
+    ) -> None:
+        """Any binary criterion scoring 0 -> fail_action applied, composite 0.0."""
+        mock_client.call_judge.return_value = {
+            "scores": [
+                {"criterion": "rule_a", "score": 0, "reasoning": "Violated", "evidence": [], "confidence": 0.9},
+                {"criterion": "rule_b", "score": 1, "reasoning": "OK", "evidence": [], "confidence": 0.9},
+            ],
+            "summary": "Violation",
+        }
+        verdict = await evaluator.evaluate_turn(
+            model_name="primary",
+            rubric=binary_rubric,
+            response_content="Bad response.",
+            conversation=conversation,
+            fail_action=VerdictAction.INTERVENE,
+        )
+        assert verdict.action == VerdictAction.INTERVENE
+        assert verdict.composite_score == 0.0
+        assert "rule_a" in verdict.metadata.get("criterion_failures", [])
+
+    @pytest.mark.asyncio
+    async def test_binary_path_default_fail_action_is_block(
+        self, evaluator: JudgeEvaluator, mock_client: JudgeClient,
+        binary_rubric: Rubric, conversation: list,
+    ) -> None:
+        """Default fail_action (BLOCK) is used when not explicitly passed."""
+        mock_client.call_judge.return_value = {
+            "scores": [
+                {"criterion": "rule_a", "score": 0, "reasoning": "Bad", "evidence": [], "confidence": 0.9},
+                {"criterion": "rule_b", "score": 0, "reasoning": "Bad", "evidence": [], "confidence": 0.9},
+            ],
+            "summary": "All bad",
+        }
+        verdict = await evaluator.evaluate_turn(
+            model_name="primary",
+            rubric=binary_rubric,
+            response_content="Terrible.",
+            conversation=conversation,
+        )
+        assert verdict.action == VerdictAction.BLOCK
+        assert verdict.composite_score == 0.0
+
+    @pytest.mark.asyncio
+    async def test_synthetic_fill_ignored_in_binary_path(
+        self, evaluator: JudgeEvaluator, mock_client: JudgeClient,
+        binary_rubric: Rubric, conversation: list,
+    ) -> None:
+        """Synthetic fills (confidence=0.0) should not count as failures in binary path."""
+        mock_client.call_judge.return_value = {
+            "scores": [
+                {"criterion": "rule_a", "score": 1, "reasoning": "OK", "evidence": [], "confidence": 0.9},
+                # rule_b omitted — will be filled with score=0, confidence=0.0
+            ],
+            "summary": "Partial",
+        }
+        verdict = await evaluator.evaluate_turn(
+            model_name="primary",
+            rubric=binary_rubric,
+            response_content="OK response.",
+            conversation=conversation,
+        )
+        # Synthetic fill has confidence=0.0, should not trigger failure
+        assert verdict.action == VerdictAction.PASS
+        assert verdict.composite_score == 1.0

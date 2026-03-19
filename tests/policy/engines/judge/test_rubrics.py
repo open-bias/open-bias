@@ -82,7 +82,8 @@ class TestCreateRulesRubric:
         assert len(rubric.criteria) == 2
         assert rubric.criteria[0].scale == ScoreScale.BINARY
         assert rubric.criteria[1].scale == ScoreScale.BINARY
-        assert rubric.fail_action == VerdictAction.BLOCK
+        # fail_action is now engine-level, rubric uses dataclass default
+        assert rubric.fail_action == VerdictAction.INTERVENE
         # Each criterion has a descriptive name derived from the rule
         assert "rule_1" in rubric.criteria[0].name
         assert "rule_2" in rubric.criteria[1].name
@@ -99,25 +100,17 @@ class TestCreateRulesRubric:
         rubric = create_rules_rubric(["Never lie"])
         assert len(rubric.criteria) == 1
         assert rubric.criteria[0].scale == ScoreScale.BINARY
-        assert rubric.criteria[0].fail_threshold == 0.5
 
     def test_custom_name(self):
         from opensentinel.policy.engines.judge.rubrics import create_rules_rubric
         rubric = create_rules_rubric(["rule1"], name="my_policy")
         assert rubric.name == "my_policy"
 
-    def test_three_rules_all_have_fail_threshold(self):
+    def test_three_rules_all_binary(self):
         from opensentinel.policy.engines.judge.rubrics import create_rules_rubric
         rules = ["Rule A", "Rule B", "Rule C"]
         rubric = create_rules_rubric(rules)
         assert len(rubric.criteria) == 3
         for criterion in rubric.criteria:
-            assert criterion.fail_threshold == 0.5
             assert criterion.scale == ScoreScale.BINARY
-
-    def test_pass_threshold_is_strict(self):
-        """pass_threshold=1.0 ensures any single rule failure causes overall failure."""
-        from opensentinel.policy.engines.judge.rubrics import create_rules_rubric
-        rubric = create_rules_rubric(["A", "B"])
-        assert rubric.pass_threshold == 1.0
 

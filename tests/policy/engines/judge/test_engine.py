@@ -543,20 +543,20 @@ class TestInlinePolicy:
         assert "No financial advice" in rubric.prompt_overrides["additional_instructions"]
 
     @pytest.mark.asyncio
-    async def test_initialize_with_inline_dict_rules(self, engine):
-        """Engine should load dict-style inline rules."""
+    async def test_initialize_with_inline_dict_rules_raises(self, engine):
+        """Dict-format inline policy should raise ValueError."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_policy": {
                 "rules": ["Never lie", "Stay on topic"],
             },
         }
-        await engine.initialize(config)
-        assert engine._default_rubric == "inline_policy"
+        with pytest.raises(ValueError, match="Dict-format inline policy is no longer supported"):
+            await engine.initialize(config)
 
     @pytest.mark.asyncio
-    async def test_initialize_with_inline_rubrics(self, engine):
-        """Engine should load formal inline rubric definitions."""
+    async def test_initialize_with_inline_rubrics_dict_raises(self, engine):
+        """Dict-format inline policy with rubrics should raise ValueError."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_policy": {
@@ -571,10 +571,8 @@ class TestInlinePolicy:
                 }],
             },
         }
-        await engine.initialize(config)
-        assert engine._default_rubric == "my_custom"
-
-        assert engine._registry.get("my_custom") is not None
+        with pytest.raises(ValueError, match="Dict-format inline policy is no longer supported"):
+            await engine.initialize(config)
 
     @pytest.mark.asyncio
     async def test_inline_policy_does_not_break_custom_rubrics_path(self, engine):

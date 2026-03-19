@@ -72,6 +72,7 @@ class JudgeEvaluator:
         tool_calls: Optional[List[Dict[str, Any]]] = None,
         session_context: Optional[JudgeSessionContext] = None,
         tool_definitions: Optional[Dict[str, Dict[str, Any]]] = None,
+        fail_action: VerdictAction = VerdictAction.BLOCK,
     ) -> JudgeVerdict:
         """Evaluate a single turn (latest assistant response).
 
@@ -99,6 +100,7 @@ class JudgeEvaluator:
                 model_name, rubric, response_content, conversation,
                 reference, metadata, session_id=session_id,
                 session_context=session_context,
+                fail_action=fail_action,
             )
 
         criteria_block = format_criteria_block(rubric.criteria)
@@ -143,16 +145,19 @@ class JudgeEvaluator:
 
         self._validate_judge_response(raw, rubric.criteria)
         scores = self._parse_pointwise_scores(raw, rubric.criteria)
-        
-        # Check for critical failures immediately
-        failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
-        composite = self._compute_composite(scores, rubric.criteria)
-        action = self._map_action(composite, rubric)
         model_id = self._client.get_model_id(model_name)
 
-        # If any criterion failed, override action
-        if failed_criteria and action != VerdictAction.BLOCK:
-            action = rubric.fail_action
+        if self._is_all_binary(rubric.criteria):
+            failed = [s for s in scores if s.score == 0 and s.confidence > 0.0]
+            action = fail_action if failed else VerdictAction.PASS
+            composite = 0.0 if failed else 1.0
+            failed_criteria = [s.criterion for s in failed]
+        else:
+            failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
+            composite = self._compute_composite(scores, rubric.criteria)
+            action = self._map_action(composite, rubric, fail_action)
+            if failed_criteria and action != VerdictAction.BLOCK:
+                action = fail_action
 
         return JudgeVerdict(
             scores=scores,
@@ -174,6 +179,7 @@ class JudgeEvaluator:
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
         session_context: Optional[JudgeSessionContext] = None,
+        fail_action: VerdictAction = VerdictAction.BLOCK,
     ) -> JudgeVerdict:
         """Evaluate the entire conversation trajectory.
 
@@ -234,14 +240,19 @@ class JudgeEvaluator:
 
         self._validate_judge_response(raw, rubric.criteria)
         scores = self._parse_pointwise_scores(raw, rubric.criteria)
-        
-        failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
-        composite = self._compute_composite(scores, rubric.criteria)
-        action = self._map_action(composite, rubric)
         model_id = self._client.get_model_id(model_name)
 
-        if failed_criteria and action != VerdictAction.BLOCK:
-            action = rubric.fail_action
+        if self._is_all_binary(rubric.criteria):
+            failed = [s for s in scores if s.score == 0 and s.confidence > 0.0]
+            action = fail_action if failed else VerdictAction.PASS
+            composite = 0.0 if failed else 1.0
+            failed_criteria = [s.criterion for s in failed]
+        else:
+            failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
+            composite = self._compute_composite(scores, rubric.criteria)
+            action = self._map_action(composite, rubric, fail_action)
+            if failed_criteria and action != VerdictAction.BLOCK:
+                action = fail_action
 
         return JudgeVerdict(
             scores=scores,
@@ -264,6 +275,7 @@ class JudgeEvaluator:
         conversation: List[Dict[str, Any]],
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
+        fail_action: VerdictAction = VerdictAction.BLOCK,
     ) -> JudgeVerdict:
         """Compare two responses using pairwise evaluation.
 
@@ -314,15 +326,15 @@ class JudgeEvaluator:
 
         # Build JudgeScores from the "a" side scores
         scores = self._parse_pairwise_scores(demapped_scores, rubric.criteria)
-        
+        model_id = self._client.get_model_id(model_name)
+
         # Check for critical failures
         failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
         composite = self._compute_composite(scores, rubric.criteria)
-        action = self._map_action(composite, rubric)
-        model_id = self._client.get_model_id(model_name)
+        action = self._map_action(composite, rubric, fail_action)
 
         if failed_criteria and action != VerdictAction.BLOCK:
-            action = rubric.fail_action
+            action = fail_action
 
         return JudgeVerdict(
             scores=scores,
@@ -351,6 +363,7 @@ class JudgeEvaluator:
         metadata: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
         session_context: Optional[JudgeSessionContext] = None,
+        fail_action: VerdictAction = VerdictAction.BLOCK,
     ) -> JudgeVerdict:
         """Evaluate a response against a reference answer."""
         criteria_block = format_criteria_block(rubric.criteria)
@@ -383,14 +396,14 @@ class JudgeEvaluator:
 
         self._validate_judge_response(raw, rubric.criteria)
         scores = self._parse_pointwise_scores(raw, rubric.criteria)
-        
-        failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
-        composite = self._compute_composite(scores, rubric.criteria)
-        action = self._map_action(composite, rubric)
         model_id = self._client.get_model_id(model_name)
 
+        failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
+        composite = self._compute_composite(scores, rubric.criteria)
+        action = self._map_action(composite, rubric, fail_action)
+
         if failed_criteria and action != VerdictAction.BLOCK:
-            action = rubric.fail_action
+            action = fail_action
 
         return JudgeVerdict(
             scores=scores,
@@ -406,6 +419,16 @@ class JudgeEvaluator:
                 "criterion_failures": failed_criteria,
             },
         )
+
+    # =========================================================================
+    # Binary evaluation
+    # =========================================================================
+
+    @staticmethod
+    def _is_all_binary(criteria: List[RubricCriterion]) -> bool:
+        """Return True if every criterion uses the BINARY scale."""
+        from opensentinel.policy.engines.judge.models import ScoreScale
+        return all(c.scale == ScoreScale.BINARY for c in criteria)
 
     # =========================================================================
     # Parsing & Scoring
@@ -519,14 +542,16 @@ class JudgeEvaluator:
 
         return weighted_sum / total_weight
 
-    def _map_action(self, composite: float, rubric: Rubric) -> VerdictAction:
+    def _map_action(
+        self, composite: float, rubric: Rubric, fail_action: VerdictAction,
+    ) -> VerdictAction:
         """Map composite score to a verdict action.
 
-        Binary: pass if above rubric threshold, otherwise rubric's fail_action.
+        Binary: pass if above rubric threshold, otherwise fail_action.
         """
         if composite >= rubric.pass_threshold:
             return VerdictAction.PASS
-        return rubric.fail_action
+        return fail_action
 
     def _check_criterion_failures(
         self,
