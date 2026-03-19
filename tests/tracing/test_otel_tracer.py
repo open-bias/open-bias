@@ -132,20 +132,20 @@ class TestSessionEviction:
 
         tracer._get_or_create_session_span("sess-a")
         tracer._get_or_create_session_span("sess-b")
-        assert len(tracer._session_spans) == 2
+        assert len(tracer._sessions) == 2
 
         # Simulate time passing beyond the TTL
-        for sid in tracer._session_timestamps:
-            tracer._session_timestamps[sid] -= 5  # push 5s into the past
+        for sid in list(tracer._sessions._timestamps):
+            tracer._sessions._timestamps[sid] -= 5  # push 5s into the past
 
         # Next access should trigger eviction of both stale sessions
         mock_span_c = MagicMock()
         mock_otel["tracer"].start_span.side_effect = [mock_span_c]
         tracer._get_or_create_session_span("sess-c")
 
-        assert "sess-a" not in tracer._session_spans
-        assert "sess-b" not in tracer._session_spans
-        assert "sess-c" in tracer._session_spans
+        assert "sess-a" not in tracer._sessions
+        assert "sess-b" not in tracer._sessions
+        assert "sess-c" in tracer._sessions
         # The stale spans should have been ended
         mock_span_a.end.assert_called_once()
         mock_span_b.end.assert_called_once()
@@ -159,14 +159,14 @@ class TestSessionEviction:
         mock_otel["tracer"].start_span.return_value = mock_span
 
         tracer._get_or_create_session_span("sess-1")
-        old_ts = tracer._session_timestamps["sess-1"]
+        old_ts = tracer._sessions._timestamps["sess-1"]
 
         # Small sleep to ensure monotonic() advances
         time.sleep(0.01)
 
         span = tracer._get_or_create_session_span("sess-1")
         assert span is mock_span  # same span returned
-        assert tracer._session_timestamps["sess-1"] > old_ts
+        assert tracer._sessions._timestamps["sess-1"] > old_ts
 
     def test_max_sessions_cap(self, mock_otel):
         """When max_sessions is exceeded, oldest sessions should be evicted."""
@@ -180,12 +180,12 @@ class TestSessionEviction:
             tracer._get_or_create_session_span(f"sess-{i}")
 
         # Only the last 3 should remain
-        assert len(tracer._session_spans) == 3
-        assert "sess-0" not in tracer._session_spans
-        assert "sess-1" not in tracer._session_spans
-        assert "sess-2" in tracer._session_spans
-        assert "sess-3" in tracer._session_spans
-        assert "sess-4" in tracer._session_spans
+        assert len(tracer._sessions) == 3
+        assert "sess-0" not in tracer._sessions
+        assert "sess-1" not in tracer._sessions
+        assert "sess-2" in tracer._sessions
+        assert "sess-3" in tracer._sessions
+        assert "sess-4" in tracer._sessions
         # The evicted spans should have been ended
         spans[0].end.assert_called_once()
         spans[1].end.assert_called_once()
@@ -199,11 +199,10 @@ class TestSessionEviction:
         mock_otel["tracer"].start_span.return_value = mock_span
 
         tracer._get_or_create_session_span("sess-1")
-        assert "sess-1" in tracer._session_timestamps
+        assert "sess-1" in tracer._sessions
 
         tracer.end_trace("sess-1")
-        assert "sess-1" not in tracer._session_spans
-        assert "sess-1" not in tracer._session_timestamps
+        assert "sess-1" not in tracer._sessions
         mock_span.end.assert_called_once()
 
     def test_default_ttl_and_max_sessions(self, mock_otel):
@@ -211,15 +210,15 @@ class TestSessionEviction:
         config = OTelConfig(enabled=True, exporter_type="otlp")
         tracer = SentinelTracer(config)
 
-        assert tracer._session_ttl == SentinelTracer.DEFAULT_SESSION_TTL
-        assert tracer._max_sessions == SentinelTracer.DEFAULT_MAX_SESSIONS
+        assert tracer._sessions._ttl == SentinelTracer.DEFAULT_SESSION_TTL
+        assert tracer._sessions._max_sessions == SentinelTracer.DEFAULT_MAX_SESSIONS
 
     def test_custom_ttl_zero_allowed(self, mock_otel):
         """A TTL of 0 should be allowed (immediate eviction of all prior sessions)."""
         config = OTelConfig(enabled=True, exporter_type="otlp")
         tracer = SentinelTracer(config, session_ttl_seconds=0)
 
-        assert tracer._session_ttl == 0
+        assert tracer._sessions._ttl == 0
 
     def test_shutdown_cleans_all_sessions(self, mock_otel):
         """shutdown() should end all remaining sessions and clear tracking."""
@@ -233,7 +232,6 @@ class TestSessionEviction:
             tracer._get_or_create_session_span(f"sess-{i}")
 
         tracer.shutdown()
-        assert len(tracer._session_spans) == 0
-        assert len(tracer._session_timestamps) == 0
+        assert len(tracer._sessions) == 0
         for s in spans:
             s.end.assert_called_once()

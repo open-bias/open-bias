@@ -10,12 +10,11 @@ Traces can be exported to any OTLP-compatible backend including:
 import base64
 import json
 import logging
-import time
-from collections import OrderedDict
 from typing import Optional, Dict, Any, List
 from contextlib import contextmanager
 
 from opensentinel import __version__
+from opensentinel.core.session import SessionStore
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
@@ -72,11 +71,11 @@ class SentinelTracer:
     ):
         self.config = config
         # Session memory management
-        self._session_ttl = session_ttl_seconds if session_ttl_seconds is not None else self.DEFAULT_SESSION_TTL
-        self._max_sessions = max_sessions if max_sessions is not None else self.DEFAULT_MAX_SESSIONS
-        # OrderedDict preserves insertion order for efficient oldest-first eviction
-        self._session_spans: OrderedDict[str, trace.Span] = OrderedDict()
-        self._session_timestamps: OrderedDict[str, float] = OrderedDict()  # session_id -> monotonic time
+        self._sessions: SessionStore[trace.Span] = SessionStore(
+            ttl=session_ttl_seconds if session_ttl_seconds is not None else self.DEFAULT_SESSION_TTL,
+            max_sessions=max_sessions if max_sessions is not None else self.DEFAULT_MAX_SESSIONS,
+            on_evict=self._on_session_evict,
+        )
         self._enabled = config.enabled
 
         if not self._enabled or config.exporter_type == "none":
@@ -141,63 +140,35 @@ class SentinelTracer:
 
         logger.info(f"SentinelTracer initialized (exporter={config.exporter_type})")
 
-    def _evict_stale_sessions(self) -> None:
-        """Remove sessions that have exceeded their TTL or breach the max cap.
+    @staticmethod
+    def _on_session_evict(session_id: str, span: trace.Span) -> None:
+        """End the span when a session is evicted."""
+        try:
+            span.set_status(Status(StatusCode.OK))
+            span.end()
+        except Exception:
+            logger.debug("Failed to end span for session %s", session_id, exc_info=True)
 
-        Iterates the OrderedDict from oldest to newest, ending spans for any
-        session whose last-access timestamp is older than ``_session_ttl``
-        seconds ago.  After TTL eviction, if the dict still exceeds
-        ``_max_sessions``, the oldest entries are removed until the cap is met.
-        """
-        now = time.monotonic()
-        # --- TTL eviction (oldest-first) ---
-        stale_ids: list[str] = []
-        for sid, ts in self._session_timestamps.items():
-            if now - ts > self._session_ttl:
-                stale_ids.append(sid)
-            else:
-                # OrderedDict is in insertion/access order — once we hit a
-                # session that is still fresh, every subsequent one is too.
-                break
-
-        for sid in stale_ids:
-            self._end_and_remove_session(sid)
-
-        if stale_ids:
-            logger.debug("Evicted %d stale session spans (TTL=%ds)", len(stale_ids), self._session_ttl)
-
-        # --- Hard cap eviction ---
-        overflow = len(self._session_spans) - self._max_sessions
-        if overflow > 0:
-            oldest = list(self._session_spans.keys())[:overflow]
-            for sid in oldest:
-                self._end_and_remove_session(sid)
-            logger.debug("Evicted %d session spans (max_sessions=%d)", overflow, self._max_sessions)
-
-    def _end_and_remove_session(self, session_id: str) -> None:
-        """End a session span and remove it from tracking dicts."""
-        span = self._session_spans.pop(session_id, None)
-        self._session_timestamps.pop(session_id, None)
-        if span is not None:
-            try:
-                span.set_status(Status(StatusCode.OK))
-                span.end()
-            except Exception:
-                logger.debug("Failed to end span for session %s", session_id, exc_info=True)
+    @staticmethod
+    def _end_span(span: trace.Span, session_id: str) -> None:
+        """Gracefully end a session span."""
+        try:
+            span.set_status(Status(StatusCode.OK))
+            span.end()
+        except Exception:
+            logger.debug("Failed to end span for session %s", session_id, exc_info=True)
 
     def _get_or_create_session_span(self, session_id: str) -> trace.Span:
         """Get existing session span or create new one.
 
         Triggers lazy eviction of stale / overflow sessions before returning.
         """
-        self._evict_stale_sessions()
+        self._sessions.evict_stale()
 
-        if session_id in self._session_spans:
-            # Refresh the timestamp so actively-used sessions aren't evicted.
-            self._session_timestamps[session_id] = time.monotonic()
-            self._session_timestamps.move_to_end(session_id)
-            self._session_spans.move_to_end(session_id)
-            return self._session_spans[session_id]
+        span = self._sessions.get(session_id)
+        if span is not None:
+            self._sessions.touch(session_id)
+            return span
 
         if self._tracer:
             span = self._tracer.start_span(
@@ -207,14 +178,10 @@ class SentinelTracer:
                     "opensentinel.version": __version__,
                 },
             )
-            self._session_spans[session_id] = span
-            self._session_timestamps[session_id] = time.monotonic()
+            self._sessions.put(session_id, span)
             logger.debug(f"Created session span for {session_id}")
 
-            # Enforce hard cap after insertion
-            self._evict_stale_sessions()
-
-        return self._session_spans.get(session_id)
+        return self._sessions.get(session_id)
 
     def _safe_json(self, obj: Any) -> str:
         """Safely serialize object to JSON string for span attributes."""
@@ -661,8 +628,9 @@ class SentinelTracer:
 
     def end_trace(self, session_id: str) -> None:
         """Mark a session trace as complete and free the session memory."""
-        if session_id in self._session_spans:
-            self._end_and_remove_session(session_id)
+        span = self._sessions.remove(session_id)
+        if span is not None:
+            self._end_span(span, session_id)
             logger.debug(f"Ended trace for session {session_id}")
 
     def flush(self) -> None:
@@ -672,7 +640,7 @@ class SentinelTracer:
 
     def shutdown(self) -> None:
         """Clean up any remaining traces."""
-        for session_id in list(self._session_spans.keys()):
+        for session_id in list(self._sessions.keys()):
             self.end_trace(session_id)
 
         if hasattr(self, "_provider") and self._provider:

@@ -856,22 +856,21 @@ class TestJudgeSessionEviction:
 
     def test_session_evicted_after_ttl(self, engine):
         """Sessions older than TTL are evicted on next _get_or_create_session."""
-        engine._session_ttl = 1  # 1 second
+        engine._sessions._ttl = 1  # 1 second
 
         # Create a session and backdate its timestamp
         engine._get_or_create_session("old")
-        engine._session_timestamps["old"] = time.monotonic() - 2
+        engine._sessions._timestamps["old"] = time.monotonic() - 2
 
         # Creating a new session triggers eviction
         engine._get_or_create_session("new")
 
         assert "old" not in engine._sessions
-        assert "old" not in engine._session_timestamps
         assert "new" in engine._sessions
 
     def test_max_sessions_eviction(self, engine):
         """When max_sessions is exceeded, oldest sessions are evicted."""
-        engine._max_sessions = 2
+        engine._sessions._max_sessions = 2
 
         engine._get_or_create_session("s1")
         engine._get_or_create_session("s2")
@@ -882,25 +881,23 @@ class TestJudgeSessionEviction:
 
     @pytest.mark.asyncio
     async def test_reset_session_clears_timestamp(self, engine):
-        """reset_session removes the session timestamp too."""
+        """reset_session removes the session from the store."""
         engine._get_or_create_session("s1")
-        assert "s1" in engine._session_timestamps
+        assert "s1" in engine._sessions
 
         await engine.reset_session("s1")
 
         assert "s1" not in engine._sessions
-        assert "s1" not in engine._session_timestamps
 
     @pytest.mark.asyncio
     async def test_shutdown_clears_timestamps(self, engine):
-        """shutdown clears all session timestamps."""
+        """shutdown clears all sessions."""
         engine._get_or_create_session("s1")
         engine._get_or_create_session("s2")
 
         await engine.shutdown()
 
         assert len(engine._sessions) == 0
-        assert len(engine._session_timestamps) == 0
 
     @pytest.mark.asyncio
     async def test_initialize_with_session_config(self):
@@ -913,8 +910,8 @@ class TestJudgeSessionEviction:
         }
         await engine.initialize(config)
 
-        assert engine._session_ttl == 300
-        assert engine._max_sessions == 500
+        assert engine._sessions._ttl == 300
+        assert engine._sessions._max_sessions == 500
 
 
 class TestMissingCriterionFalsePositive:

@@ -7,8 +7,6 @@ handles async checker task management, and applies interventions.
 
 import asyncio
 import logging
-import time
-from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,6 +14,7 @@ from opensentinel.core.intervention.strategies import (
     SystemPromptAppendStrategy,
     UserMessageInjectStrategy,
 )
+from opensentinel.core.session import SessionStore
 from opensentinel.policy.protocols import Decision, EngineResult
 
 from .adapters import PolicyEngineChecker
@@ -80,18 +79,17 @@ class Interceptor:
         self._default_strategy = default_strategy
 
         # Session memory management
-        self._session_ttl = session_ttl if session_ttl is not None else self.DEFAULT_SESSION_TTL
-        self._max_sessions = max_sessions if max_sessions is not None else self.DEFAULT_MAX_SESSIONS
         self._max_async_tasks = (
             max_async_tasks_per_session
             if max_async_tasks_per_session is not None
             else self.DEFAULT_MAX_ASYNC_TASKS_PER_SESSION
         )
 
-        # session_id -> running async tasks (OrderedDict for LRU eviction)
-        self._running_tasks: OrderedDict[str, list[asyncio.Task[_PendingResult]]] = OrderedDict()
-        # session_id -> last access monotonic timestamp
-        self._session_timestamps: OrderedDict[str, float] = OrderedDict()
+        self._sessions: SessionStore[list[asyncio.Task[_PendingResult]]] = SessionStore(
+            ttl=session_ttl if session_ttl is not None else self.DEFAULT_SESSION_TTL,
+            max_sessions=max_sessions if max_sessions is not None else self.DEFAULT_MAX_SESSIONS,
+            on_evict=self._on_session_evict,
+        )
 
         logger.info(
             f"Interceptor initialized: {len(self._sync_pre_call)} sync pre-call, "
@@ -116,8 +114,8 @@ class Interceptor:
         3. Start async PRE_CALL checkers in background
         4. Return result with possibly modified request_data
         """
-        self._touch_session(session_id)
-        self._evict_stale_sessions()
+        self._sessions.touch(session_id)
+        self._sessions.evict_stale()
 
         modified_data = dict(request_data)
         all_metadata: dict[str, Any] = {"results": []}
@@ -230,7 +228,7 @@ class Interceptor:
         2. Start async POST_CALL checkers in background (don't wait)
         3. Return result with optional modified_data for response modification
         """
-        self._touch_session(session_id)
+        self._sessions.touch(session_id)
 
         all_metadata: dict[str, Any] = {"results": [], "interventions": []}
         modified_data: dict[str, Any] | None = None
@@ -306,35 +304,36 @@ class Interceptor:
         """Collect results from completed async tasks for a session."""
         results: list[_PendingResult] = []
 
-        # Check running tasks
-        if session_id in self._running_tasks:
-            tasks = self._running_tasks[session_id]
-            still_running: list[asyncio.Task[_PendingResult]] = []
+        tasks = self._sessions.get(session_id)
+        if tasks is None:
+            return results
 
-            for task in tasks:
-                if task.done():
-                    try:
-                        result = task.result()
-                        results.append(result)
-                    except Exception as e:
-                        logger.error(f"Async checker task failed: {e}")
-                        results.append(
-                            _PendingResult(
-                                checker_name="async_task_error",
-                                result=EngineResult(
-                                    decision=Decision.ALLOW,
-                                    message=f"Async task error: {e}",
-                                    metadata={"error": str(e)},
-                                ),
-                            )
+        still_running: list[asyncio.Task[_PendingResult]] = []
+
+        for task in tasks:
+            if task.done():
+                try:
+                    result = task.result()
+                    results.append(result)
+                except Exception as e:
+                    logger.error(f"Async checker task failed: {e}")
+                    results.append(
+                        _PendingResult(
+                            checker_name="async_task_error",
+                            result=EngineResult(
+                                decision=Decision.ALLOW,
+                                message=f"Async task error: {e}",
+                                metadata={"error": str(e)},
+                            ),
                         )
-                else:
-                    still_running.append(task)
-
-            if still_running:
-                self._running_tasks[session_id] = still_running
+                    )
             else:
-                del self._running_tasks[session_id]
+                still_running.append(task)
+
+        if still_running:
+            tasks[:] = still_running
+        else:
+            self._sessions.remove(session_id)
 
         return results
 
@@ -369,13 +368,13 @@ class Interceptor:
                 )
 
         # Enforce per-session async task cap
-        if session_id not in self._running_tasks:
-            self._running_tasks[session_id] = []
+        tasks = self._sessions.get(session_id)
+        if tasks is None:
+            tasks = []
+            self._sessions.put(session_id, tasks)
 
-        tasks = self._running_tasks[session_id]
         # Prune completed tasks before checking the cap
-        self._running_tasks[session_id] = [t for t in tasks if not t.done()]
-        tasks = self._running_tasks[session_id]
+        tasks[:] = [t for t in tasks if not t.done()]
 
         if len(tasks) >= self._max_async_tasks:
             logger.warning(
@@ -387,7 +386,7 @@ class Interceptor:
                 oldest.cancel()
 
         task = asyncio.create_task(run_checker())
-        self._running_tasks[session_id].append(task)
+        tasks.append(task)
 
         logger.debug(f"Started async checker '{checker.name}' for session {session_id}")
 
@@ -419,58 +418,26 @@ class Interceptor:
 
         return result
 
-    def _touch_session(self, session_id: str) -> None:
-        """Update the last-access timestamp for a session (LRU tracking)."""
-        self._session_timestamps[session_id] = time.monotonic()
-        # Move to end for LRU ordering
-        self._session_timestamps.move_to_end(session_id)
-
-    def _evict_stale_sessions(self) -> None:
-        """Remove sessions that have exceeded their TTL or breach the max cap."""
-        now = time.monotonic()
-
-        # TTL eviction (oldest-first)
-        stale_ids: list[str] = []
-        for sid, ts in self._session_timestamps.items():
-            if now - ts > self._session_ttl:
-                stale_ids.append(sid)
-            else:
-                break
-
-        for sid in stale_ids:
-            self._cancel_session_tasks(sid)
-            self._session_timestamps.pop(sid, None)
-
-        if stale_ids:
-            logger.debug("Evicted %d stale interceptor sessions (TTL=%ds)", len(stale_ids), self._session_ttl)
-
-        # Hard cap eviction
-        overflow = len(self._session_timestamps) - self._max_sessions
-        if overflow > 0:
-            oldest = list(self._session_timestamps.keys())[:overflow]
-            for sid in oldest:
-                self._cancel_session_tasks(sid)
-                self._session_timestamps.pop(sid, None)
-            logger.debug("Evicted %d interceptor sessions (max=%d)", overflow, self._max_sessions)
-
-    def _cancel_session_tasks(self, session_id: str) -> None:
-        """Cancel and remove all async tasks for a session."""
-        if session_id in self._running_tasks:
-            for task in self._running_tasks[session_id]:
-                if not task.done():
-                    task.cancel()
-            del self._running_tasks[session_id]
+    @staticmethod
+    def _on_session_evict(_session_id: str, tasks: list[asyncio.Task[_PendingResult]]) -> None:
+        """Cancel all async tasks when a session is evicted."""
+        for task in tasks:
+            if not task.done():
+                task.cancel()
 
     async def cleanup_session(self, session_id: str) -> None:
         """Cancel running async tasks and clear pending results for a session."""
-        self._cancel_session_tasks(session_id)
-        self._session_timestamps.pop(session_id, None)
+        tasks = self._sessions.remove(session_id)
+        if tasks:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
 
         logger.debug(f"Cleaned up session {session_id}")
 
     async def shutdown(self) -> None:
         """Shutdown the interceptor, cancelling all running async tasks."""
-        for session_id in list(self._running_tasks.keys()):
+        for session_id in list(self._sessions.keys()):
             await self.cleanup_session(session_id)
 
         logger.info("Interceptor shutdown complete")
