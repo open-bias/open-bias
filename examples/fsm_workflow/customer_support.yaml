@@ -8,207 +8,22 @@
 #   cd examples/fsm_workflow && osentinel serve
 
 name: customer-support-agent
-version: "1.0"
-description: |
-  Customer support workflow with identity verification requirement.
-  Ensures agents verify customer identity before account modifications.
+mode: guide
 
-states:
-  # Initial greeting state
-  - name: greeting
-    description: "Agent greets the customer and offers assistance"
-    is_initial: true
-    classification:
-      patterns:
-        - "hello|hi|hey|good (morning|afternoon|evening)"
-        - "welcome|how can i (help|assist)"
-        - "thank you for (contacting|calling|reaching)"
+steps:
+  - greet the customer
+  - understand their issue
+  - verify identity (if account action needed)
+  - look up information or take account action
+  - resolve and close
 
-  # Identify the customer's issue
-  - name: identify_issue
-    description: "Agent asks clarifying questions to understand the problem"
-    classification:
-      patterns:
-        - "what.*(issue|problem|help|assist)"
-        - "can you (tell|explain|describe)"
-        - "i understand|i see|got it"
-      exemplars:
-        - "What seems to be the issue today?"
-        - "How can I help you with your account?"
-        - "Could you tell me more about the problem you're experiencing?"
-        - "I understand. Let me look into that for you."
+rules:
+  - verify identity before any account action
+  - never share internal system information
+  - must eventually resolve the conversation
 
-  # Verify customer identity
-  - name: identity_verification
-    description: "Agent verifies customer identity before account access"
-    classification:
-      tool_calls:
-        - verify_identity
-        - check_account
-        - authenticate_customer
-      patterns:
-        - "verify.*identity|confirm.*(account|identity)"
-        - "security question|verification code"
-        - "last four digits|billing address"
-      exemplars:
-        - "For security purposes, I need to verify your identity."
-        - "Can you confirm the last four digits of your payment method?"
-        - "What is the email address associated with your account?"
-
-  # Search knowledge base for solutions
-  - name: lookup_info
-    description: "Agent searches for information to help resolve the issue"
-    classification:
-      tool_calls:
-        - search_knowledge_base
-        - search_kb
-        - get_article
-        - lookup_faq
-      patterns:
-        - "let me (check|look|search|find)"
-        - "searching.*documentation|knowledge base"
-      exemplars:
-        - "Let me search our knowledge base for that."
-        - "I'll look up the information for you."
-
-  # Perform account action (requires identity verification first)
-  - name: account_action
-    description: "Agent performs account modification"
-    classification:
-      tool_calls:
-        - update_account
-        - process_refund
-        - change_subscription
-        - reset_password
-        - update_billing
-        - cancel_order
-      patterns:
-        - "processing.*(refund|change|update)"
-        - "i('ve| have) (updated|changed|processed)"
-
-  # Escalate to human agent
-  - name: escalation
-    description: "Agent escalates issue to human support"
-    classification:
-      tool_calls:
-        - escalate_to_human
-        - transfer_to_agent
-        - request_supervisor
-      patterns:
-        - "transfer.*human|escalat"
-        - "supervisor|manager|specialist"
-      exemplars:
-        - "I'm going to transfer you to a specialist who can help."
-        - "Let me escalate this to our technical team."
-
-  # Resolution and closing
-  - name: resolution
-    description: "Agent confirms issue is resolved and closes the interaction"
-    is_terminal: true
-    classification:
-      patterns:
-        - "resolved|fixed|taken care of"
-        - "anything else.*help|is there anything else"
-        - "have a (great|good|nice) day"
-      exemplars:
-        - "Great, I've resolved that issue for you."
-        - "Is there anything else I can help you with today?"
-        - "Thank you for contacting support. Have a great day!"
-
-# Valid state transitions
-transitions:
-  - from_state: greeting
-    to_state: identify_issue
-    description: "Move from greeting to issue identification"
-
-  - from_state: identify_issue
-    to_state: identity_verification
-    description: "Verify identity when needed"
-
-  - from_state: identify_issue
-    to_state: lookup_info
-    description: "Look up information to help"
-
-  - from_state: identify_issue
-    to_state: resolution
-    description: "Simple issues can be resolved directly"
-
-  - from_state: identity_verification
-    to_state: account_action
-    description: "Proceed to account action after verification"
-
-  - from_state: identity_verification
-    to_state: lookup_info
-    description: "Look up info after verification"
-
-  - from_state: lookup_info
-    to_state: resolution
-    description: "Resolve after finding information"
-
-  - from_state: lookup_info
-    to_state: identity_verification
-    description: "Need to verify before account action"
-
-  - from_state: lookup_info
-    to_state: escalation
-    description: "Escalate if can't find solution"
-
-  - from_state: account_action
-    to_state: resolution
-    description: "Resolve after account action"
-
-  - from_state: escalation
-    to_state: resolution
-    description: "Close after escalation"
-
-  # Allow returning to identify_issue from various states
-  - from_state: resolution
-    to_state: identify_issue
-    description: "Customer has another issue"
-
-# Workflow constraints (LTL-lite)
-constraints:
-  # CRITICAL: Must verify identity before any account modifications
-  - name: verify_before_account_action
-    type: precedence
-    trigger: account_action
-    target: identity_verification
-    severity: critical
-    intervention: prompt_verify_identity
-    description: "Customer identity must be verified before any account modifications"
-
-  # Should eventually reach resolution
-  - name: must_resolve
-    type: eventually
-    target: resolution
-    severity: warning
-    description: "Conversation should eventually reach resolution"
-
-  # Never share internal system information
-  - name: no_internal_info
-    type: never
-    target: share_internal_info
-    severity: critical
-    description: "Never share internal system information with customers"
-
-# Intervention prompts
-interventions:
-  prompt_verify_identity: |
-    IMPORTANT: You must verify the customer's identity before performing any
-    account actions such as refunds, subscription changes, or password resets.
-
-    Please ask the customer to verify their identity by:
-    1. Confirming the email address on file, OR
-    2. Providing the last 4 digits of their payment method, OR
-    3. Answering their security question
-
-    Use the verify_identity tool once verified.
-
-  prompt_identify_issue: |
-    Please ask the customer clarifying questions to better understand their issue
-    before proceeding. Understanding the problem fully will help you provide
-    better assistance.
-
-  prompt_offer_escalation: |
-    The customer seems frustrated or the issue appears complex. Consider offering
-    to escalate to a specialist or supervisor if you cannot resolve this directly.
+tools:
+  verify identity: [verify_identity, check_account, authenticate_customer]
+  account action: [update_account, process_refund, change_subscription, reset_password, update_billing, cancel_order]
+  look up information: [search_knowledge_base, search_kb, get_article, lookup_faq]
+  escalate: [escalate_to_human, transfer_to_agent, request_supervisor]
