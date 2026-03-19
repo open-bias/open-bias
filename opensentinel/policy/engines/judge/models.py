@@ -209,14 +209,15 @@ class JudgeSessionContext:
             self.violation_counts[action_key] = self.violation_counts.get(action_key, 0) + 1
 
         # Track intervention criteria for escalation
-        failed = verdict.metadata.get("criterion_failures", [])
-        if verdict.action in (VerdictAction.INTERVENE, VerdictAction.BLOCK) and failed:
+        if verdict.action in (VerdictAction.INTERVENE, VerdictAction.BLOCK):
             self.intervention_count += 1
-            self.last_intervention_criteria = list(failed)
-            for criterion in failed:
-                self.criterion_intervention_counts[criterion] = (
-                    self.criterion_intervention_counts.get(criterion, 0) + 1
-                )
+            failed = verdict.metadata.get("criterion_failures", [])
+            if failed:
+                self.last_intervention_criteria = list(failed)
+                for criterion in failed:
+                    self.criterion_intervention_counts[criterion] = (
+                        self.criterion_intervention_counts.get(criterion, 0) + 1
+                    )
 
     def to_dict(self) -> Dict[str, Any]:
         return {

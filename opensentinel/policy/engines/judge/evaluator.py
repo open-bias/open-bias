@@ -602,6 +602,10 @@ class JudgeEvaluator:
         failures = []
 
         for score in scores:
+            # Skip synthetic fills (confidence=0.0) — these are placeholders
+            # for criteria the judge LLM omitted, not real failures
+            if score.confidence == 0.0:
+                continue
             criterion = criteria_map.get(score.criterion)
             if criterion and criterion.fail_threshold is not None:
                 if score.normalized < criterion.fail_threshold:

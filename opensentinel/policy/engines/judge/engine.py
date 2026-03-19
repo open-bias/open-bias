@@ -282,7 +282,10 @@ class JudgePolicyEngine(PolicyEngine):
                     self._trace_verdict(session_id, turn_verdict, turn_rubric.name)
                 verdicts.append(turn_verdict)
             except Exception as e:
-                logger.error(f"Turn evaluation failed: {e}")
+                logger.error(
+                    f"Turn evaluation failed for session {session_id} "
+                    f"({type(e).__name__}): {e}"
+                )
         else:
             logger.warning(f"Default rubric not found: {self._default_rubric}")
 
@@ -327,7 +330,10 @@ class JudgePolicyEngine(PolicyEngine):
                         self._trace_verdict(session_id, conv_verdict, conv_rubric.name)
                     verdicts.append(conv_verdict)
                 except Exception as e:
-                    logger.error(f"Conversation evaluation failed: {e}")
+                    logger.error(
+                        f"Conversation evaluation failed for session {session_id} "
+                        f"({type(e).__name__}): {e}"
+                    )
 
         # 3. Merge verdicts and build result
         if not verdicts:
