@@ -184,7 +184,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         transition_result, error = await self._state_machine.transition(
             session_id,
             classification.state_name,
-            context,
             confidence=classification.confidence,
             method=classification.method,
         )

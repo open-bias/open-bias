@@ -9,7 +9,6 @@ Tracks agent progress through workflow states with:
 
 import asyncio
 import logging
-import ast
 from typing import Optional, Dict, Any, Set, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -25,7 +24,6 @@ class TransitionResult(Enum):
 
     SUCCESS = "success"
     INVALID_TRANSITION = "invalid_transition"
-    GUARD_FAILED = "guard_failed"
     SAME_STATE = "same_state"
     CONSTRAINT_VIOLATED = "constraint_violated"
 
@@ -167,7 +165,6 @@ class WorkflowStateMachine:
         self,
         session_id: str,
         target_state: str,
-        context: Optional[Dict[str, Any]] = None,
         confidence: float = 1.0,
         method: str = "explicit",
     ) -> Tuple[TransitionResult, Optional[str]]:
@@ -177,7 +174,6 @@ class WorkflowStateMachine:
         Args:
             session_id: Session identifier
             target_state: State to transition to
-            context: Additional context for guard evaluation
             confidence: Classification confidence (0-1)
             method: Classification method used
 
@@ -209,14 +205,6 @@ class WorkflowStateMachine:
                 f"No transition from '{current}' to '{target_state}'",
             )
 
-        # Evaluate guards if transition has one
-        if matching and matching[0].guard:
-            if not self._evaluate_guard(matching[0].guard, context or {}):
-                return (
-                    TransitionResult.GUARD_FAILED,
-                    f"Guard failed for transition to '{target_state}'",
-                )
-
         # Perform transition
         async with self._lock:
             # Close current history entry
@@ -228,7 +216,6 @@ class WorkflowStateMachine:
                 StateHistoryEntry(
                     state_name=target_state,
                     entered_at=datetime.now(timezone.utc),
-                    metadata=context or {},
                     classification_confidence=confidence,
                     classification_method=method,
                 )
@@ -242,93 +229,6 @@ class WorkflowStateMachine:
         )
 
         return (TransitionResult.SUCCESS, None)
-
-    def _evaluate_guard(self, guard, context: Dict[str, Any]) -> bool:
-        """Evaluate a transition guard."""
-        # Check required metadata
-        if guard.required_metadata:
-            for key, value in guard.required_metadata.items():
-                if context.get(key) != value:
-                    return False
-
-        # Evaluate expression
-        if guard.expression:
-            try:
-                safe_context = self._sanitize_context(context)
-                if not self._is_safe_expression(guard.expression):
-                    logger.warning("Guard expression contains disallowed syntax")
-                    return False
-                # Safe evaluation with limited builtins
-                safe_builtins = {}
-                safe_locals = {"True": True, "False": False, "None": None}
-                safe_locals.update(safe_context)
-                return bool(
-                    eval(guard.expression, {"__builtins__": safe_builtins}, safe_locals)
-                )
-            except Exception as e:
-                logger.warning(f"Guard expression evaluation failed: {e}")
-                return False
-
-        return True
-
-    def _sanitize_context(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Allow only simple, JSON-serializable primitives in guard context."""
-        def is_safe_value(value: Any) -> bool:
-            if value is None or isinstance(value, (str, int, float, bool)):
-                return True
-            if isinstance(value, (list, tuple)):
-                return all(is_safe_value(v) for v in value)
-            if isinstance(value, dict):
-                return all(
-                    isinstance(k, str) and is_safe_value(v) for k, v in value.items()
-                )
-            return False
-
-        return {k: v for k, v in context.items() if is_safe_value(v)}
-
-    def _is_safe_expression(self, expression: str) -> bool:
-        """Reject expressions with calls, attributes, or other unsafe nodes."""
-        try:
-            tree = ast.parse(expression, mode="eval")
-        except SyntaxError:
-            return False
-
-        allowed_nodes = (
-            ast.Expression,
-            ast.BoolOp,
-            ast.BinOp,
-            ast.UnaryOp,
-            ast.Compare,
-            ast.Name,
-            ast.Load,
-            ast.Constant,
-            ast.And,
-            ast.Or,
-            ast.Not,
-            ast.Eq,
-            ast.NotEq,
-            ast.Lt,
-            ast.LtE,
-            ast.Gt,
-            ast.GtE,
-            ast.In,
-            ast.NotIn,
-            ast.Is,
-            ast.IsNot,
-            ast.Add,
-            ast.Sub,
-            ast.Mult,
-            ast.Div,
-            ast.Mod,
-        )
-
-        for node in ast.walk(tree):
-            if not isinstance(node, allowed_nodes):
-                return False
-            if isinstance(node, ast.Name) and node.id.startswith("__"):
-                return False
-
-        return True
 
     async def get_valid_transitions(self, session_id: str) -> Set[str]:
         """
