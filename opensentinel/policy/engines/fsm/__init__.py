@@ -10,46 +10,43 @@ This module now contains all FSM-specific components:
 - Intervention: InterventionHandler
 """
 
-from opensentinel.policy.engines.fsm.engine import FSMPolicyEngine
-
-# Workflow components
-from opensentinel.policy.engines.fsm.workflow import (
-    # Schema
-    SimpleWorkflowConfig,
-    ClassificationHint,
-    State,
-    Transition,
-    ConstraintType,
-    Constraint,
-    WorkflowDefinition,
-    # Parser
-    WorkflowParser,
-    WorkflowRegistry,
-    # State machine
-    TransitionResult,
-    StateHistoryEntry,
-    SessionState,
-    WorkflowStateMachine,
-    # Constraints
-    EvaluationResult,
-    ConstraintViolation,
-    ConstraintEvaluator,
-)
-
 # Monitor components
 from opensentinel.policy.engines.fsm.classifier import (
-
     StateClassifier,
 )
 
+# Compiler
+from opensentinel.policy.engines.fsm.compiler import FSMCompiler, compile_workflow
+from opensentinel.policy.engines.fsm.engine import FSMPolicyEngine
 
 # Intervention components
 from opensentinel.policy.engines.fsm.intervention import (
     InterventionHandler,
 )
 
-# Compiler
-from opensentinel.policy.engines.fsm.compiler import FSMCompiler
+# Workflow components
+from opensentinel.policy.engines.fsm.workflow import (
+    ClassificationHint,
+    Constraint,
+    ConstraintEvaluator,
+    ConstraintType,
+    ConstraintViolation,
+    # Constraints
+    EvaluationResult,
+    SessionState,
+    # Schema
+    SimpleWorkflowConfig,
+    State,
+    StateHistoryEntry,
+    Transition,
+    # State machine
+    TransitionResult,
+    WorkflowDefinition,
+    # Parser
+    WorkflowParser,
+    WorkflowRegistry,
+    WorkflowStateMachine,
+)
 
 __all__ = [
     # Engine
@@ -81,5 +78,6 @@ __all__ = [
     "InterventionHandler",
     # Compiler
     "FSMCompiler",
+    "compile_workflow",
 ]
 

@@ -1,35 +1,31 @@
 """
-FSM Policy Compiler - Natural Language to WorkflowDefinition.
+FSM Policy Compiler — Deterministic SimpleWorkflowConfig → WorkflowDefinition.
 
-Converts natural language policy descriptions into FSM workflow YAML
-that can be used with the FSMPolicyEngine.
+Transforms plain-English steps/rules into the internal FSM representation
+without any LLM calls. The pipeline:
 
-Example:
-    ```python
-    compiler = FSMCompiler()
-    result = await compiler.compile(
-        "Agent must verify identity before processing refunds. "
-        "Never share internal system information."
-    )
-
-    if result.success:
-        compiler.export(result, Path("workflow.yaml"))
-    ```
+1. Parse steps → State objects
+2. Infer transitions from step order + parenthetical hints
+3. Parse rules → Constraint objects
+4. Generate hidden states for NEVER conceptual targets
+5. Map tools to states
+6. Generate classification hints
 """
 
 import logging
+import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
-from opensentinel.policy.compiler.base import LLMPolicyCompiler
-from opensentinel.policy.compiler.protocol import CompilationResult
+from opensentinel.policy.compiler.protocol import CompilationResult, PolicyCompiler
 from opensentinel.policy.compiler.registry import register_compiler
 from opensentinel.policy.engines.fsm.workflow.schema import (
     ClassificationHint,
     Constraint,
     ConstraintType,
+    SimpleWorkflowConfig,
     State,
     Transition,
     WorkflowDefinition,
@@ -37,399 +33,533 @@ from opensentinel.policy.engines.fsm.workflow.schema import (
 
 logger = logging.getLogger(__name__)
 
+# Keywords that signal a terminal state
+_TERMINAL_KEYWORDS = re.compile(
+    r"\b(resolve|close|end|finish|complete|done|terminate|goodbye|farewell)\b",
+    re.IGNORECASE,
+)
 
-# Schema description for LLM prompt
-FSM_SCHEMA_DESCRIPTION = """
-Generate a JSON object with this structure:
+# Pattern to extract parenthetical hints from step text
+_PAREN_HINT = re.compile(r"\(([^)]+)\)")
 
-{
-  "name": "workflow-name",
-  "description": "Brief description of the workflow",
-  "states": [
-    {
-      "name": "state_name",  // lowercase with underscores
-      "description": "What this state represents",
-      "is_initial": true/false,  // First state in workflow
-      "is_terminal": true/false,  // End state
-      "classification": {
-        "tool_calls": ["function_name"],  // Tool/function names that indicate this state
-        "patterns": ["regex.*pattern"],   // Regex patterns in response text
-        "exemplars": ["example phrase"]   // Example text for semantic matching
-      }
-    }
-  ],
-  "transitions": [
-    {
-      "from_state": "state_a",
-      "to_state": "state_b",
-      "description": "When/why this transition happens"
-    }
-  ],
-  "constraints": [
-    {
-      "name": "constraint_name",
-      "description": "What this constraint enforces",
-      "type": "precedence|never|eventually|response",
-      "trigger": "triggering_state",  // Required for precedence, response
-      "target": "target_state",       // Required for all except 'always'
-      "severity": "warning|error|critical",
-      "intervention": "intervention_name"  // Must match key in interventions
-    }
-  ],
-  "interventions": {
-    "intervention_name": "Message to inject when constraint is violated. Guide the agent back on track."
-  }
-}
 
-Constraint types:
-- "precedence": target must occur BEFORE trigger (e.g., verify identity before refund)
-- "never": target state must never occur (e.g., never share internal info)
-- "eventually": target state must eventually be reached
-- "response": if trigger occurs, target must eventually follow
+def slugify(text: str) -> str:
+    """Convert plain-English text to a snake_case identifier."""
+    # Strip parentheticals first
+    text = _PAREN_HINT.sub("", text).strip()
+    # Lowercase, replace non-alnum with underscore, collapse runs
+    slug = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+    return slug
 
-Rules:
-1. At least one state must have is_initial: true
-2. Use snake_case for all names
-3. Every constraint intervention must have a matching entry in interventions
-4. For "never" constraints, the target can be a conceptual forbidden state not in states list
-5. Classification hints help identify when the agent is in each state
-"""
+
+def _strip_filler(text: str) -> str:
+    """Remove leading filler words (any, the, a, an) from text."""
+    return re.sub(r"^(any|the|a|an)\s+", "", text.strip(), flags=re.IGNORECASE)
+
+
+def _resolve_state(
+    slug: str, state_names: set[str], *, strict: bool = False
+) -> str:
+    """
+    Resolve a slugified rule reference to a known state name.
+
+    Tries (in order):
+    1. Exact match
+    2. slug is a substring of a state name
+    3. A state name is a substring of slug
+    4. (unless *strict*) Significant word overlap between slug and state names
+
+    When *strict* is True, only exact/substring matches are tried. This is
+    used for NEVER constraints, which should create hidden states for
+    conceptual targets rather than fuzzy-matching to existing states.
+    """
+    if slug in state_names:
+        return slug
+
+    # Substring: slug contained in state name
+    matches = [name for name in state_names if slug in name]
+    if matches:
+        return min(matches, key=len)
+
+    # Reverse substring: state name contained in slug
+    matches = [name for name in state_names if name in slug]
+    if matches:
+        return max(matches, key=len)  # prefer longest (most specific) match
+
+    if strict:
+        return slug
+
+    # Word overlap: pick the state sharing the most words with slug
+    slug_words = set(slug.split("_")) - {"and", "or", "the", "a", "an"}
+    best: str | None = None
+    best_overlap = 0
+    for name in state_names:
+        name_words = set(name.split("_")) - {"and", "or", "the", "a", "an"}
+        overlap = len(slug_words & name_words)
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best = name
+    if best is not None and best_overlap > 0:
+        return best
+
+    return slug
+
+
+def compile_workflow(config: SimpleWorkflowConfig) -> WorkflowDefinition:
+    """
+    Compile a SimpleWorkflowConfig into a WorkflowDefinition.
+
+    Args:
+        config: Human-authored simple config.
+
+    Returns:
+        Fully populated WorkflowDefinition.
+    """
+    states = _parse_steps(config.steps)
+    transitions = _infer_transitions(states, config.steps)
+    constraints, hidden_states = _parse_rules(config.rules, states)
+    states.extend(hidden_states)
+    _map_tools(states, config.tools, config.steps)
+    _generate_hints(states)
+
+    return WorkflowDefinition(
+        name=config.name,
+        mode=config.mode,
+        description=f"Compiled from simple config: {config.name}",
+        states=states,
+        transitions=transitions,
+        constraints=constraints,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Step 1: Parse steps → States
+# ---------------------------------------------------------------------------
+
+
+def _parse_steps(steps: list[str]) -> list[State]:
+    """Convert step descriptions into State objects."""
+    states: list[State] = []
+    for i, step in enumerate(steps):
+        name = slugify(step)
+        is_initial = i == 0
+        is_terminal = bool(_TERMINAL_KEYWORDS.search(step))
+        states.append(
+            State(
+                name=name,
+                description=step,
+                is_initial=is_initial,
+                is_terminal=is_terminal,
+            )
+        )
+    return states
+
+
+# ---------------------------------------------------------------------------
+# Step 2: Infer transitions
+# ---------------------------------------------------------------------------
+
+
+def _infer_transitions(states: list[State], steps: list[str]) -> list[Transition]:
+    """
+    Build transitions from step ordering.
+
+    Sequential by default. Parenthetical hints like "(if X needed)" create
+    skip-ahead branches from the previous state to the state after.
+    """
+    transitions: list[Transition] = []
+    for i in range(len(states) - 1):
+        transitions.append(
+            Transition(from_state=states[i].name, to_state=states[i + 1].name)
+        )
+
+    # Detect conditional steps via parenthetical hints and add skip transitions
+    for i, step in enumerate(steps):
+        match = _PAREN_HINT.search(step)
+        if match and i > 0 and i < len(states) - 1:
+            # Previous state can skip the conditional state
+            skip = Transition(
+                from_state=states[i - 1].name,
+                to_state=states[i + 1].name,
+                description=f"skip conditional: {step}",
+            )
+            # Avoid duplicate
+            existing = {(t.from_state, t.to_state) for t in transitions}
+            if (skip.from_state, skip.to_state) not in existing:
+                transitions.append(skip)
+
+    return transitions
+
+
+# ---------------------------------------------------------------------------
+# Step 3: Parse rules → Constraints
+# ---------------------------------------------------------------------------
+
+
+def _parse_rules(
+    rules: list[str], states: list[State]
+) -> tuple[list[Constraint], list[State]]:
+    """
+    Parse natural language rules into Constraint objects.
+
+    Returns constraints and any hidden states generated for NEVER conceptual targets.
+    """
+    constraints: list[Constraint] = []
+    hidden_states: list[State] = []
+    state_names = {s.name for s in states}
+
+    for rule in rules:
+        result = _parse_single_rule(rule, state_names)
+        if result is None:
+            logger.warning("Could not parse rule: %s", rule)
+            continue
+        constraint, hidden = result
+        constraints.append(constraint)
+        if hidden is not None:
+            hidden_states.append(hidden)
+            state_names.add(hidden.name)
+
+    return constraints, hidden_states
+
+
+def _parse_single_rule(
+    rule: str, state_names: set[str]
+) -> tuple[Constraint, State | None] | None:
+    """
+    Parse a single rule string into a Constraint and optional hidden State.
+
+    Patterns recognized:
+    - "X before Y" → PRECEDENCE (target=X, trigger=Y)
+    - "never X" → NEVER (target=X)
+    - "must eventually X" / "must reach X" → EVENTUALLY (target=X)
+    - "if X then Y" → RESPONSE (trigger=X, target=Y)
+    """
+    normalized = rule.strip().lower()
+    hidden: State | None = None
+
+    # --- RESPONSE: "if X then Y" ---
+    if_then = re.match(r"if\s+(.+?)\s+then\s+(?:must\s+)?(.+)", normalized)
+    if if_then:
+        trigger_text = _strip_filler(if_then.group(1))
+        target_text = _strip_filler(if_then.group(2))
+        trigger_slug = _resolve_state(slugify(trigger_text), state_names)
+        target_slug = _resolve_state(slugify(target_text), state_names)
+        return (
+            Constraint(
+                name=f"if_{trigger_slug}_then_{target_slug}",
+                description=rule,
+                type=ConstraintType.RESPONSE,
+                trigger=trigger_slug,
+                target=target_slug,
+                message=f"Policy: {rule}",
+            ),
+            None,
+        )
+
+    # --- PRECEDENCE: "X before Y" ---
+    before_match = re.search(r"(.+?)\s+before\s+(.+)", normalized)
+    if before_match:
+        target_text = _strip_filler(before_match.group(1))
+        trigger_text = _strip_filler(before_match.group(2))
+        target_slug = _resolve_state(slugify(target_text), state_names)
+        trigger_slug = _resolve_state(slugify(trigger_text), state_names)
+        return (
+            Constraint(
+                name=f"{target_slug}_before_{trigger_slug}",
+                description=rule,
+                type=ConstraintType.PRECEDENCE,
+                trigger=trigger_slug,
+                target=target_slug,
+                message=f"Policy: {rule}",
+            ),
+            None,
+        )
+
+    # --- NEVER: "never X" ---
+    never_match = re.match(r"never\s+(.+)", normalized)
+    if never_match:
+        target_text = _strip_filler(never_match.group(1))
+        target_slug = slugify(target_text)
+        # For NEVER, only use exact/substring match — not word overlap.
+        # NEVER targets are often conceptual states that should become hidden states.
+        resolved = _resolve_state(target_slug, state_names, strict=True)
+
+        # Generate hidden state only if target doesn't match any existing state
+        if resolved == target_slug and target_slug not in state_names:
+            hidden = State(
+                name=target_slug,
+                description=target_text,
+                is_initial=False,
+                is_terminal=False,
+                is_error=True,
+            )
+        else:
+            target_slug = resolved
+
+        return (
+            Constraint(
+                name=f"never_{target_slug}",
+                description=rule,
+                type=ConstraintType.NEVER,
+                target=target_slug,
+                message=f"Policy: {rule}",
+            ),
+            hidden,
+        )
+
+    # --- EVENTUALLY: "must eventually X" / "must reach X" ---
+    eventually_match = re.match(r"must\s+(?:eventually|reach)\s+(.+)", normalized)
+    if eventually_match:
+        target_text = _strip_filler(eventually_match.group(1))
+        target_slug = _resolve_state(slugify(target_text), state_names)
+        return (
+            Constraint(
+                name=f"must_{target_slug}",
+                description=rule,
+                type=ConstraintType.EVENTUALLY,
+                target=target_slug,
+                message=f"Policy: {rule}",
+            ),
+            None,
+        )
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Step 4: Map tools to states
+# ---------------------------------------------------------------------------
+
+
+def _map_tools(
+    states: list[State],
+    tools: dict[str, list[str]] | None,
+    steps: list[str],
+) -> None:
+    """
+    Map tool keys to states via case-insensitive substring match.
+
+    Matches tool map keys against step descriptions (with parentheticals stripped).
+    """
+    if not tools:
+        return
+
+    for tool_key, tool_names in tools.items():
+        key_lower = tool_key.lower()
+        for state, step in zip(states, steps):
+            # Strip parentheticals from the step for matching
+            step_clean = _PAREN_HINT.sub("", step).strip().lower()
+            if key_lower in step_clean:
+                if state.classification.tool_calls is None:
+                    state.classification = ClassificationHint(
+                        tool_calls=list(tool_names),
+                        patterns=state.classification.patterns,
+                        exemplars=state.classification.exemplars,
+                        min_similarity=state.classification.min_similarity,
+                    )
+                else:
+                    state.classification.tool_calls.extend(tool_names)
+
+
+# ---------------------------------------------------------------------------
+# Step 5: Generate classification hints
+# ---------------------------------------------------------------------------
+
+
+def _generate_hints(states: list[State]) -> None:
+    """
+    Generate regex patterns and exemplar strings from state descriptions.
+
+    Populates classification.patterns and classification.exemplars for states
+    that don't already have them.
+    """
+    for state in states:
+        desc = state.description
+        if not desc:
+            continue
+
+        # --- Patterns ---
+        if state.classification.patterns is None:
+            patterns = _generate_patterns(desc)
+            if patterns:
+                state.classification = ClassificationHint(
+                    tool_calls=state.classification.tool_calls,
+                    patterns=patterns,
+                    exemplars=state.classification.exemplars,
+                    min_similarity=state.classification.min_similarity,
+                )
+
+        # --- Exemplars ---
+        if state.classification.exemplars is None:
+            exemplars = _generate_exemplars(desc)
+            if exemplars:
+                state.classification = ClassificationHint(
+                    tool_calls=state.classification.tool_calls,
+                    patterns=state.classification.patterns,
+                    exemplars=exemplars,
+                    min_similarity=state.classification.min_similarity,
+                )
+
+
+def _generate_patterns(description: str) -> list[str]:
+    """Generate regex patterns from a step/state description."""
+    # Strip parentheticals
+    clean = _PAREN_HINT.sub("", description).strip()
+    # Extract key words (3+ chars, not stopwords)
+    stopwords = {"the", "and", "for", "with", "from", "that", "this", "their", "them"}
+    words = [w for w in re.findall(r"[a-zA-Z]+", clean) if len(w) >= 3 and w.lower() not in stopwords]
+    if not words:
+        return []
+    # Build a case-insensitive pattern from key phrases
+    # Use the full phrase and individual significant words
+    patterns: list[str] = []
+    if len(words) >= 2:
+        # Phrase pattern: key words joined by flexible whitespace
+        phrase = r"\b" + r"\b.*?\b".join(re.escape(w) for w in words[:3]) + r"\b"
+        patterns.append(f"(?i){phrase}")
+    for w in words:
+        if len(w) >= 5:  # Only longer words as standalone patterns
+            patterns.append(f"(?i)\\b{re.escape(w)}\\b")
+    return patterns
+
+
+def _generate_exemplars(description: str) -> list[str]:
+    """Generate exemplar phrases for embedding similarity."""
+    # Strip parentheticals for the base exemplar
+    clean = _PAREN_HINT.sub("", description).strip()
+    exemplars = [clean]
+    # Add a variant: "The agent should {description}"
+    exemplars.append(f"The agent should {clean.lower()}")
+    return exemplars
+
+
+# ---------------------------------------------------------------------------
+# FSMCompiler — PolicyCompiler wrapper for registry / engine integration
+# ---------------------------------------------------------------------------
 
 
 @register_compiler("fsm")
-class FSMCompiler(LLMPolicyCompiler):
+class FSMCompiler(PolicyCompiler):
     """
-    Compiler that converts natural language to FSM WorkflowDefinition.
+    Deterministic FSM compiler registered as a PolicyCompiler.
 
-    Uses an LLM to parse policy descriptions and generate workflow YAML
-    with states, transitions, constraints, and interventions.
+    Wraps :func:`compile_workflow` so the engine and compiler registry
+    can use the standard PolicyCompiler interface.  No LLM calls are made.
     """
 
     @property
     def engine_type(self) -> str:
-        """Engine type this compiler produces config for."""
         return "fsm"
 
-    def _build_compilation_prompt(
+    async def compile(
         self,
         natural_language: str,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> str:
-        """
-        Build the prompt for FSM workflow compilation.
-
-        Args:
-            natural_language: User's policy description
-            context: Optional hints (domain, tool_names, etc.)
-
-        Returns:
-            Complete prompt for LLM
-        """
-        prompt_parts = [
-            "Convert the following natural language policy into an FSM workflow configuration.",
-            "",
-            FSM_SCHEMA_DESCRIPTION,
-            "",
-        ]
-
-        # Add context if provided
-        if context:
-            if context.get("domain"):
-                prompt_parts.append(f"Domain: {context['domain']}")
-
-            if context.get("tool_names"):
-                tools = ", ".join(context["tool_names"])
-                prompt_parts.append(f"Available tools/functions: {tools}")
-
-            if context.get("existing_states"):
-                states = ", ".join(context["existing_states"])
-                prompt_parts.append(f"Known states to include: {states}")
-
-            prompt_parts.append("")
-
-        prompt_parts.extend([
-            "Natural language policy:",
-            "---",
-            natural_language,
-            "---",
-            "",
-            "Generate the JSON workflow configuration:",
-        ])
-
-        return "\n".join(prompt_parts)
-
-    def _parse_compilation_response(
-        self,
-        response: Dict[str, Any],
-        natural_language: str,
+        context: dict[str, Any] | None = None,
     ) -> CompilationResult:
         """
-        Parse LLM JSON response into WorkflowDefinition.
+        Compile a simple config dict (or natural-language placeholder) to a WorkflowDefinition.
 
-        Args:
-            response: Parsed JSON from LLM
-            natural_language: Original policy for metadata
-
-        Returns:
-            CompilationResult with WorkflowDefinition config
+        If *context* contains a ``"simple_config"`` key whose value is a
+        :class:`SimpleWorkflowConfig` (or a raw dict), the deterministic
+        pipeline is used directly.  Otherwise the *natural_language* string
+        is ignored and an error is returned — the new compiler does not call
+        an LLM.
         """
-        warnings: List[str] = []
-        errors: List[str] = []
-
-        try:
-            # Parse states
-            states = []
-            for state_data in response.get("states", []):
-                classification_data = state_data.get("classification", {})
-                classification = ClassificationHint(
-                    tool_calls=classification_data.get("tool_calls"),
-                    patterns=classification_data.get("patterns"),
-                    exemplars=classification_data.get("exemplars"),
-                    min_similarity=classification_data.get("min_similarity", 0.7),
-                )
-
-                state = State(
-                    name=state_data["name"],
-                    description=state_data.get("description"),
-                    classification=classification,
-                    is_initial=state_data.get("is_initial", False),
-                    is_terminal=state_data.get("is_terminal", False),
-                    is_error=state_data.get("is_error", False),
-                )
-                states.append(state)
-
-            if not states:
-                errors.append("No states generated")
-                return CompilationResult.failure(errors, warnings)
-
-            # Ensure at least one initial state
-            if not any(s.is_initial for s in states):
-                states[0].is_initial = True
-                warnings.append(f"No initial state specified, marked '{states[0].name}' as initial")
-
-            # Parse transitions
-            transitions = []
-            for trans_data in response.get("transitions", []):
-                trans = Transition(
-                    from_state=trans_data["from_state"],
-                    to_state=trans_data["to_state"],
-                    description=trans_data.get("description"),
-                )
-                transitions.append(trans)
-
-            # Parse interventions
-            interventions = response.get("interventions", {})
-
-            # Parse constraints
-            constraints = []
-            for const_data in response.get("constraints", []):
-                try:
-                    const_type = ConstraintType(const_data["type"])
-                except ValueError:
-                    warnings.append(
-                        f"Unknown constraint type '{const_data['type']}', skipping"
-                    )
-                    continue
-
-                # Validate intervention reference
-                intervention_name = const_data.get("intervention")
-                if intervention_name and intervention_name not in interventions:
-                    # Auto-generate a basic intervention
-                    interventions[intervention_name] = (
-                        f"Policy reminder: {const_data.get('description', const_data['name'])}"
-                    )
-                    warnings.append(
-                        f"Auto-generated missing intervention: {intervention_name}"
-                    )
-
-                constraint = Constraint(
-                    name=const_data["name"],
-                    description=const_data.get("description"),
-                    type=const_type,
-                    trigger=const_data.get("trigger"),
-                    target=const_data.get("target"),
-                    severity=const_data.get("severity", "error"),
-                    intervention=intervention_name,
-                )
-                constraints.append(constraint)
-
-            # Build WorkflowDefinition
-            workflow = WorkflowDefinition(
-                name=response.get("name", "compiled-policy"),
-                version=response.get("version", "1.0"),
-                description=response.get("description"),
-                states=states,
-                transitions=transitions,
-                constraints=constraints,
-                interventions=interventions,
+        context = context or {}
+        raw = context.get("simple_config")
+        if raw is None:
+            return CompilationResult.failure(
+                errors=[
+                    "FSMCompiler requires context['simple_config'] "
+                    "(a SimpleWorkflowConfig or dict). LLM-based compilation "
+                    "has been replaced by the deterministic pipeline."
+                ]
             )
 
+        try:
+            if isinstance(raw, SimpleWorkflowConfig):
+                config = raw
+            else:
+                config = SimpleWorkflowConfig(**raw)
+
+            workflow = compile_workflow(config)
             return CompilationResult(
                 success=True,
                 config=workflow,
-                warnings=warnings,
                 metadata={
-                    "source": natural_language[:200],  # Truncate for metadata
-                    "state_count": len(states),
-                    "constraint_count": len(constraints),
+                    "source": config.name,
+                    "state_count": len(workflow.states),
+                    "constraint_count": len(workflow.constraints),
                 },
             )
-
-        except KeyError as e:
-            errors.append(f"Missing required field: {e}")
-            return CompilationResult.failure(errors, warnings)
         except Exception as e:
-            logger.exception("Failed to parse compilation response")
-            errors.append(f"Parse error: {type(e).__name__}: {e}")
-            return CompilationResult.failure(errors, warnings)
-
-    def validate_result(self, result: CompilationResult) -> List[str]:
-        """
-        Validate the compiled WorkflowDefinition.
-
-        Args:
-            result: Compilation result to validate
-
-        Returns:
-            List of validation errors
-        """
-        errors = super().validate_result(result)
-        if errors:
-            return errors
-
-        workflow: WorkflowDefinition = result.config
-
-        # Additional FSM-specific validation
-        state_names = {s.name for s in workflow.states}
-
-        # Check transition references
-        for trans in workflow.transitions:
-            if trans.from_state not in state_names:
-                errors.append(f"Transition references unknown state: {trans.from_state}")
-            if trans.to_state not in state_names:
-                errors.append(f"Transition references unknown state: {trans.to_state}")
-
-        # Check constraint references (except NEVER which can reference conceptual states)
-        for const in workflow.constraints:
-            if const.trigger and const.trigger not in state_names:
-                errors.append(
-                    f"Constraint '{const.name}' references unknown trigger: {const.trigger}"
-                )
-            if (
-                const.target
-                and const.target not in state_names
-                and const.type != ConstraintType.NEVER
-            ):
-                errors.append(
-                    f"Constraint '{const.name}' references unknown target: {const.target}"
-                )
-
-        return errors
+            logger.exception("Deterministic compilation failed")
+            return CompilationResult.failure(
+                errors=[f"Compilation failed: {type(e).__name__}: {e}"]
+            )
 
     def export(self, result: CompilationResult, output_path: Path) -> None:
-        """
-        Export WorkflowDefinition to YAML file.
-
-        Args:
-            result: Successful compilation result
-            output_path: Path to write YAML file
-
-        Raises:
-            ValueError: If result was not successful
-        """
+        """Export WorkflowDefinition to YAML."""
         if not result.success:
             raise ValueError("Cannot export failed compilation result")
 
         workflow: WorkflowDefinition = result.config
-
-        # Convert to dict for YAML export
-        workflow_dict = {
+        workflow_dict: dict[str, Any] = {
             "name": workflow.name,
-            "version": workflow.version,
+            "mode": workflow.mode,
         }
-
         if workflow.description:
             workflow_dict["description"] = workflow.description
 
-        # States
         workflow_dict["states"] = []
         for state in workflow.states:
-            state_dict: Dict[str, Any] = {"name": state.name}
-
+            sd: dict[str, Any] = {"name": state.name}
             if state.description:
-                state_dict["description"] = state.description
-
+                sd["description"] = state.description
             if state.is_initial:
-                state_dict["is_initial"] = True
+                sd["is_initial"] = True
             if state.is_terminal:
-                state_dict["is_terminal"] = True
+                sd["is_terminal"] = True
             if state.is_error:
-                state_dict["is_error"] = True
+                sd["is_error"] = True
 
-            # Classification hints
-            classification: Dict[str, Any] = {}
+            cls: dict[str, Any] = {}
             if state.classification.tool_calls:
-                classification["tool_calls"] = state.classification.tool_calls
+                cls["tool_calls"] = state.classification.tool_calls
             if state.classification.patterns:
-                classification["patterns"] = state.classification.patterns
+                cls["patterns"] = state.classification.patterns
             if state.classification.exemplars:
-                classification["exemplars"] = state.classification.exemplars
+                cls["exemplars"] = state.classification.exemplars
             if state.classification.min_similarity != 0.7:
-                classification["min_similarity"] = state.classification.min_similarity
+                cls["min_similarity"] = state.classification.min_similarity
+            if cls:
+                sd["classification"] = cls
+            workflow_dict["states"].append(sd)
 
-            if classification:
-                state_dict["classification"] = classification
-
-            workflow_dict["states"].append(state_dict)
-
-        # Transitions
         if workflow.transitions:
-            workflow_dict["transitions"] = []
-            for trans in workflow.transitions:
-                trans_dict: Dict[str, Any] = {
-                    "from_state": trans.from_state,
-                    "to_state": trans.to_state,
-                }
-                if trans.description:
-                    trans_dict["description"] = trans.description
-                workflow_dict["transitions"].append(trans_dict)
+            workflow_dict["transitions"] = [
+                {"from_state": t.from_state, "to_state": t.to_state}
+                | ({"description": t.description} if t.description else {})
+                for t in workflow.transitions
+            ]
 
-        # Constraints
         if workflow.constraints:
             workflow_dict["constraints"] = []
-            for const in workflow.constraints:
-                const_dict: Dict[str, Any] = {
-                    "name": const.name,
-                    "type": const.type.value,
-                }
-                if const.description:
-                    const_dict["description"] = const.description
-                if const.trigger:
-                    const_dict["trigger"] = const.trigger
-                if const.target:
-                    const_dict["target"] = const.target
-                if const.severity != "error":
-                    const_dict["severity"] = const.severity
-                if const.intervention:
-                    const_dict["intervention"] = const.intervention
+            for c in workflow.constraints:
+                cd: dict[str, Any] = {"name": c.name, "type": c.type.value}
+                if c.description:
+                    cd["description"] = c.description
+                if c.trigger:
+                    cd["trigger"] = c.trigger
+                if c.target:
+                    cd["target"] = c.target
+                if c.message:
+                    cd["message"] = c.message
+                workflow_dict["constraints"].append(cd)
 
-                workflow_dict["constraints"].append(const_dict)
+        output = Path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with open(output, "w") as f:
+            yaml.dump(workflow_dict, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
-        # Interventions
-        if workflow.interventions:
-            workflow_dict["interventions"] = workflow.interventions
-
-        # Write YAML
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(output_path, "w") as f:
-            yaml.dump(
-                workflow_dict,
-                f,
-                default_flow_style=False,
-                sort_keys=False,
-                allow_unicode=True,
-            )
-
-        logger.info(f"Exported workflow to {output_path}")
+        logger.info("Exported workflow to %s", output)
