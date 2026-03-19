@@ -20,6 +20,7 @@ import sys
 if TYPE_CHECKING:
     from opensentinel.policy.compiler.protocol import PolicyCompiler
 
+from opensentinel.core.utils import extract_response_content
 from opensentinel.policy.protocols import (
     PolicyEngine,
     Decision,
@@ -244,7 +245,7 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             )
 
             # Check if the request was blocked
-            response_content = self._extract_response_content(result)
+            response_content = extract_response_content(result)
 
             if self._is_blocked_response(response_content):
                 return EngineResult(
@@ -312,7 +313,7 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             )
 
         # Extract response content
-        content = self._extract_response_content(response_data)
+        content = extract_response_content(response_data)
         if not content:
             return EngineResult(decision=Decision.ALLOW)
 
@@ -331,7 +332,7 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
                 }
             )
 
-            response_content = self._extract_response_content(result)
+            response_content = extract_response_content(result)
 
             if self._is_blocked_response(response_content):
                 return EngineResult(
@@ -387,40 +388,6 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             return result.messages
 
         return None
-
-    def _extract_response_content(self, response_data: Any) -> str:
-        """Extract text content from LLM response or NeMo result."""
-        if response_data is None:
-            return ""
-
-        # String response
-        if isinstance(response_data, str):
-            return response_data
-
-        # Dict response (OpenAI format)
-        if isinstance(response_data, dict):
-            # NeMo result format
-            if "content" in response_data:
-                return response_data.get("content", "") or ""
-
-            # OpenAI format
-            if "choices" in response_data:
-                choices = response_data.get("choices", [])
-                if choices:
-                    message = choices[0].get("message", {})
-                    return message.get("content", "") or ""
-
-        # Object with content attribute
-        if hasattr(response_data, "content"):
-            return response_data.content or ""
-
-        # Object with choices attribute (LiteLLM response)
-        if hasattr(response_data, "choices") and response_data.choices:
-            first_choice = response_data.choices[0]
-            if hasattr(first_choice, "message") and first_choice.message:
-                return first_choice.message.content or ""
-
-        return ""
 
     async def get_session_state(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get current session state for debugging/tracing."""

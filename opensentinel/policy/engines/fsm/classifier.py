@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from opensentinel.policy.protocols import StateClassificationResult
 from opensentinel.policy.engines.fsm.workflow.schema import State, ClassificationHint
 from opensentinel.config.settings import ClassifierConfig
+from opensentinel.core.utils import extract_response_content, extract_tool_call_names
 
 logger = logging.getLogger(__name__)
 
@@ -137,8 +138,8 @@ class StateClassifier:
             StateClassificationResult with state name, confidence, and method used.
         """
         # Extract content and tool calls from response
-        content = self._extract_content(response)
-        tool_calls = self._extract_tool_calls(response)
+        content = extract_response_content(response)
+        tool_calls = extract_tool_call_names(response)
 
         logger.debug(
             f"Classifying response: {len(content)} chars, "
@@ -262,50 +263,6 @@ class StateClassifier:
             logger.error(f"Embedding classification failed: {e}")
 
         return None
-
-    def _extract_content(self, response: Any) -> str:
-        """Extract text content from response."""
-        if isinstance(response, dict):
-            # OpenAI format
-            if "choices" in response:
-                message = response["choices"][0].get("message", {})
-                return message.get("content", "") or ""
-
-            # Simple message format
-            if "content" in response:
-                return response.get("content", "") or ""
-
-            # Role-based message
-            if "role" in response:
-                return response.get("content", "") or ""
-
-        if hasattr(response, "content"):
-            return response.content or ""
-
-        return str(response) if response else ""
-
-    def _extract_tool_calls(self, response: Any) -> List[str]:
-        """Extract tool call names from response."""
-        tool_names = []
-
-        if isinstance(response, dict):
-            # OpenAI format
-            if "choices" in response:
-                message = response["choices"][0].get("message", {})
-                for tc in message.get("tool_calls", []):
-                    if func := tc.get("function", {}).get("name"):
-                        tool_names.append(func)
-
-            # Direct tool_calls field
-            elif "tool_calls" in response:
-                for tc in response.get("tool_calls", []):
-                    if isinstance(tc, dict):
-                        if func := tc.get("function", {}).get("name"):
-                            tool_names.append(func)
-                        elif name := tc.get("name"):
-                            tool_names.append(name)
-
-        return tool_names
 
     def classify_from_tool_call(
         self,

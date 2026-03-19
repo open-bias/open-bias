@@ -11,6 +11,8 @@ import logging
 import re
 from typing import Optional, Dict, Any
 
+from opensentinel.core.utils import extract_response_content
+
 logger = logging.getLogger(__name__)
 
 
@@ -118,7 +120,7 @@ class LLMClient:
                     )
                 
                 # Extract content
-                content = self._extract_content(response)
+                content = extract_response_content(response)
                 if not content:
                     raise LLMClientError("Empty response from LLM")
                 
@@ -140,14 +142,6 @@ class LLMClient:
         raise LLMClientError(
             f"LLM call failed after {self.max_retries + 1} attempts: {last_error}"
         )
-
-    def _extract_content(self, response: Any) -> str:
-        """Extract text content from LLM response."""
-        if hasattr(response, "choices") and response.choices:
-            choice = response.choices[0]
-            if hasattr(choice, "message") and choice.message:
-                return getattr(choice.message, "content", "") or ""
-        return ""
 
     def _parse_json(self, content: str) -> Dict[str, Any]:
         """Parse JSON from content, handling markdown fences.

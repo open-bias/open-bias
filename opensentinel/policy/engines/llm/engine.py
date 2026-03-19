@@ -29,6 +29,7 @@ from opensentinel.policy.engines.llm.drift_detector import DriftDetector
 from opensentinel.policy.engines.llm.constraint_evaluator import LLMConstraintEvaluator
 from opensentinel.policy.engines.llm.intervention import InterventionHandler
 from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+from opensentinel.core.utils import extract_response_content, extract_tool_call_names
 
 logger = logging.getLogger(__name__)
 
@@ -180,8 +181,8 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         session = self._get_or_create_session(session_id)
 
         # Extract content from response
-        message = self._extract_content(response_data)
-        tool_calls = self._extract_tool_calls(response_data)
+        message = extract_response_content(response_data)
+        tool_calls = extract_tool_call_names(response_data)
 
         # Add turn to session
         session.add_turn({
@@ -330,9 +331,9 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         
         session = self._get_or_create_session(session_id)
         
-        message = self._extract_content(response_data)
-        tool_calls = self._extract_tool_calls(response_data)
-        
+        message = extract_response_content(response_data)
+        tool_calls = extract_tool_call_names(response_data)
+
         result = await self._state_classifier.classify(session, message, tool_calls)
         
         return StateClassificationResult(
@@ -419,50 +420,3 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                 return state.classification.tool_calls
         return []
 
-    def _extract_content(self, response: Any) -> str:
-        """Extract text content from response."""
-        if isinstance(response, dict):
-            # OpenAI format
-            if "choices" in response:
-                message = response["choices"][0].get("message", {})
-                return message.get("content", "") or ""
-            if "content" in response:
-                return response.get("content", "") or ""
-        
-        if hasattr(response, "choices") and response.choices:
-            choice = response.choices[0]
-            if hasattr(choice, "message") and choice.message:
-                return getattr(choice.message, "content", "") or ""
-        
-        return str(response) if response else ""
-
-    def _extract_tool_calls(self, response: Any) -> List[str]:
-        """Extract tool call names from response."""
-        tool_names = []
-        
-        if isinstance(response, dict):
-            # OpenAI dict format
-            if "choices" in response:
-                message = response["choices"][0].get("message", {})
-                for tc in message.get("tool_calls", []):
-                    if func := tc.get("function", {}).get("name"):
-                        tool_names.append(func)
-            elif "tool_calls" in response:
-                for tc in response.get("tool_calls", []):
-                    if isinstance(tc, dict):
-                        if func := tc.get("function", {}).get("name"):
-                            tool_names.append(func)
-                        elif name := tc.get("name"):
-                            tool_names.append(name)
-        
-        elif hasattr(response, "choices") and response.choices:
-            choice = response.choices[0]
-            if hasattr(choice, "message") and choice.message:
-                tool_calls = getattr(choice.message, "tool_calls", None) or []
-                for tc in tool_calls:
-                    if hasattr(tc, "function") and tc.function:
-                        name = getattr(tc.function, "name", None)
-                        if name:
-                            tool_names.append(name)
-        
-        return tool_names

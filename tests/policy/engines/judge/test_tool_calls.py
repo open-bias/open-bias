@@ -4,6 +4,7 @@ Tests for tool call awareness in the judge engine.
 
 import pytest
 
+from opensentinel.core.utils import extract_tool_calls
 from opensentinel.policy.engines.judge import JudgePolicyEngine
 from opensentinel.policy.engines.judge.prompts import (
     format_conversation_block,
@@ -37,7 +38,7 @@ class TestExtractToolCalls:
                 },
             }],
         }
-        result = engine._extract_tool_calls(response)
+        result = extract_tool_calls(response)
         assert len(result) == 1
         assert result[0]["id"] == "call_abc123"
         assert result[0]["function_name"] == "delete_all_records"
@@ -61,7 +62,7 @@ class TestExtractToolCalls:
                 },
             }],
         }
-        result = engine._extract_tool_calls(response)
+        result = extract_tool_calls(response)
         assert len(result) == 2
         assert result[0]["function_name"] == "read_file"
         assert result[1]["function_name"] == "write_file"
@@ -70,11 +71,11 @@ class TestExtractToolCalls:
         response = {
             "choices": [{"message": {"content": "Hello!"}}],
         }
-        result = engine._extract_tool_calls(response)
+        result = extract_tool_calls(response)
         assert result == []
 
     def test_extract_from_string_response(self, engine):
-        result = engine._extract_tool_calls("just a string")
+        result = extract_tool_calls("just a string")
         assert result == []
 
     def test_extract_from_dict_without_choices(self, engine):
@@ -86,7 +87,7 @@ class TestExtractToolCalls:
                 },
             ],
         }
-        result = engine._extract_tool_calls(response)
+        result = extract_tool_calls(response)
         assert len(result) == 1
         assert result[0]["function_name"] == "search"
 
@@ -111,7 +112,7 @@ class TestExtractToolCalls:
         class ResponseObj:
             choices = [ChoiceObj()]
 
-        result = engine._extract_tool_calls(ResponseObj())
+        result = extract_tool_calls(ResponseObj())
         assert len(result) == 1
         assert result[0]["id"] == "call_xyz"
         assert result[0]["function_name"] == "delete_database"
@@ -121,7 +122,7 @@ class TestExtractToolCalls:
         response = {
             "choices": [{"message": {"content": "Hi", "tool_calls": []}}],
         }
-        result = engine._extract_tool_calls(response)
+        result = extract_tool_calls(response)
         assert result == []
 
 

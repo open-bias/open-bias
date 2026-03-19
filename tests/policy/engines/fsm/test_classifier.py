@@ -5,6 +5,7 @@ import pytest
 from opensentinel.policy.protocols import StateClassificationResult
 from opensentinel.policy.engines.fsm.classifier import StateClassifier
 from opensentinel.policy.engines.fsm.workflow.schema import State, ClassificationHint
+from opensentinel.core.utils import extract_response_content, extract_tool_call_names
 
 
 class TestStateClassifier:
@@ -117,21 +118,21 @@ class TestStateClassifier:
         assert result.state_name == "search"
         assert result.method == "tool_call"
 
-    def test_extract_content_from_dict(self, classifier):
+    def test_extract_content_from_dict(self):
         """Test extracting content from various response formats."""
         # OpenAI format
         response1 = {"choices": [{"message": {"content": "Hello"}}]}
-        assert classifier._extract_content(response1) == "Hello"
+        assert extract_response_content(response1) == "Hello"
 
         # Simple format
         response2 = {"content": "Hello"}
-        assert classifier._extract_content(response2) == "Hello"
+        assert extract_response_content(response2) == "Hello"
 
         # Role-based
         response3 = {"role": "assistant", "content": "Hello"}
-        assert classifier._extract_content(response3) == "Hello"
+        assert extract_response_content(response3) == "Hello"
 
-    def test_extract_tool_calls(self, classifier, mock_tool_call):
+    def test_extract_tool_calls(self, mock_tool_call):
         """Test extracting tool calls from response."""
         response = {
             "choices": [
@@ -147,7 +148,7 @@ class TestStateClassifier:
             ]
         }
 
-        tools = classifier._extract_tool_calls(response)
+        tools = extract_tool_call_names(response)
 
         assert tools == ["search_kb", "lookup"]
 

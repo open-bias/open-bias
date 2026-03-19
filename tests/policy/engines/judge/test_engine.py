@@ -6,6 +6,7 @@ import time
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from opensentinel.core.utils import extract_response_content
 from opensentinel.policy.engines.judge import JudgePolicyEngine
 from opensentinel.policy.engines.judge.models import (
     JudgeVerdict,
@@ -242,16 +243,16 @@ class TestSessionManagement:
 class TestResponseExtraction:
     def test_extract_openai_format(self, engine):
         data = {"choices": [{"message": {"content": "Hello"}}]}
-        assert engine._extract_response_content(data) == "Hello"
+        assert extract_response_content(data) == "Hello"
 
     def test_extract_string(self, engine):
-        assert engine._extract_response_content("Hello") == "Hello"
+        assert extract_response_content("Hello") == "Hello"
 
     def test_extract_dict_content(self, engine):
-        assert engine._extract_response_content({"content": "Hello"}) == "Hello"
+        assert extract_response_content({"content": "Hello"}) == "Hello"
 
     def test_extract_fallback(self, engine):
-        assert engine._extract_response_content(42) == "42"
+        assert extract_response_content(42) == "42"
 
 
 class TestConversationEvalTrigger:

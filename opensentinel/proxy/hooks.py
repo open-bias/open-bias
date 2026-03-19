@@ -35,6 +35,7 @@ from litellm.integrations.custom_logger import CustomLogger
 from litellm.proxy._types import UserAPIKeyAuth
 
 from opensentinel.config.settings import SentinelSettings
+from opensentinel.core.utils import extract_response_content, extract_usage_info
 from opensentinel.core.interceptor import (
     CheckerMode,
     CheckPhase,
@@ -472,21 +473,9 @@ class SentinelCallback(CustomLogger):
 
         # Log LLM call via OTEL BEFORE interceptor
         if self.tracer:
-            response_content = None
-            if hasattr(response, "choices") and response.choices:
-                first_choice = response.choices[0]
-                if hasattr(first_choice, "message") and first_choice.message:
-                    response_content = first_choice.message.content
-                elif hasattr(first_choice, "text"):
-                    response_content = first_choice.text
+            response_content = extract_response_content(response) or None
 
-            usage_info = None
-            if hasattr(response, "usage") and response.usage:
-                usage_info = {
-                    "prompt_tokens": getattr(response.usage, "prompt_tokens", 0),
-                    "completion_tokens": getattr(response.usage, "completion_tokens", 0),
-                    "total_tokens": getattr(response.usage, "total_tokens", 0),
-                }
+            usage_info = extract_usage_info(response)
 
             self.tracer.log_llm_call(
                 session_id=session_id,
@@ -505,11 +494,7 @@ class SentinelCallback(CustomLogger):
 
         if interceptor:
             # Extract response content for tracing
-            response_content_for_trace = None
-            if hasattr(response, "choices") and response.choices:
-                first_choice = response.choices[0]
-                if hasattr(first_choice, "message") and first_choice.message:
-                    response_content_for_trace = first_choice.message.content
+            response_content_for_trace = extract_response_content(response) or None
 
             if self.tracer:
                 cm = self.tracer.trace_block(
@@ -694,23 +679,9 @@ class SentinelCallback(CustomLogger):
 
         # Log LLM call via OTEL
         if self.tracer:
-            response_content = None
-            if hasattr(response_obj, "choices") and response_obj.choices:
-                first_choice = response_obj.choices[0]
-                if hasattr(first_choice, "message") and first_choice.message:
-                    response_content = first_choice.message.content
-                elif hasattr(first_choice, "text"):
-                    response_content = first_choice.text
+            response_content = extract_response_content(response_obj) or None
 
-            usage_info = None
-            if hasattr(response_obj, "usage") and response_obj.usage:
-                usage_info = {
-                    "prompt_tokens": getattr(response_obj.usage, "prompt_tokens", 0),
-                    "completion_tokens": getattr(
-                        response_obj.usage, "completion_tokens", 0
-                    ),
-                    "total_tokens": getattr(response_obj.usage, "total_tokens", 0),
-                }
+            usage_info = extract_usage_info(response_obj)
 
             self.tracer.log_llm_call(
                 session_id=session_id,
