@@ -21,8 +21,6 @@ class TestScoreScale:
         assert ScoreScale.BINARY.max_score == 1
         assert ScoreScale.LIKERT_3.max_score == 3
         assert ScoreScale.LIKERT_5.max_score == 5
-        assert ScoreScale.LIKERT_7.max_score == 7
-        assert ScoreScale.LIKERT_10.max_score == 10
 
     def test_min_score_values(self):
         assert ScoreScale.BINARY.min_score == 0

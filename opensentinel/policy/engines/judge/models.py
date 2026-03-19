@@ -16,7 +16,6 @@ class EvaluationType(Enum):
     POINTWISE = "pointwise"        # Score a single response
     PAIRWISE = "pairwise"          # Compare two responses
     REFERENCE = "reference"        # Score against a reference answer
-    REFERENCE_FREE = "reference_free"  # Score without reference
 
 
 class EvaluationScope(Enum):
@@ -30,8 +29,6 @@ class ScoreScale(Enum):
     BINARY = "binary"              # 0 or 1
     LIKERT_3 = "likert_3"          # 1-3
     LIKERT_5 = "likert_5"          # 1-5
-    LIKERT_7 = "likert_7"          # 1-7
-    LIKERT_10 = "likert_10"        # 1-10
 
     @property
     def max_score(self) -> int:
@@ -39,8 +36,6 @@ class ScoreScale(Enum):
             ScoreScale.BINARY: 1,
             ScoreScale.LIKERT_3: 3,
             ScoreScale.LIKERT_5: 5,
-            ScoreScale.LIKERT_7: 7,
-            ScoreScale.LIKERT_10: 10,
         }[self]
 
     @property

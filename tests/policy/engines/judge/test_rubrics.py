@@ -17,12 +17,9 @@ class TestRubricRegistry:
         """All built-in rubrics should be available in new instances."""
         registry = RubricRegistry()
         names = registry.list_rubrics()
-        assert "general_quality" in names
-        assert "instruction_following" in names
         assert "safety" in names
         assert "agent_behavior" in names
         assert "conversation_policy" in names
-        assert "comparison" in names
 
     def test_get_existing_rubric(self):
         registry = RubricRegistry()
@@ -74,12 +71,6 @@ class TestRubricRegistry:
         rubric = registry.get("conversation_policy")
         assert rubric.scope == EvaluationScope.CONVERSATION
         assert rubric.fail_action == VerdictAction.INTERVENE
-
-    def test_comparison_rubric(self):
-        registry = RubricRegistry()
-        rubric = registry.get("comparison")
-        assert rubric.evaluation_type == EvaluationType.PAIRWISE
-
 
 class TestCreateRulesRubric:
     def test_creates_one_criterion_per_rule(self):

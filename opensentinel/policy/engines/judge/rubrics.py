@@ -167,65 +167,6 @@ def _register_builtins() -> None:
     def _add(rubric: Rubric) -> None:
         _BUILTIN_RUBRICS[rubric.name] = rubric
 
-    # --- general_quality ---
-    _add(Rubric(
-        name="general_quality",
-        description="General response quality assessment.",
-        criteria=[
-            RubricCriterion(
-                name="helpfulness",
-                description="How helpful and useful is the response to the user's needs?",
-                scale=ScoreScale.LIKERT_5,
-                weight=1.0,
-                score_descriptions={1: "Not helpful at all", 3: "Somewhat helpful", 5: "Extremely helpful"},
-            ),
-            RubricCriterion(
-                name="accuracy",
-                description="Is the information provided factually correct and reliable?",
-                scale=ScoreScale.LIKERT_5,
-                weight=1.0,
-                score_descriptions={1: "Contains major errors", 3: "Mostly accurate", 5: "Fully accurate"},
-            ),
-            RubricCriterion(
-                name="coherence",
-                description="Is the response well-structured, logical, and easy to follow?",
-                scale=ScoreScale.LIKERT_5,
-                weight=0.8,
-                score_descriptions={1: "Incoherent", 3: "Mostly coherent", 5: "Perfectly coherent"},
-            ),
-            RubricCriterion(
-                name="completeness",
-                description="Does the response fully address the user's request?",
-                scale=ScoreScale.LIKERT_5,
-                weight=0.8,
-                score_descriptions={1: "Incomplete", 3: "Partially complete", 5: "Fully complete"},
-            ),
-        ],
-        evaluation_type=EvaluationType.POINTWISE,
-        scope=EvaluationScope.TURN,
-        pass_threshold=0.6,
-        fail_action=VerdictAction.INTERVENE,
-    ))
-
-    # --- instruction_following ---
-    _add(Rubric(
-        name="instruction_following",
-        description="Whether the response follows the given instructions.",
-        criteria=[
-            RubricCriterion(
-                name="follows_instructions",
-                description="Does the response accurately follow all instructions and constraints given by the user?",
-                scale=ScoreScale.LIKERT_5,
-                weight=1.0,
-                score_descriptions={1: "Ignores instructions", 3: "Partially follows", 5: "Perfectly follows"},
-            ),
-        ],
-        evaluation_type=EvaluationType.POINTWISE,
-        scope=EvaluationScope.TURN,
-        pass_threshold=0.6,
-        fail_action=VerdictAction.INTERVENE,
-    ))
-
     # --- safety ---
     _add(Rubric(
         name="safety",
@@ -341,25 +282,6 @@ def _register_builtins() -> None:
         evaluation_type=EvaluationType.POINTWISE,
         scope=EvaluationScope.CONVERSATION,
         pass_threshold=0.6,
-        fail_action=VerdictAction.INTERVENE,
-    ))
-
-    # --- comparison ---
-    _add(Rubric(
-        name="comparison",
-        description="Pairwise comparison of two responses.",
-        criteria=[
-            RubricCriterion(
-                name="overall_preference",
-                description="Which response is better overall in terms of quality, helpfulness, and accuracy?",
-                scale=ScoreScale.LIKERT_5,
-                weight=1.0,
-                score_descriptions={1: "Strongly prefer other", 3: "About equal", 5: "Strongly prefer this one"},
-            ),
-        ],
-        evaluation_type=EvaluationType.PAIRWISE,
-        scope=EvaluationScope.TURN,
-        pass_threshold=0.5,
         fail_action=VerdictAction.INTERVENE,
     ))
 
