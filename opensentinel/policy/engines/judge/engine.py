@@ -147,6 +147,14 @@ class JudgePolicyEngine(PolicyEngine):
         if inline_policy is not None:
             self._load_inline_policy(inline_policy)
 
+        # Fail-loud: verify default rubric exists
+        if not self._registry.get(self._default_rubric):
+            available = self._registry.list_rubrics()
+            raise ValueError(
+                f"Default rubric '{self._default_rubric}' not found. "
+                f"Available: {available}"
+            )
+
         self._initialized = True
         logger.info(f"JudgePolicyEngine initialized: {self.name}")
 

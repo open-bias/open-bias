@@ -121,6 +121,16 @@ class TestInitialization:
         with pytest.raises(ValueError, match="Judge engine requires a model"):
             await engine.initialize({})
 
+    @pytest.mark.asyncio
+    async def test_initialize_raises_when_default_rubric_not_found(self, engine):
+        """Test that engine raises ValueError when default rubric doesn't exist."""
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "default_rubric": "nonexistent_rubric",
+        }
+        with pytest.raises(ValueError, match="Default rubric 'nonexistent_rubric' not found"):
+            await engine.initialize(config)
+
 
 class TestEvaluateRequest:
     @pytest.mark.asyncio
