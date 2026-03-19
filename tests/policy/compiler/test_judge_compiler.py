@@ -144,7 +144,6 @@ def test_validate_valid_result(judge_compiler):
             "rubrics": [
                 {
                     "name": "safety",
-                    "fail_action": "block",
                     "pass_threshold": 0.8,
                     "criteria": [
                         {"name": "c1", "scale": "binary"}
@@ -153,7 +152,7 @@ def test_validate_valid_result(judge_compiler):
             ]
         }
     )
-    
+
     errors = judge_compiler.validate_result(result)
     assert not errors
 
@@ -164,7 +163,6 @@ def test_validate_invalid_result(judge_compiler):
             "rubrics": [
                 {
                     "name": "safety",
-                    "fail_action": "invalid_action",
                     "pass_threshold": 1.5,
                     "criteria": [
                         {"name": "c1", "scale": "wrong_scale"}
@@ -173,9 +171,8 @@ def test_validate_invalid_result(judge_compiler):
             ]
         }
     )
-    
+
     errors = judge_compiler.validate_result(result)
-    assert len(errors) == 3
-    assert any("invalid_action" in e for e in errors)
+    assert len(errors) == 2
     assert any("pass_threshold" in e for e in errors)
     assert any("wrong_scale" in e for e in errors)

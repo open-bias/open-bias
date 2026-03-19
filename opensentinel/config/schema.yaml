@@ -51,16 +51,14 @@ log_level: INFO        # default: INFO
 #      - "No financial advice"
 #      - "Be professional"
 #
-# 3. Inline rubrics (dict) — judge engine only:
+# 3. Inline rubrics (list of dicts) — judge engine only:
 #    policy:
-#      rules: ["No financial advice"]
-#      rubrics:
-#        - name: my_rubric
-#          description: Custom rubric
-#          criteria:
-#            - name: tone
-#              description: Professional tone
-#              scale: binary
+#      - name: my_rubric
+#        description: Custom rubric
+#        criteria:
+#          - name: tone
+#            description: Professional tone
+#            scale: binary
 
 # ---------------------------------------------------------------------------
 # Judge Engine — engine: judge
@@ -69,9 +67,8 @@ judge:
   # LLM model for the judge (overrides global `model`).
   model: anthropic/claude-sonnet-4-5
 
-  # Score threshold (0.0–1.0) — the sole decision threshold.
-  # Scores >= pass_threshold → PASS, below → rubric's fail_action.
-  pass_threshold: 0.6          # default: 0.6
+  # What happens when a policy violation is detected: block | intervene (default: block)
+  fail_action: block
 
   # Pre-call evaluation (evaluate requests BEFORE the LLM call)
   pre_call_enabled: false      # default: false
