@@ -9,9 +9,9 @@ Contains all FSM-specific workflow components:
 """
 
 from opensentinel.policy.engines.fsm.workflow.schema import (
+    SimpleWorkflowConfig,
     ClassificationHint,
     State,
-    TransitionGuard,
     Transition,
     ConstraintType,
     Constraint,
@@ -35,9 +35,9 @@ from opensentinel.policy.engines.fsm.workflow.constraints import (
 
 __all__ = [
     # Schema
+    "SimpleWorkflowConfig",
     "ClassificationHint",
     "State",
-    "TransitionGuard",
     "Transition",
     "ConstraintType",
     "Constraint",

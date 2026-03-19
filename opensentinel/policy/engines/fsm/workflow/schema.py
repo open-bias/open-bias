@@ -1,32 +1,36 @@
 """
 Workflow definition schema using Pydantic models.
 
-Supports:
-- State definitions with classification hints
-- Transitions with guards
-- LTL-lite constraints (eventually, always, never, precedence, response)
-- Intervention strategies
+Supports two config formats:
 
-Example YAML:
+Simple (human-authored):
 ```yaml
 name: customer-support
-version: "1.0"
+mode: guide
+
+steps:
+  - greet the customer
+  - understand their issue
+  - resolve and close
+
+rules:
+  - verify identity before any account action
+  - never share internal system information
+
+tools:
+  verify identity: [verify_identity]
+```
+
+Internal (compiler output):
+```yaml
+name: customer-support
+mode: guide
 
 states:
   - name: greeting
     is_initial: true
     classification:
       patterns: ["hello", "hi", "welcome"]
-
-  - name: identify_issue
-    classification:
-      tool_calls: ["search_kb"]
-      exemplars:
-        - "Let me look that up"
-        - "I'll search our documentation"
-
-  - name: resolution
-    is_terminal: true
 
 transitions:
   - from_state: greeting
@@ -37,17 +41,23 @@ constraints:
     type: precedence
     trigger: account_action
     target: identity_verified
-    intervention: prompt_identity_verification
-
-interventions:
-  prompt_identity_verification: |
-    You must verify the customer's identity before account actions.
+    message: You must verify the customer's identity before account actions.
 ```
 """
 
 from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 from enum import Enum
+
+
+class SimpleWorkflowConfig(BaseModel):
+    """Human-authored workflow config with plain English steps and rules."""
+
+    name: str
+    mode: Literal["guide", "enforce"]
+    steps: List[str]
+    rules: List[str]
+    tools: Optional[Dict[str, List[str]]] = None
 
 
 class ClassificationHint(BaseModel):
@@ -98,9 +108,6 @@ class State(BaseModel):
     # Allowed dwell time (for temporal constraints)
     max_duration_seconds: Optional[float] = Field(default=None, ge=0)
 
-    # Support inline transitions
-    transitions: List[Dict[str, Any]] = Field(default_factory=list)
-
     @field_validator("name")
     @classmethod
     def validate_name(cls, v: str) -> str:
@@ -108,24 +115,6 @@ class State(BaseModel):
         if not v.replace("_", "").replace("-", "").isalnum():
             raise ValueError(f"State name must be alphanumeric (with _ or -): {v}")
         return v
-
-
-class TransitionGuard(BaseModel):
-    """
-    Conditions that must be true for a transition to occur.
-
-    Guards can specify:
-    - A Python expression to evaluate
-    - Required metadata fields
-    """
-
-    # Python expression evaluated with context
-    # Example: "confidence > 0.8"
-    expression: Optional[str] = None
-
-    # Required metadata fields and values
-    # Example: {"user_verified": True}
-    required_metadata: Optional[Dict[str, Any]] = None
 
 
 class Transition(BaseModel):
@@ -139,9 +128,6 @@ class Transition(BaseModel):
     from_state: str
     to_state: str
 
-    # Optional guard conditions
-    guard: Optional[TransitionGuard] = None
-
     # Priority for disambiguation (higher = preferred)
     priority: int = Field(default=0, ge=0)
 
@@ -151,58 +137,31 @@ class Transition(BaseModel):
 
 class ConstraintType(str, Enum):
     """
-    LTL-lite constraint operators.
+    Temporal constraint operators.
 
-    Simplified temporal logic for practical workflow constraints:
-
-    - EVENTUALLY (F): Must eventually reach target state
-    - ALWAYS (G): Condition must always hold
-    - NEVER (G!): Target state must never occur
-    - UNTIL (U): Stay in trigger until target reached
-    - NEXT (X): Immediate next state requirement
+    - PRECEDENCE: Target must occur before trigger
+    - NEVER: Target state must never occur
+    - EVENTUALLY: Must eventually reach target state
     - RESPONSE: If trigger occurs, target must eventually follow
-    - PRECEDENCE: Target cannot occur before trigger
     """
 
-    EVENTUALLY = "eventually"
-    ALWAYS = "always"
-    NEVER = "never"
-    UNTIL = "until"
-    NEXT = "next"
-    RESPONSE = "response"
     PRECEDENCE = "precedence"
+    NEVER = "never"
+    EVENTUALLY = "eventually"
+    RESPONSE = "response"
 
 
 class Constraint(BaseModel):
     """
-    LTL-lite temporal constraint.
-
-    Constraints define invariants that must hold during workflow execution.
-    When violated, the specified intervention is triggered.
+    Temporal constraint on workflow execution.
 
     Examples:
-        # Must verify identity before account actions
         Constraint(
             name="verify_first",
             type=ConstraintType.PRECEDENCE,
             trigger="account_action",
             target="identity_verified",
-            intervention="prompt_verify"
-        )
-
-        # Must eventually reach resolution
-        Constraint(
-            name="must_resolve",
-            type=ConstraintType.EVENTUALLY,
-            target="resolution"
-        )
-
-        # Never share credentials
-        Constraint(
-            name="no_credentials",
-            type=ConstraintType.NEVER,
-            target="share_credentials",
-            severity="critical"
+            message="You must verify identity before account actions.",
         )
     """
 
@@ -211,33 +170,22 @@ class Constraint(BaseModel):
     type: ConstraintType
 
     # Constraint parameters (interpretation depends on type)
-    trigger: Optional[str] = None  # For response/precedence/until
+    trigger: Optional[str] = None  # For response/precedence
     target: Optional[str] = None  # Target state
-    condition: Optional[str] = None  # Boolean expression for ALWAYS
 
-    # Violation handling
-    severity: Literal["warning", "error", "critical"] = "error"
-    intervention: Optional[str] = None  # Intervention strategy name
+    # Intervention message when violated
+    message: str = ""
 
     @model_validator(mode="after")
-    def validate_constraint_params(self):
+    def validate_constraint_params(self) -> "Constraint":
         """Validate that required parameters are present for each constraint type."""
         t = self.type
 
         if t == ConstraintType.EVENTUALLY and not self.target:
             raise ValueError("EVENTUALLY constraint requires 'target'")
 
-        if t == ConstraintType.ALWAYS and not self.condition:
-            raise ValueError("ALWAYS constraint requires 'condition'")
-
         if t == ConstraintType.NEVER and not self.target:
             raise ValueError("NEVER constraint requires 'target'")
-
-        if t == ConstraintType.UNTIL and (not self.trigger or not self.target):
-            raise ValueError("UNTIL constraint requires 'trigger' and 'target'")
-
-        if t == ConstraintType.NEXT and not self.target:
-            raise ValueError("NEXT constraint requires 'target'")
 
         if t == ConstraintType.RESPONSE and (not self.trigger or not self.target):
             raise ValueError("RESPONSE constraint requires 'trigger' and 'target'")
@@ -250,17 +198,16 @@ class Constraint(BaseModel):
 
 class WorkflowDefinition(BaseModel):
     """
-    Complete workflow definition.
+    Complete workflow definition (internal compiler output format).
 
     A workflow defines:
     - States: The valid phases of the agent's operation
     - Transitions: Valid state progressions
     - Constraints: Temporal invariants that must hold
-    - Interventions: Correction strategies when constraints violated
     """
 
     name: str = Field(..., min_length=1, max_length=100)
-    version: str = "1.0"
+    mode: Literal["guide", "enforce"] = "guide"
     description: Optional[str] = None
 
     # Workflow components
@@ -268,53 +215,8 @@ class WorkflowDefinition(BaseModel):
     transitions: List[Transition] = Field(default_factory=list)
     constraints: List[Constraint] = Field(default_factory=list)
 
-    # Intervention templates
-    # Maps intervention name -> prompt template
-    interventions: Dict[str, str] = Field(default_factory=dict)
-
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict)
-
-    @model_validator(mode="before")
-    @classmethod
-    def collect_state_transitions(cls, data: Any) -> Any:
-        """Collect transitions defined inside states into the top-level transitions list."""
-        if not isinstance(data, dict):
-            return data
-
-        states = data.get("states", [])
-        if not isinstance(states, list):
-            return data
-
-        transitions = data.get("transitions", [])
-        if not isinstance(transitions, list):
-            transitions = []
-
-        for state in states:
-            if not isinstance(state, dict):
-                continue
-            
-            state_name = state.get("name")
-            state_transitions = state.get("transitions", [])
-            
-            if not state_name or not isinstance(state_transitions, list):
-                continue
-                
-            for trans in state_transitions:
-                if not isinstance(trans, dict):
-                    continue
-                
-                # If from_state is not specified, use the current state
-                if "from_state" not in trans:
-                    trans["from_state"] = state_name
-                    
-                transitions.append(trans)
-            
-            # Remove inline transitions after collecting them
-            # state.pop("transitions", None) # Keep them for now to avoid issues with State model validation
-
-        data["transitions"] = transitions
-        return data
 
     @field_validator("states")
     @classmethod
@@ -325,7 +227,7 @@ class WorkflowDefinition(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_references(self):
+    def validate_references(self) -> "WorkflowDefinition":
         """Validate that all state references are valid."""
         state_names = {s.name for s in self.states}
 
@@ -351,12 +253,6 @@ class WorkflowDefinition(BaseModel):
             ):
                 raise ValueError(
                     f"Constraint '{c.name}' references unknown target state: {c.target}"
-                )
-
-            # Check intervention reference
-            if c.intervention and c.intervention not in self.interventions:
-                raise ValueError(
-                    f"Constraint '{c.name}' references unknown intervention: {c.intervention}"
                 )
 
         return self

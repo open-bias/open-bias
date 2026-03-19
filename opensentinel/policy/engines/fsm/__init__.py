@@ -15,9 +15,9 @@ from opensentinel.policy.engines.fsm.engine import FSMPolicyEngine
 # Workflow components
 from opensentinel.policy.engines.fsm.workflow import (
     # Schema
+    SimpleWorkflowConfig,
     ClassificationHint,
     State,
-    TransitionGuard,
     Transition,
     ConstraintType,
     Constraint,
@@ -55,9 +55,9 @@ __all__ = [
     # Engine
     "FSMPolicyEngine",
     # Workflow - Schema
+    "SimpleWorkflowConfig",
     "ClassificationHint",
     "State",
-    "TransitionGuard",
     "Transition",
     "ConstraintType",
     "Constraint",
