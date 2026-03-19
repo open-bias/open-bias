@@ -12,8 +12,6 @@ import pytest
 
 from opensentinel.proxy.middleware import (
     SessionExtractor,
-    WorkflowContextExtractor,
-    ResponseTransformer,
     _get_header,
 )
 
@@ -268,99 +266,3 @@ class TestMultiAgentIsolation:
         assert SessionExtractor.extract_session_id(agent_b) == "meta-sess"
 
 
-# ===========================================================================
-# WorkflowContextExtractor
-# ===========================================================================
-class TestWorkflowContextExtractor:
-    def test_extract_from_explicit_headers(self):
-        data = {"messages": []}
-        headers = {
-            "x-sentinel-workflow": "customer-support",
-            "x-sentinel-expected-state": "greeting",
-            "x-sentinel-disable-intervention": "true",
-        }
-        context = WorkflowContextExtractor.extract_context(data, headers)
-        assert context["workflow_name"] == "customer-support"
-        assert context["expected_state"] == "greeting"
-        assert context["disable_intervention"] is True
-
-    def test_extract_from_embedded_headers(self):
-        """LiteLLM proxy mode: headers in data dict."""
-        data = _litellm_proxy_data(
-            headers={
-                "x-sentinel-workflow": "order-flow",
-                "x-sentinel-expected-state": "cart",
-            }
-        )
-        context = WorkflowContextExtractor.extract_context(data)
-        assert context["workflow_name"] == "order-flow"
-        assert context["expected_state"] == "cart"
-
-    def test_extract_from_metadata(self):
-        data = {
-            "metadata": {
-                "sentinel_workflow": "onboarding",
-                "sentinel_expected_state": "verify_email",
-                "sentinel_disable_intervention": True,
-            }
-        }
-        context = WorkflowContextExtractor.extract_context(data)
-        assert context["workflow_name"] == "onboarding"
-        assert context["expected_state"] == "verify_email"
-        assert context["disable_intervention"] is True
-
-    def test_custom_metadata_collected(self):
-        data = {
-            "metadata": {
-                "sentinel_custom_key": "custom_value",
-                "sentinel_another": 42,
-            }
-        }
-        context = WorkflowContextExtractor.extract_context(data)
-        assert context["custom_metadata"] == {"custom_key": "custom_value", "another": 42}
-
-    def test_empty_data_returns_empty_context(self):
-        assert WorkflowContextExtractor.extract_context({}) == {}
-
-    def test_case_insensitive_headers(self):
-        data = {}
-        headers = {"X-Sentinel-Workflow": "test-workflow"}
-        context = WorkflowContextExtractor.extract_context(data, headers)
-        assert context["workflow_name"] == "test-workflow"
-
-
-# ===========================================================================
-# ResponseTransformer
-# ===========================================================================
-class TestResponseTransformer:
-    def test_add_workflow_state(self):
-        result = ResponseTransformer.add_sentinel_headers(
-            {}, workflow_state="verification"
-        )
-        assert result["x-sentinel-workflow-state"] == "verification"
-
-    def test_add_intervention(self):
-        result = ResponseTransformer.add_sentinel_headers(
-            {}, intervention_applied="redirect_to_verification"
-        )
-        assert result["x-sentinel-intervention"] == "redirect_to_verification"
-
-    def test_add_violations(self):
-        result = ResponseTransformer.add_sentinel_headers(
-            {}, violations=["skip_auth", "missing_context"]
-        )
-        assert result["x-sentinel-violations"] == "skip_auth,missing_context"
-
-    def test_preserves_existing_headers(self):
-        existing = {"content-type": "application/json"}
-        result = ResponseTransformer.add_sentinel_headers(
-            existing, workflow_state="done"
-        )
-        assert result["content-type"] == "application/json"
-        assert result["x-sentinel-workflow-state"] == "done"
-
-    def test_no_sentinel_headers_when_none(self):
-        result = ResponseTransformer.add_sentinel_headers({})
-        assert "x-sentinel-workflow-state" not in result
-        assert "x-sentinel-intervention" not in result
-        assert "x-sentinel-violations" not in result

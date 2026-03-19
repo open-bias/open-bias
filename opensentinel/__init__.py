@@ -60,19 +60,6 @@ from opensentinel.config.settings import SentinelSettings
 # Proxy server
 from opensentinel.proxy.server import SentinelProxy, start_proxy
 
-# Workflow components (from FSM engine)
-from opensentinel.policy.engines.fsm import (
-    WorkflowDefinition,
-    State,
-    Transition,
-    Constraint,
-    ConstraintType,
-    WorkflowParser,
-    WorkflowStateMachine,
-
-    StateClassifier,
-)
-
 # Policy engines
 from opensentinel.policy import (
     PolicyEngine,
@@ -89,17 +76,6 @@ __all__ = [
     # Proxy
     "SentinelProxy",
     "start_proxy",
-    # Workflow
-    "WorkflowDefinition",
-    "State",
-    "Transition",
-    "Constraint",
-    "ConstraintType",
-    "WorkflowParser",
-    "WorkflowStateMachine",
-    # Monitoring
-
-    "StateClassifier",
     # Policy engines
     "PolicyEngine",
     "PolicyEngineRegistry",

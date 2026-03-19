@@ -1,93 +1,74 @@
 """
 Policy engine registry for dynamic engine loading.
 
-Provides a central registry for policy engine implementations,
-enabling dynamic selection and instantiation of engines.
+Provides a generic registry base class and a specialized registry
+for policy engine implementations.
 """
 
-from typing import Dict, Type, Optional, Any, List, Callable
+from typing import Dict, Type, Optional, Any, List, Callable, TypeVar, Generic
 import logging
 
 from opensentinel.policy.protocols import PolicyEngine
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
 
-class PolicyEngineRegistry:
+
+class GenericRegistry(Generic[T]):
     """
-    Registry for policy engine implementations.
+    Generic base class for type registries.
 
-    Allows dynamic registration and lookup of policy engines.
-    Engines are registered by type identifier (e.g., 'fsm', 'nemo').
-
-    Usage:
-        # Registration (usually via decorator)
-        PolicyEngineRegistry.register("fsm", FSMPolicyEngine)
-
-        # Lookup
-        engine_class = PolicyEngineRegistry.get("fsm")
-
-        # Factory
-        engine = PolicyEngineRegistry.create("fsm", config)
-        await engine.initialize(config)
+    Each subclass gets its own isolated ``_registry`` dict via
+    ``__init_subclass__``, so registrations never leak between
+    different registry types.
     """
 
-    _engines: Dict[str, Type[PolicyEngine]] = {}
+    _registry: Dict[str, Type[T]]
+    _label: str = "item"
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        cls._registry = {}
 
     @classmethod
-    def register(cls, engine_type: str, engine_class: Type[PolicyEngine]) -> None:
-        """
-        Register a policy engine class.
-
-        Args:
-            engine_type: Type identifier (e.g., 'fsm', 'nemo')
-            engine_class: The engine class to register
-        """
-        if engine_type in cls._engines:
-            logger.warning(
-                f"Overwriting existing policy engine registration: {engine_type}"
-            )
-        cls._engines[engine_type] = engine_class
-        logger.debug(f"Registered policy engine: {engine_type}")
+    def register(cls, key: str, registered_class: Type[T]) -> None:
+        if key in cls._registry:
+            logger.warning(f"Overwriting existing {cls._label} registration: {key}")
+        cls._registry[key] = registered_class
+        logger.debug(f"Registered {cls._label}: {key}")
 
     @classmethod
-    def get(cls, engine_type: str) -> Optional[Type[PolicyEngine]]:
-        """
-        Get a policy engine class by type.
+    def get(cls, key: str) -> Optional[Type[T]]:
+        return cls._registry.get(key)
 
-        Args:
-            engine_type: Type identifier
+    @classmethod
+    def list_registered(cls) -> List[str]:
+        return list(cls._registry.keys())
 
-        Returns:
-            Engine class or None if not found
-        """
-        return cls._engines.get(engine_type)
+    @classmethod
+    def is_registered(cls, key: str) -> bool:
+        return key in cls._registry
+
+    @classmethod
+    def clear(cls) -> None:
+        cls._registry.clear()
+
+
+class PolicyEngineRegistry(GenericRegistry[PolicyEngine]):
+    """Registry for policy engine implementations."""
+
+    _label = "policy engine"
 
     @classmethod
     def create(cls, engine_type: str) -> PolicyEngine:
-        """
-        Create a policy engine instance.
-
-        Note: The engine must be initialized separately by calling
-        `await engine.initialize(config)`.
-
-        Args:
-            engine_type: Type identifier
-
-        Returns:
-            Uninitialized engine instance
-
-        Raises:
-            ValueError: If engine type is not registered
-        """
         engine_class = cls.get(engine_type)
         if not engine_class:
-            available = ", ".join(cls._engines.keys()) or "none"
+            available = ", ".join(cls._registry.keys()) or "none"
             raise ValueError(
                 f"Unknown policy engine type: '{engine_type}'. "
                 f"Available engines: {available}"
             )
-
         return engine_class()
 
     @classmethod
@@ -96,70 +77,16 @@ class PolicyEngineRegistry:
         engine_type: str,
         config: Dict[str, Any],
     ) -> PolicyEngine:
-        """
-        Create and initialize a policy engine instance.
-
-        Convenience method that combines create() and initialize().
-
-        Args:
-            engine_type: Type identifier
-            config: Engine configuration
-
-        Returns:
-            Initialized engine instance
-        """
         engine = cls.create(engine_type)
         await engine.initialize(config)
         return engine
 
-    @classmethod
-    def list_engines(cls) -> List[str]:
-        """
-        List all registered engine types.
-
-        Returns:
-            List of registered engine type identifiers
-        """
-        return list(cls._engines.keys())
-
-    @classmethod
-    def is_registered(cls, engine_type: str) -> bool:
-        """
-        Check if an engine type is registered.
-
-        Args:
-            engine_type: Type identifier
-
-        Returns:
-            True if registered, False otherwise
-        """
-        return engine_type in cls._engines
-
-    @classmethod
-    def clear(cls) -> None:
-        """
-        Clear all registrations.
-
-        Mainly useful for testing.
-        """
-        cls._engines.clear()
+    # Backwards-compatible alias
+    list_engines = GenericRegistry.list_registered
 
 
 def register_engine(engine_type: str) -> Callable[[Type[PolicyEngine]], Type[PolicyEngine]]:
-    """
-    Decorator to auto-register a policy engine class.
-
-    Usage:
-        @register_engine("fsm")
-        class FSMPolicyEngine(PolicyEngine):
-            ...
-
-    Args:
-        engine_type: Type identifier for the engine
-
-    Returns:
-        Decorator function
-    """
+    """Decorator to auto-register a policy engine class."""
 
     def decorator(cls: Type[PolicyEngine]) -> Type[PolicyEngine]:
         PolicyEngineRegistry.register(engine_type, cls)
