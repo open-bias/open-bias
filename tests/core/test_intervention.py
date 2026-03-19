@@ -236,39 +236,51 @@ class TestInterventionHandler:
     """Tests for InterventionHandler."""
 
     @pytest.fixture
-    def workflow(self, simple_workflow):
-        """Use simple workflow fixture."""
-        return simple_workflow
+    def handler(self):
+        """Create InterventionHandler."""
+        return InterventionHandler()
 
     @pytest.fixture
-    def handler(self, workflow):
-        """Create InterventionHandler."""
-        return InterventionHandler(workflow)
+    def violation(self):
+        """Create a sample constraint violation."""
+        from opensentinel.policy.engines.fsm.workflow.constraints import (
+            ConstraintViolation,
+            ConstraintType,
+        )
 
-    def test_list_interventions(self, handler):
-        """Test listing available interventions."""
-        interventions = handler.list_interventions()
+        return ConstraintViolation(
+            constraint_name="verify_before_action",
+            message="Please verify identity first.",
+            constraint_type=ConstraintType.PRECEDENCE,
+            details={"current_state": "start", "proposed_state": "action"},
+        )
 
-        assert "prompt_search" in interventions
-
-    def test_get_intervention_info(self, handler):
-        """Test getting intervention info."""
-        info = handler.get_intervention_info("prompt_search")
-
-        assert info is not None
-        assert info["name"] == "prompt_search"
-        assert "strategy" in info
-        assert "template" in info
-
-    def test_get_config_known(self, handler):
-        """Test getting config for a known intervention."""
-        config = handler.get_config("prompt_search")
+    def test_get_config_for_violation(self, handler, violation):
+        """Test building InterventionConfig from a violation."""
+        config = handler.get_config_for_violation(violation)
 
         assert config is not None
-        assert config.message_template is not None
+        assert config.message_template == "Please verify identity first."
+        assert config.strategy_type == StrategyType.SYSTEM_PROMPT_APPEND
 
-    def test_get_config_unknown(self, handler):
-        """Test getting config for unknown intervention returns None."""
-        config = handler.get_config("nonexistent")
+    def test_get_message(self, handler, violation):
+        """Test getting message from a violation."""
+        msg = handler.get_message(violation)
 
-        assert config is None
+        assert msg == "Please verify identity first."
+
+    def test_get_message_empty(self, handler):
+        """Test getting message from a violation with no message."""
+        from opensentinel.policy.engines.fsm.workflow.constraints import (
+            ConstraintViolation,
+            ConstraintType,
+        )
+
+        violation = ConstraintViolation(
+            constraint_name="test",
+            message="",
+            constraint_type=ConstraintType.NEVER,
+            details={},
+        )
+
+        assert handler.get_message(violation) is None
