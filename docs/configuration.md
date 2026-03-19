@@ -79,49 +79,13 @@ Set `engine: judge` at the top level. Configure under the `judge:` section.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `judge.model` | string | global `model` | LLM model for evaluation. Overrides the global model setting. |
-| `judge.mode` | string | `balanced` | Reliability preset: `safe`, `balanced`, `aggressive`. Individual keys below override the preset. |
 | `judge.pass_threshold` | float | `0.6` | Score above which a response passes (0.0-1.0) |
-| `judge.warn_threshold` | float | `0.4` | Score below pass but above this triggers a warning |
-| `judge.block_threshold` | float | `0.2` | Score below this blocks the response |
-| `judge.confidence_threshold` | float | `0.5` | Minimum confidence for the judge's own assessment |
 | `judge.pre_call_enabled` | bool | `false` | Evaluate requests before forwarding to the LLM |
 | `judge.pre_call_rubric` | string | `safety` | Which rubric to use for pre-call evaluation |
 | `judge.default_rubric` | string | `agent_behavior` | Default rubric for per-turn evaluation |
 | `judge.conversation_rubric` | string | `conversation_policy` | Rubric for multi-turn conversation evaluation |
 | `judge.custom_rubrics_path` | string | -- | Path to directory containing custom rubric YAML files |
 | `judge.conversation_eval_interval` | int | `5` | Run conversation-level evaluation every N turns |
-| `judge.ensemble_enabled` | bool | `false` | Use multiple models for judging |
-| `judge.aggregation_strategy` | string | `mean_score` | How to combine ensemble results: `mean_score`, `conservative` |
-| `judge.min_agreement` | float | `0.6` | Minimum agreement ratio across ensemble models |
-
-### Reliability Modes
-
-The `mode` key sets sensible defaults for thresholds. Any individual key you set overrides the preset.
-
-**safe** -- Stricter thresholds, pre-call safety screening enabled, ensemble when multiple models configured. For high-stakes applications.
-
-**balanced** (default) -- Moderate thresholds, post-call evaluation only. Reasonable tradeoff between safety and latency.
-
-**aggressive** -- Looser thresholds, fewer interventions. For low-risk applications where overhead matters more than coverage.
-
-### Multi-Model Ensemble
-
-For explicit multi-model configuration, use `judge.models` instead of `judge.model`:
-
-```yaml
-judge:
-  ensemble_enabled: true
-  aggregation_strategy: mean_score
-  models:
-    - name: primary
-      model: anthropic/claude-3-5-sonnet-latest
-      temperature: 0.0
-      max_tokens: 2048
-      timeout: 15.0
-    - name: secondary
-      model: gpt-4o-mini
-      temperature: 0.0
-```
 
 ## LLM Engine
 
@@ -280,7 +244,7 @@ The `osentinel serve` command validates configuration at startup:
 
 - Checks that referenced policy files exist on disk
 - Verifies that the required API key is present for the configured model
-- Applies reliability mode defaults before engine-specific overrides
+- Applies engine defaults before engine-specific overrides
 
 If validation fails, the server prints the error and exits with code 1. Use `--debug` for a full traceback.
 
@@ -296,10 +260,8 @@ policy: ./policy.yaml
 
 judge:
   model: anthropic/claude-3-5-sonnet-latest
-  mode: balanced
   pass_threshold: 0.6
   pre_call_enabled: false
-  ensemble_enabled: false
 
 tracing:
   type: none
