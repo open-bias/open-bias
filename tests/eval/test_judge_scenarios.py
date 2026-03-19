@@ -142,3 +142,119 @@ async def test_system_prompt_leak_detected(engine, runner):
         if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
     ]
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"
+
+
+async def test_tool_call_violation(engine, runner):
+    """Agent makes dangerous tool call (delete_users) — should be caught."""
+    messages = json.loads((EVALS_DIR / "tool_call_violation.json").read_text())
+
+    # First response: agent deletes without approval — violation
+    fail_resp = _make_judge_response(0, "Agent executed destructive tool call without approval")
+    # Second response: agent checks audit log — passes
+    pass_resp = _make_judge_response(1, "Agent appropriately checked audit log")
+    # Third: fully recovered
+    pass_resp_2 = _make_judge_response(1, "Agent acknowledged mistake and offered restore")
+
+    _patch_judge(engine, [fail_resp, pass_resp, pass_resp_2])
+
+    result = await runner.run(engine, messages)
+
+    assert result.error is None
+    assert len(result.turns) >= 1
+    # First turn (the destructive tool call) should be flagged
+    assert result.turns[0].response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
+
+
+async def test_multi_turn_drift(engine, runner):
+    """Gradual off-topic drift over 5 turns — later turns should trigger violation."""
+    messages = json.loads((EVALS_DIR / "multi_turn_drift.json").read_text())
+
+    responses = [
+        _make_judge_response(1, "On-topic password help"),
+        _make_judge_response(1, "Slightly off-topic but borderline"),
+        _make_judge_response(0, "Completely off-topic restaurant recommendations"),
+        _make_judge_response(0, "Providing financial advice, way off-topic"),
+        _make_judge_response(0, "Crypto investment advice, fully drifted"),
+    ]
+
+    _patch_judge(engine, responses)
+
+    result = await runner.run(engine, messages)
+
+    assert result.error is None
+    assert len(result.turns) == 5
+
+    violation_turns = [
+        t for t in result.turns
+        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
+    ]
+    assert len(violation_turns) >= 2, "Expected drift to trigger violations in later turns"
+
+
+async def test_recovery_after_intervention(runner):
+    """Violate → intervene → agent corrects → pass (core value loop).
+
+    Uses a dedicated engine with conversation eval disabled to avoid
+    extra judge calls that would consume mock responses.
+    """
+    eng = await PolicyEngineRegistry.create_and_initialize(
+        "judge",
+        {
+            "inline_policy": INLINE_POLICY,
+            "conversation_eval_interval": 999,
+            "conversation_rubric": None,
+        },
+    )
+
+    messages = json.loads((EVALS_DIR / "recovery_after_intervention.json").read_text())
+
+    responses = [
+        # Turn 1: agent diagnoses and prescribes — violation
+        _make_judge_response(0, "Agent provided diagnosis and prescribed medication"),
+        # Turn 2: agent corrects behavior — passes
+        _make_judge_response(1, "Agent appropriately deferred to healthcare professionals"),
+        # Turn 3: agent stays on track — passes
+        _make_judge_response(1, "Agent provided general information without diagnosing"),
+    ]
+
+    _patch_judge(eng, responses)
+
+    result = await runner.run(eng, messages)
+    await eng.shutdown()
+
+    assert result.error is None
+    assert len(result.turns) == 3
+    # Turn 1 should be caught
+    assert result.turns[0].response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
+    # Turns 2 and 3 should pass (recovery)
+    assert result.turns[1].response_eval.decision == Decision.ALLOW
+    assert result.turns[2].response_eval.decision == Decision.ALLOW
+
+
+async def test_empty_response_no_crash(engine, runner):
+    """Empty assistant content should not crash the engine."""
+    messages = json.loads((EVALS_DIR / "empty_response.json").read_text())
+
+    _patch_judge(engine, [_make_judge_response(1, "Empty but not harmful")])
+
+    result = await runner.run(engine, messages)
+
+    assert result.error is None
+    assert len(result.turns) == 1
+
+
+async def test_tool_calls_only_no_crash(engine, runner):
+    """Response with only tool_calls (no text content) should not crash."""
+    messages = json.loads((EVALS_DIR / "tool_calls_only.json").read_text())
+
+    responses = [
+        _make_judge_response(1, "Appropriate tool use"),
+        _make_judge_response(1, "Good response with weather info"),
+    ]
+
+    _patch_judge(engine, responses)
+
+    result = await runner.run(engine, messages)
+
+    assert result.error is None
+    assert len(result.turns) >= 1

@@ -101,6 +101,45 @@ class TestInterventionStrategies:
         result = strategy.format_message(template, {})
         assert template == result  # Returns original if key missing
 
+    def test_user_message_inject_after_last_user(self):
+        """Fix 2A: injected guidance must appear AFTER the last user message."""
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "First question"},
+            {"role": "assistant", "content": "First answer"},
+            {"role": "user", "content": "Second question"},
+        ]
+
+        result = UserMessageInjectStrategy.merge(messages, "Check this.")
+        # Guidance should be right after the last user message (index 3)
+        assert result[4]["role"] == "user"
+        assert "[System Note]" in result[4]["content"]
+        assert "Check this." in result[4]["content"]
+        # Last user message should be untouched at index 3
+        assert result[3]["content"] == "Second question"
+
+    def test_user_message_inject_not_before_last_user(self):
+        """Fix 2A: guidance must NOT appear before the last user message."""
+        messages = [
+            {"role": "system", "content": "System prompt"},
+            {"role": "user", "content": "My question"},
+        ]
+
+        result = UserMessageInjectStrategy.merge(messages, "Verify identity.")
+        # The [System Note] should come AFTER "My question", not before
+        assert result[1]["content"] == "My question"
+        assert result[2]["content"] == "[System Note]: Verify identity."
+
+    def test_user_message_inject_no_user_messages(self):
+        """When no user message exists, guidance is appended at end."""
+        messages = [
+            {"role": "system", "content": "System prompt"},
+        ]
+
+        result = UserMessageInjectStrategy.merge(messages, "Guidance.")
+        assert len(result) == 2
+        assert result[-1]["content"] == "[System Note]: Guidance."
+
 
 class TestResponseModificationStrategy:
     """Tests for ResponseModificationStrategy."""

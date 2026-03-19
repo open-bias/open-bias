@@ -767,6 +767,88 @@ class TestInterventionEscalation:
         assert session.last_intervention_criteria == []
         assert session.criterion_intervention_counts == {}
 
+    def test_intervene_without_criterion_failures_increments_count(self):
+        """INTERVENE verdict from composite score alone still increments intervention_count."""
+        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+        session = JudgeSessionContext(session_id="test")
+
+        verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(criterion="quality", score=2, max_score=5, reasoning="Low"),
+            ],
+            composite_score=0.3,
+            action=VerdictAction.INTERVENE,
+            summary="Below threshold",
+            judge_model="test",
+            metadata={},  # No criterion_failures
+        )
+        session.record_verdict(verdict)
+
+        assert session.intervention_count == 1
+        assert session.criterion_intervention_counts == {}
+
+    def test_block_without_criterion_failures_increments_count(self):
+        """BLOCK verdict from composite score alone still increments intervention_count."""
+        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+        session = JudgeSessionContext(session_id="test")
+
+        verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(criterion="quality", score=1, max_score=5, reasoning="Very low"),
+            ],
+            composite_score=0.1,
+            action=VerdictAction.BLOCK,
+            summary="Blocked",
+            judge_model="test",
+            metadata={},  # No criterion_failures
+        )
+        session.record_verdict(verdict)
+
+        assert session.intervention_count == 1
+        assert session.criterion_intervention_counts == {}
+
+    def test_escalation_cap_works_with_composite_only_verdicts(self):
+        """Intervention count cap (3) triggers on composite-only verdicts
+        (no criterion_failures) via direct session model testing.
+        """
+        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+        session = JudgeSessionContext(session_id="test")
+
+        # Simulate 4 INTERVENE verdicts with no criterion_failures
+        for _ in range(4):
+            verdict = JudgeVerdict(
+                scores=[
+                    JudgeScore(criterion="quality", score=2, max_score=5, reasoning="Low"),
+                ],
+                composite_score=0.3,
+                action=VerdictAction.INTERVENE,
+                summary="Below threshold",
+                judge_model="test",
+                metadata={},  # No criterion_failures
+            )
+            session.record_verdict(verdict)
+
+        # All 4 should be counted
+        assert session.intervention_count == 4
+        # No per-criterion tracking since no failures
+        assert session.criterion_intervention_counts == {}
+
+        # Escalation check: pending_count (4+1=5) > 3 should trigger
+        engine = JudgePolicyEngine()
+        next_verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(criterion="quality", score=2, max_score=5, reasoning="Low"),
+            ],
+            composite_score=0.3,
+            action=VerdictAction.INTERVENE,
+            summary="Still low",
+            judge_model="test",
+            metadata={},
+        )
+        result = engine._check_escalation(next_verdict, session)
+        assert result["should_escalate"] is True
+        assert "intervention_count_exceeded" in result["reason"]
+
 
 class TestJudgeSessionEviction:
     """Tests for judge engine session TTL and LRU eviction."""
@@ -832,4 +914,99 @@ class TestJudgeSessionEviction:
 
         assert engine._session_ttl == 300
         assert engine._max_sessions == 500
+
+
+class TestMissingCriterionFalsePositive:
+    """Tests for fix 1C: synthetic fills should not trigger false positives."""
+
+    @pytest.mark.asyncio
+    async def test_missing_criterion_not_false_positive(self):
+        """When the judge omits a binary criterion, the synthetic fill should not
+        cause a criterion_failure (false positive BLOCK). The composite may still
+        drop (producing a WARN), but that maps to ALLOW — the key point is no
+        per-criterion false positive.
+        """
+        engine = JudgePolicyEngine()
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "inline_policy": ["No financial advice", "Be professional"],
+            "conversation_rubric": None,
+        }
+        await engine.initialize(config)
+
+        rubric = engine._registry.get("inline_policy")
+        criteria_names = [c.name for c in rubric.criteria]
+
+        # Judge only returns score for the first criterion; second is omitted
+        judge_response = {
+            "scores": [
+                {
+                    "criterion": criteria_names[0],
+                    "score": 1,
+                    "reasoning": "No financial advice given",
+                    "evidence": [],
+                    "confidence": 0.9,
+                },
+                # criteria_names[1] intentionally omitted — evaluator fills it
+            ],
+            "summary": "Good response.",
+        }
+        engine._client.call_judge = AsyncMock(return_value=judge_response)
+
+        sample_request = {
+            "messages": [{"role": "user", "content": "Hello"}],
+            "model": "gpt-4o",
+        }
+        sample_response = {"choices": [{"message": {"content": "Hi there"}}]}
+
+        result = await engine.evaluate_response("s1", sample_response, sample_request)
+        # Decision must be ALLOW (WARN maps to ALLOW) — NOT BLOCK/INTERVENE
+        assert result.decision == Decision.ALLOW
+        # No criterion_failures should be reported — the synthetic fill with
+        # confidence=0.0 must be skipped by _check_criterion_failures
+        verdicts = result.metadata.get("judge", {}).get("verdicts", [])
+        for v in verdicts:
+            assert len(v.get("criterion_failures", [])) == 0, (
+                f"Synthetic fill caused false criterion failure: {v}"
+            )
+
+
+class TestRubricIsolation:
+    """Tests for fix 2C: engine instances must not share rubric registries."""
+
+    @pytest.mark.asyncio
+    async def test_two_engines_dont_share_rubrics(self):
+        """Inline policy registered on one engine must not appear on another."""
+        engine_a = JudgePolicyEngine()
+        engine_b = JudgePolicyEngine()
+
+        await engine_a.initialize({
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "inline_policy": ["Never share secrets"],
+        })
+        await engine_b.initialize({
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+        })
+
+        # Engine A has inline_policy rubric
+        assert engine_a._registry.get("inline_policy") is not None
+        # Engine B should NOT have it
+        assert engine_b._registry.get("inline_policy") is None
+
+    @pytest.mark.asyncio
+    async def test_inline_policy_doesnt_corrupt_builtins(self):
+        """Registering an inline_policy should not modify built-in rubrics globally."""
+        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
+
+        engine = JudgePolicyEngine()
+        await engine.initialize({
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "inline_policy": ["Custom rule"],
+        })
+
+        # A fresh registry should not have the inline_policy
+        fresh = RubricRegistry()
+        assert fresh.get("inline_policy") is None
+        # But should still have built-ins
+        assert fresh.get("agent_behavior") is not None
 
