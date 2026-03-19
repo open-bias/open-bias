@@ -6,7 +6,7 @@ deterministically, with evidence memory for context accumulation.
 """
 
 import logging
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 
 from opensentinel.policy.engines.llm.models import (
     ConstraintEvaluation,
@@ -241,7 +241,7 @@ class LLMConstraintEvaluator:
 
     def _parse_evaluations(
         self,
-        response: any,
+        response: Any,
         constraints: List[Constraint],
     ) -> List[ConstraintEvaluation]:
         """Parse LLM response into constraint evaluations."""
