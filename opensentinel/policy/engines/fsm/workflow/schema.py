@@ -46,7 +46,7 @@ interventions:
 """
 
 from typing import Optional, List, Dict, Any, Literal
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, model_validator
 from enum import Enum
 
 
@@ -90,12 +90,10 @@ class State(BaseModel):
     # Classification configuration
     classification: ClassificationHint = Field(default_factory=ClassificationHint)
 
-    model_config = ConfigDict(populate_by_name=True)
-
     # State metadata
-    is_initial: bool = Field(default=False, validation_alias="initial")
-    is_terminal: bool = Field(default=False, validation_alias="terminal")
-    is_error: bool = Field(default=False, validation_alias="error")
+    is_initial: bool = Field(default=False)
+    is_terminal: bool = Field(default=False)
+    is_error: bool = Field(default=False)
 
     # Allowed dwell time (for temporal constraints)
     max_duration_seconds: Optional[float] = Field(default=None, ge=0)
@@ -138,10 +136,8 @@ class Transition(BaseModel):
     If no transitions are defined FROM a state, any state can follow.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
-
-    from_state: str = Field(..., validation_alias="from")
-    to_state: str = Field(..., validation_alias="target")
+    from_state: str
+    to_state: str
 
     # Optional guard conditions
     guard: Optional[TransitionGuard] = None
@@ -150,7 +146,7 @@ class Transition(BaseModel):
     priority: int = Field(default=0, ge=0)
 
     # Optional description
-    description: Optional[str] = Field(default=None, validation_alias="trigger")
+    description: Optional[str] = None
 
 
 class ConstraintType(str, Enum):
@@ -309,12 +305,8 @@ class WorkflowDefinition(BaseModel):
                     continue
                 
                 # If from_state is not specified, use the current state
-                if "from_state" not in trans and "from" not in trans:
+                if "from_state" not in trans:
                     trans["from_state"] = state_name
-                
-                # Map 'target' to 'to_state' if needed (handled by alias anyway, but good to be explicit here)
-                if "target" in trans and "to_state" not in trans:
-                    trans["to_state"] = trans["target"]
                     
                 transitions.append(trans)
             
