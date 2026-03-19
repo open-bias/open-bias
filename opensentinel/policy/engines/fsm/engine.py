@@ -5,28 +5,28 @@ Wraps the existing workflow/state machine implementation as a PolicyEngine,
 enabling it to be used alongside other policy mechanisms.
 """
 
-from typing import Optional, Dict, Any, List, TYPE_CHECKING
 import logging
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 if TYPE_CHECKING:
     from opensentinel.policy.compiler.protocol import PolicyCompiler
 
+from opensentinel.policy.engines.fsm.classifier import StateClassifier
+from opensentinel.policy.engines.fsm.intervention import InterventionHandler
+from opensentinel.policy.engines.fsm.workflow.constraints import ConstraintEvaluator
+from opensentinel.policy.engines.fsm.workflow.parser import WorkflowParser
+from opensentinel.policy.engines.fsm.workflow.schema import ConstraintType, WorkflowDefinition
+from opensentinel.policy.engines.fsm.workflow.state_machine import WorkflowStateMachine
+from opensentinel.policy.engines.stateful import (
+    StateClassificationResult,
+    StatefulPolicyEngine,
+)
 from opensentinel.policy.protocols import (
     Decision,
     EngineResult,
     require_initialized,
 )
-from opensentinel.policy.engines.stateful import (
-    StatefulPolicyEngine,
-    StateClassificationResult,
-)
 from opensentinel.policy.registry import register_engine
-from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
-from opensentinel.policy.engines.fsm.workflow.parser import WorkflowParser
-from opensentinel.policy.engines.fsm.workflow.state_machine import WorkflowStateMachine, TransitionResult
-from opensentinel.policy.engines.fsm.workflow.constraints import ConstraintEvaluator
-from opensentinel.policy.engines.fsm.classifier import StateClassifier
-from opensentinel.policy.engines.fsm.intervention import InterventionHandler
 
 logger = logging.getLogger(__name__)
 
@@ -60,12 +60,13 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         ```
     """
 
-    def __init__(self):
-        self._workflow: Optional[WorkflowDefinition] = None
-        self._state_machine: Optional[WorkflowStateMachine] = None
-        self._classifier: Optional[StateClassifier] = None
-        self._constraint_evaluator: Optional[ConstraintEvaluator] = None
-        self._intervention_handler: Optional[InterventionHandler] = None
+    def __init__(self) -> None:
+        self._workflow: WorkflowDefinition | None = None
+        self._mode: Literal["guide", "enforce"] = "guide"
+        self._state_machine: WorkflowStateMachine | None = None
+        self._classifier: StateClassifier | None = None
+        self._constraint_evaluator: ConstraintEvaluator | None = None
+        self._intervention_handler: InterventionHandler | None = None
         self._initialized = False
 
     @property
@@ -80,20 +81,24 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         """Type identifier for this engine."""
         return "fsm"
 
-    async def initialize(self, config: Dict[str, Any]) -> None:
+    async def initialize(self, config: dict[str, Any]) -> None:
         """
         Initialize with workflow configuration.
 
+        Detects config format automatically:
+        - If config has ``steps`` key → simple format, auto-compiled
+        - If config has ``states`` key → internal format, loaded directly
+        - ``config_path`` / ``workflow`` → format detected from contents
+
         Args:
             config: Configuration dict with either:
-                - workflow_path: str - Path to workflow YAML/JSON
+                - config_path: str - Path to workflow YAML/JSON
                 - workflow: dict - Workflow definition as dict
 
         Raises:
-            ValueError: If neither workflow_path nor workflow provided
+            ValueError: If neither config_path nor workflow provided
         """
         if "config_path" in config:
-            # Unified config path
             self._workflow = WorkflowParser.parse_file(config["config_path"])
         elif "workflow" in config:
             workflow_data = config["workflow"]
@@ -106,6 +111,7 @@ class FSMPolicyEngine(StatefulPolicyEngine):
                 "FSM engine requires 'config_path' or 'workflow' in config"
             )
 
+        self._mode = self._workflow.mode
         self._state_machine = WorkflowStateMachine(self._workflow)
 
         # Wire classifier config from engine config
@@ -123,7 +129,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         default_strategy = StrategyType(default_strategy_str)
         max_intervention_attempts = intervention_cfg.get("max_intervention_attempts", 3)
         self._intervention_handler = InterventionHandler(
-            self._workflow,
             default_strategy=default_strategy,
             max_intervention_attempts=max_intervention_attempts,
         )
@@ -140,8 +145,8 @@ class FSMPolicyEngine(StatefulPolicyEngine):
     async def evaluate_request(
         self,
         session_id: str,
-        request_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
     ) -> EngineResult:
         """Evaluate request — FSM evaluation happens post-call."""
         session = await self._state_machine.get_or_create_session(session_id)
@@ -159,8 +164,8 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         self,
         session_id: str,
         response_data: Any,
-        request_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
     ) -> EngineResult:
         """Evaluate response — classify state, check constraints, transition."""
         session = await self._state_machine.get_or_create_session(session_id)
@@ -188,37 +193,28 @@ class FSMPolicyEngine(StatefulPolicyEngine):
             method=classification.method,
         )
 
-        # Map constraint violations to Decision
+        # Session-boundary evaluation: check EVENTUALLY/RESPONSE at terminal state
+        if await self._state_machine.is_in_terminal_state(session_id):
+            boundary_violations = self._constraint_evaluator.evaluate_session_boundary(
+                session,
+            )
+            constraint_violations.extend(boundary_violations)
+
+        # Mode-aware decision logic
         decision = Decision.ALLOW
-        message: Optional[str] = None
+        message: str | None = None
 
         if constraint_violations:
-            has_critical = any(cv.severity == "critical" for cv in constraint_violations)
-
-            if has_critical:
-                decision = Decision.BLOCK
-                critical = next(cv for cv in constraint_violations if cv.severity == "critical")
-                message = critical.message
-            else:
+            if self._mode == "guide":
                 decision = Decision.INTERVENE
-                # Build message from intervention handler template if available
-                for cv in constraint_violations:
-                    if cv.intervention and self._intervention_handler:
-                        config = self._intervention_handler.get_config(cv.intervention)
-                        if config:
-                            from opensentinel.core.intervention.strategies import (
-                                InterventionStrategy,
-                            )
-                            template_context = {
-                                "constraint_type": cv.constraint_type.value,
-                                **cv.details,
-                            }
-                            message = InterventionStrategy.format_message(
-                                config.message_template, template_context
-                            )
-                            break
-                if message is None:
-                    message = constraint_violations[0].message
+            else:
+                has_immediate = any(
+                    v.constraint_type in (ConstraintType.PRECEDENCE, ConstraintType.NEVER)
+                    for v in constraint_violations
+                )
+                decision = Decision.BLOCK if has_immediate else Decision.INTERVENE
+
+            message = constraint_violations[0].message
 
         return EngineResult(
             decision=decision,
@@ -231,10 +227,10 @@ class FSMPolicyEngine(StatefulPolicyEngine):
                 "transition_result": transition_result.value,
                 "transition_error": error,
                 "workflow": self._workflow.name,
+                "mode": self._mode,
                 "violations": [
                     {
                         "name": cv.constraint_name,
-                        "severity": cv.severity,
                         "message": cv.message,
                         "constraint_type": cv.constraint_type.value,
                         **cv.details,
@@ -249,7 +245,7 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         self,
         session_id: str,
         response_data: Any,
-        current_state: Optional[str] = None,
+        current_state: str | None = None,
     ) -> StateClassificationResult:
         """
         Classify response to workflow state.
@@ -277,19 +273,19 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         return session.current_state
 
     @require_initialized
-    async def get_state_history(self, session_id: str) -> List[str]:
+    async def get_state_history(self, session_id: str) -> list[str]:
         """Get state transition history."""
 
         return await self._state_machine.get_state_history(session_id)
 
     @require_initialized
-    async def get_valid_next_states(self, session_id: str) -> List[str]:
+    async def get_valid_next_states(self, session_id: str) -> list[str]:
         """Get valid next states from current state."""
 
         valid = await self._state_machine.get_valid_transitions(session_id)
         return list(valid)
 
-    async def get_session_state(self, session_id: str) -> Optional[Dict[str, Any]]:
+    async def get_session_state(self, session_id: str) -> dict[str, Any] | None:
         """Get current session state for debugging/tracing."""
         if not self._initialized:
             return None
@@ -308,22 +304,34 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         }
 
     async def reset_session(self, session_id: str) -> None:
-        """Reset session state."""
+        """Reset session state, evaluating boundary constraints first."""
         if not self._initialized:
             return
+
+        # Evaluate session-boundary constraints before reset
+        session = await self._state_machine.get_session(session_id)
+        if session:
+            boundary_violations = self._constraint_evaluator.evaluate_session_boundary(
+                session,
+            )
+            if boundary_violations:
+                logger.info(
+                    f"Session {session_id} reset with {len(boundary_violations)} "
+                    "pending constraint violations"
+                )
 
         await self._state_machine.reset_session(session_id)
         logger.debug(f"Session {session_id} reset")
 
     def get_compiler(
         self,
-        model: Optional[str] = None,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
     ) -> Optional["PolicyCompiler"]:
         """Return an FSMCompiler instance."""
         from opensentinel.policy.engines.fsm.compiler import FSMCompiler
-        kwargs: Dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}
         if model:
             kwargs["model"] = model
         if api_key:

@@ -6,11 +6,11 @@ Loads and validates workflow definitions from YAML or JSON files.
 
 import logging
 from pathlib import Path
-from typing import Union
 
 import yaml
 
-from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+from opensentinel.policy.engines.fsm.compiler import compile_workflow
+from opensentinel.policy.engines.fsm.workflow.schema import SimpleWorkflowConfig, WorkflowDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class WorkflowParser:
     """
 
     @staticmethod
-    def parse_file(path: Union[str, Path]) -> WorkflowDefinition:
+    def parse_file(path: str | Path) -> WorkflowDefinition:
         """
         Parse workflow from file.
 
@@ -98,12 +98,16 @@ class WorkflowParser:
         if data is None:
             raise ValueError("Empty workflow definition")
 
-        return WorkflowDefinition.model_validate(data)
+        return WorkflowParser._load(data)
 
     @staticmethod
     def parse_dict(data: dict) -> WorkflowDefinition:
         """
         Parse workflow from dictionary.
+
+        Detects format automatically:
+        - ``steps`` key → simple format, compiled to internal
+        - ``states`` key → internal format, loaded directly
 
         Args:
             data: Workflow definition as dict
@@ -111,10 +115,18 @@ class WorkflowParser:
         Returns:
             Validated WorkflowDefinition
         """
+        return WorkflowParser._load(data)
+
+    @staticmethod
+    def _load(data: dict) -> WorkflowDefinition:
+        """Detect format and load accordingly."""
+        if "steps" in data:
+            config = SimpleWorkflowConfig.model_validate(data)
+            return compile_workflow(config)
         return WorkflowDefinition.model_validate(data)
 
     @staticmethod
-    def validate_file(path: Union[str, Path]) -> tuple[bool, str]:
+    def validate_file(path: str | Path) -> tuple[bool, str]:
         """
         Validate a workflow file without fully loading it.
 
@@ -126,7 +138,7 @@ class WorkflowParser:
         """
         try:
             workflow = WorkflowParser.parse_file(path)
-            return True, f"Valid workflow: {workflow.name} v{workflow.version}"
+            return True, f"Valid workflow: {workflow.name}"
         except FileNotFoundError as e:
             return False, f"File not found: {e}"
         except ValueError as e:
@@ -152,7 +164,7 @@ class WorkflowRegistry:
         self._workflows[workflow.name] = workflow
         logger.info(f"Registered workflow: {workflow.name}")
 
-    def register_from_file(self, path: Union[str, Path]) -> str:
+    def register_from_file(self, path: str | Path) -> str:
         """
         Register workflow from file.
 
