@@ -98,10 +98,7 @@ def _parse_rubric_dict(data: dict) -> Rubric:
         evaluation_type=EvaluationType(data.get("evaluation_type", "pointwise")),
         scope=EvaluationScope(data.get("scope", "turn")),
         pass_threshold=data.get("pass_threshold", 0.6),
-        fail_action=VerdictAction(
-            "intervene" if data.get("fail_action", "intervene") == "warn"
-            else data.get("fail_action", "intervene")
-        ),
+        fail_action=VerdictAction(data.get("fail_action", "intervene")),
         prompt_overrides=data.get("prompt_overrides") or {},
     )
 
