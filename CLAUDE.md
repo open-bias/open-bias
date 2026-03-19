@@ -50,7 +50,7 @@ The proxy wraps LiteLLM and uses callback hooks (`async_pre_call_hook`, `async_p
 | `opensentinel/policy/protocols.py` | Core protocol definitions: `Decision` enum, `EngineResult`, `PolicyEngine` ABC, `StatefulPolicyEngine` ABC |
 | `opensentinel/policy/` | Engine registry (`@register_engine` decorator), engine implementations |
 | `opensentinel/policy/compiler/` | Natural-language-to-config compilers: `PolicyCompiler` ABC, `LLMPolicyCompiler` base, per-engine compilers |
-| `opensentinel/policy/engines/judge/` | LLM-as-a-judge with rubrics, reliability modes, ensemble support |
+| `opensentinel/policy/engines/judge/` | LLM-as-a-judge with rubrics and session tracking |
 | `opensentinel/policy/engines/fsm/` | Deterministic state machine with classification cascade (tool call → regex → embeddings) |
 | `opensentinel/policy/engines/llm/` | LLM-based state classification and drift detection |
 | `opensentinel/policy/engines/nemo/` | NVIDIA NeMo Guardrails wrapper |
