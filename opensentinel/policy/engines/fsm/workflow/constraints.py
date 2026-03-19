@@ -1,28 +1,25 @@
 """
-LTL-lite constraint evaluator.
+Constraint evaluator for workflow enforcement.
 
-Implements runtime verification for temporal constraints:
-- EVENTUALLY (F): Must reach target state
-- ALWAYS (G): Condition must always hold
-- NEVER (G!): Condition must never hold
-- UNTIL (U): Stay in state until condition
-- NEXT (X): Immediate next state requirement
-- RESPONSE: If trigger, then eventually response
-- PRECEDENCE: Target before trigger
+Implements runtime verification for 4 constraint types:
+- PRECEDENCE: Target must occur before trigger
+- NEVER: Target state must never occur
+- EVENTUALLY: Must eventually reach target state
+- RESPONSE: If trigger occurs, target must eventually follow
 
-Based on runtime verification semantics where constraints can be:
-- SATISFIED: Constraint is met
-- VIOLATED: Constraint is broken
-- PENDING: Cannot yet determine (waiting for more states)
+Constraints are mode-aware:
+- guide: all violations → INTERVENE
+- enforce: PRECEDENCE/NEVER → BLOCK, EVENTUALLY/RESPONSE → INTERVENE
 """
 
 import logging
-from typing import List, Optional
 from dataclasses import dataclass
 from enum import Enum
+from typing import Literal
 
 from opensentinel.policy.engines.fsm.workflow.schema import Constraint, ConstraintType
 from opensentinel.policy.engines.fsm.workflow.state_machine import SessionState
+from opensentinel.policy.protocols import Decision
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +29,7 @@ class EvaluationResult(Enum):
 
     SATISFIED = "satisfied"
     VIOLATED = "violated"
-    PENDING = "pending"  # Not yet determinable
+    PENDING = "pending"
 
 
 @dataclass
@@ -41,35 +38,40 @@ class ConstraintViolation:
 
     constraint_name: str
     constraint_type: ConstraintType
-    severity: str
     message: str
-    intervention: Optional[str]
     details: dict
+
+
+def get_decision(
+    mode: Literal["guide", "enforce"], constraint_type: ConstraintType
+) -> Decision:
+    """Map a violation to a Decision based on workflow mode and constraint type.
+
+    - guide: always INTERVENE
+    - enforce: PRECEDENCE/NEVER → BLOCK, EVENTUALLY/RESPONSE → INTERVENE
+    """
+    if mode == "guide":
+        return Decision.INTERVENE
+
+    if constraint_type in (ConstraintType.PRECEDENCE, ConstraintType.NEVER):
+        return Decision.BLOCK
+
+    return Decision.INTERVENE
 
 
 class ConstraintEvaluator:
     """
-    Evaluates LTL-lite constraints against workflow execution.
-
-    This implements runtime verification where we evaluate constraints
-    as the workflow progresses, rather than model-checking all possible
-    paths upfront.
+    Evaluates constraints against workflow execution.
 
     Example:
         ```python
-        from opensentinel.policy.engines.fsm.workflow import ConstraintEvaluator
-
         evaluator = ConstraintEvaluator(workflow.constraints)
-
-        # Check constraints for a session
         violations = evaluator.evaluate_all(session_state)
-
-        # Check what would happen if we transition
         violations = evaluator.evaluate_all(session_state, proposed_state="resolution")
         ```
     """
 
-    def __init__(self, constraints: List[Constraint]):
+    def __init__(self, constraints: list[Constraint]):
         self.constraints = constraints
         logger.debug(
             f"ConstraintEvaluator initialized with {len(constraints)} constraints"
@@ -78,8 +80,8 @@ class ConstraintEvaluator:
     def evaluate_all(
         self,
         session: SessionState,
-        proposed_state: Optional[str] = None,
-    ) -> List[ConstraintViolation]:
+        proposed_state: str | None = None,
+    ) -> list[ConstraintViolation]:
         """
         Evaluate all constraints for a session.
 
@@ -97,17 +99,16 @@ class ConstraintEvaluator:
             history = history + [proposed_state]
 
         for constraint in self.constraints:
-            result = self._evaluate_constraint(constraint, history, session)
+            result = self._evaluate_constraint(constraint, history)
 
             if result == EvaluationResult.VIOLATED:
                 violation = ConstraintViolation(
                     constraint_name=constraint.name,
                     constraint_type=constraint.type,
-                    severity=constraint.severity,
-                    message=self._format_violation_message(constraint, history),
-                    intervention=constraint.intervention,
+                    message=constraint.message
+                    or self._format_violation_message(constraint, history),
                     details={
-                        "history": history[-5:],  # Last 5 states
+                        "history": history[-5:],
                         "current_state": session.current_state,
                         "proposed_state": proposed_state,
                     },
@@ -119,41 +120,67 @@ class ConstraintEvaluator:
 
         return violations
 
+    def evaluate_session_boundary(
+        self,
+        session: SessionState,
+    ) -> list[ConstraintViolation]:
+        """Evaluate EVENTUALLY and RESPONSE constraints at session boundary.
+
+        Called when a terminal state is reached or session is reset.
+        PENDING EVENTUALLY/RESPONSE constraints that haven't been satisfied
+        are now considered violated.
+        """
+        violations = []
+        history = session.get_state_sequence()
+
+        for constraint in self.constraints:
+            if constraint.type not in (ConstraintType.EVENTUALLY, ConstraintType.RESPONSE):
+                continue
+
+            result = self._evaluate_constraint(constraint, history)
+
+            if result == EvaluationResult.PENDING:
+                violation = ConstraintViolation(
+                    constraint_name=constraint.name,
+                    constraint_type=constraint.type,
+                    message=constraint.message
+                    or self._format_violation_message(constraint, history),
+                    details={
+                        "history": history[-5:],
+                        "current_state": session.current_state,
+                        "proposed_state": None,
+                        "reason": "session_boundary",
+                    },
+                )
+                violations.append(violation)
+                logger.info(
+                    f"Constraint violated at session boundary: "
+                    f"{constraint.name} ({constraint.type.value})"
+                )
+
+        return violations
+
     def evaluate_transition(
         self,
         session: SessionState,
         from_state: str,
         to_state: str,
-    ) -> List[ConstraintViolation]:
-        """
-        Evaluate constraints for a specific transition.
-
-        More efficient than evaluate_all when only checking one transition.
-        """
+    ) -> list[ConstraintViolation]:
+        """Evaluate constraints for a specific transition."""
         return self.evaluate_all(session, proposed_state=to_state)
 
     def _evaluate_constraint(
         self,
         constraint: Constraint,
-        history: List[str],
-        session: SessionState,
+        history: list[str],
     ) -> EvaluationResult:
         """Evaluate a single constraint."""
         match constraint.type:
             case ConstraintType.EVENTUALLY:
                 return self._eval_eventually(constraint.target, history)
 
-            case ConstraintType.ALWAYS:
-                return self._eval_always(constraint.condition, history, session)
-
             case ConstraintType.NEVER:
                 return self._eval_never(constraint.target, history)
-
-            case ConstraintType.UNTIL:
-                return self._eval_until(constraint.trigger, constraint.target, history)
-
-            case ConstraintType.NEXT:
-                return self._eval_next(constraint.target, history)
 
             case ConstraintType.RESPONSE:
                 return self._eval_response(
@@ -168,64 +195,21 @@ class ConstraintEvaluator:
         return EvaluationResult.PENDING
 
     def _eval_eventually(
-        self, target: Optional[str], history: List[str]
+        self, target: str | None, history: list[str]
     ) -> EvaluationResult:
-        """
-        F(target): Must eventually reach target state.
-
-        This can only be VIOLATED when we know we can't reach target
-        (e.g., session ended). Otherwise it's PENDING or SATISFIED.
-        """
+        """F(target): Must eventually reach target state."""
         if not target:
             return EvaluationResult.PENDING
 
         if target in history:
             return EvaluationResult.SATISFIED
 
-        # Can't definitively say violated until workflow ends
         return EvaluationResult.PENDING
 
-    def _eval_always(
-        self,
-        condition: Optional[str],
-        history: List[str],
-        session: SessionState,
-    ) -> EvaluationResult:
-        """
-        G(condition): Condition must hold in all states.
-
-        For simplicity, condition can be:
-        - A state name that must always be present (matches if current)
-        - "*" (always true)
-        - "!state_name" (state must never occur)
-        """
-        if not condition:
-            return EvaluationResult.PENDING
-
-        if condition == "*":
-            return EvaluationResult.SATISFIED
-
-        # Handle negation
-        if condition.startswith("!"):
-            forbidden = condition[1:]
-            if forbidden in history:
-                return EvaluationResult.VIOLATED
-            return EvaluationResult.SATISFIED
-
-        # For positive condition, check that EVERY state in history matches
-        # G(p) means p must hold at every step
-        for state in history:
-            if state != condition:
-                return EvaluationResult.VIOLATED
-
-        return EvaluationResult.SATISFIED
-
     def _eval_never(
-        self, target: Optional[str], history: List[str]
+        self, target: str | None, history: list[str]
     ) -> EvaluationResult:
-        """
-        G(!target): Target state must never occur.
-        """
+        """G(!target): Target state must never occur."""
         if not target:
             return EvaluationResult.PENDING
 
@@ -234,91 +218,22 @@ class ConstraintEvaluator:
 
         return EvaluationResult.SATISFIED
 
-    def _eval_until(
-        self,
-        trigger: Optional[str],
-        target: Optional[str],
-        history: List[str],
-    ) -> EvaluationResult:
-        """
-        trigger U target: Stay in trigger until target reached.
-
-        The constraint only begins enforcement once the trigger state is first
-        entered. After that point, all states must be either the trigger or
-        the target (which ends the constraint).
-        """
-        if not trigger or not target:
-            return EvaluationResult.PENDING
-
-        # Find when trigger region begins (first occurrence of trigger)
-        trigger_start = None
-        for i, state in enumerate(history):
-            if state == trigger:
-                trigger_start = i
-                break
-
-        # If trigger hasn't been entered yet, constraint is pending
-        if trigger_start is None:
-            return EvaluationResult.PENDING
-
-        # Now enforce: from trigger_start onwards, must be trigger or target
-        for i in range(trigger_start, len(history)):
-            state = history[i]
-            if state == target:
-                # Target reached - constraint satisfied
-                return EvaluationResult.SATISFIED
-            if state != trigger:
-                # In trigger region but not trigger or target - violated
-                return EvaluationResult.VIOLATED
-
-        # Still in trigger state, waiting for target
-        return EvaluationResult.PENDING
-
-    def _eval_next(self, target: Optional[str], history: List[str]) -> EvaluationResult:
-        """
-        X(target): Next state must be target.
-
-        Checks that the second state in history (the first transition from
-        the initial state) matches the target. Evaluated once at position [1]
-        and the result is stable for all subsequent transitions.
-        """
-        if not target:
-            return EvaluationResult.PENDING
-
-        if len(history) < 2:
-            return EvaluationResult.PENDING
-
-        # Check the state immediately after the initial state
-        if history[1] == target:
-            return EvaluationResult.SATISFIED
-
-        return EvaluationResult.VIOLATED
-
     def _eval_response(
         self,
-        trigger: Optional[str],
-        target: Optional[str],
-        history: List[str],
+        trigger: str | None,
+        target: str | None,
+        history: list[str],
     ) -> EvaluationResult:
-        """
-        G(trigger -> F(target)): If trigger occurs, target must eventually follow.
-
-        This is the "response" pattern - whenever we see trigger,
-        we must eventually see target.
-        """
+        """G(trigger -> F(target)): If trigger occurs, target must eventually follow."""
         if not trigger or not target:
             return EvaluationResult.PENDING
 
-        # Find all occurrences of trigger
         trigger_indices = [i for i, s in enumerate(history) if s == trigger]
 
         if not trigger_indices:
-            # Trigger never occurred - constraint vacuously satisfied
             return EvaluationResult.SATISFIED
 
-        # For each trigger, check if target eventually follows
         for trigger_idx in trigger_indices:
-            # Look for target after this trigger
             found_target = False
             for j in range(trigger_idx + 1, len(history)):
                 if history[j] == target:
@@ -326,26 +241,17 @@ class ConstraintEvaluator:
                     break
 
             if not found_target:
-                # Haven't seen target yet after this trigger
-                # Could still happen - PENDING, not VIOLATED
                 return EvaluationResult.PENDING
 
         return EvaluationResult.SATISFIED
 
     def _eval_precedence(
         self,
-        trigger: Optional[str],
-        target: Optional[str],
-        history: List[str],
+        trigger: str | None,
+        target: str | None,
+        history: list[str],
     ) -> EvaluationResult:
-        """
-        Target must precede trigger (trigger cannot occur before target).
-
-        This is the "precedence" pattern - target is required before trigger.
-
-        Example: "identity_verified must precede account_action"
-        means account_action (trigger) cannot happen before identity_verified (target).
-        """
+        """Target must precede trigger."""
         if not trigger or not target:
             return EvaluationResult.PENDING
 
@@ -354,7 +260,6 @@ class ConstraintEvaluator:
             if state == target:
                 target_seen = True
             if state == trigger and not target_seen:
-                # Trigger occurred before target - VIOLATED
                 return EvaluationResult.VIOLATED
 
         return EvaluationResult.SATISFIED
@@ -362,7 +267,7 @@ class ConstraintEvaluator:
     def _format_violation_message(
         self,
         constraint: Constraint,
-        history: List[str],
+        history: list[str],
     ) -> str:
         """Format a human-readable violation message."""
         recent_history = " -> ".join(history[-5:]) if history else "(empty)"
@@ -374,28 +279,10 @@ class ConstraintEvaluator:
                     f"'{constraint.target}'. History: {recent_history}"
                 )
 
-            case ConstraintType.ALWAYS:
-                return (
-                    f"Constraint '{constraint.name}': Condition '{constraint.condition}' "
-                    f"must always hold. History: {recent_history}"
-                )
-
             case ConstraintType.NEVER:
                 return (
                     f"Constraint '{constraint.name}': State '{constraint.target}' "
                     f"must never occur. History: {recent_history}"
-                )
-
-            case ConstraintType.UNTIL:
-                return (
-                    f"Constraint '{constraint.name}': Must stay in '{constraint.trigger}' "
-                    f"until '{constraint.target}'. History: {recent_history}"
-                )
-
-            case ConstraintType.NEXT:
-                return (
-                    f"Constraint '{constraint.name}': Next state must be "
-                    f"'{constraint.target}'. History: {recent_history}"
                 )
 
             case ConstraintType.RESPONSE:

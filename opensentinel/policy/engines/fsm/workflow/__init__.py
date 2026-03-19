@@ -8,29 +8,30 @@ Contains all FSM-specific workflow components:
 - Constraints: ConstraintEvaluator for LTL-lite verification
 """
 
-from opensentinel.policy.engines.fsm.workflow.schema import (
-    SimpleWorkflowConfig,
-    ClassificationHint,
-    State,
-    Transition,
-    ConstraintType,
-    Constraint,
-    WorkflowDefinition,
+from opensentinel.policy.engines.fsm.workflow.constraints import (
+    ConstraintEvaluator,
+    ConstraintViolation,
+    EvaluationResult,
+    get_decision,
 )
 from opensentinel.policy.engines.fsm.workflow.parser import (
     WorkflowParser,
     WorkflowRegistry,
 )
-from opensentinel.policy.engines.fsm.workflow.state_machine import (
-    TransitionResult,
-    StateHistoryEntry,
-    SessionState,
-    WorkflowStateMachine,
+from opensentinel.policy.engines.fsm.workflow.schema import (
+    ClassificationHint,
+    Constraint,
+    ConstraintType,
+    SimpleWorkflowConfig,
+    State,
+    Transition,
+    WorkflowDefinition,
 )
-from opensentinel.policy.engines.fsm.workflow.constraints import (
-    EvaluationResult,
-    ConstraintViolation,
-    ConstraintEvaluator,
+from opensentinel.policy.engines.fsm.workflow.state_machine import (
+    SessionState,
+    StateHistoryEntry,
+    TransitionResult,
+    WorkflowStateMachine,
 )
 
 __all__ = [
@@ -54,4 +55,5 @@ __all__ = [
     "EvaluationResult",
     "ConstraintViolation",
     "ConstraintEvaluator",
+    "get_decision",
 ]
