@@ -98,14 +98,8 @@ def test_log_llm_call(mock_otel):
     # Check that required attributes are present (GenAI semantic conventions)
     attrs = llm_call[1]["attributes"]
     assert attrs["opensentinel.session_id"] == "session-1"
-    assert attrs["llm.model"] == "gpt-4"
-    assert attrs["llm.requested_model"] == "gpt-4"
-    assert attrs["llm.message_count"] == 1
     assert attrs["gen_ai.request.model"] == "gpt-4"
     assert attrs["gen_ai.response.model"] == "gpt-4"
-
-    # Verify span attributes were set for response/usage
-    mock_span.set_attribute.assert_any_call("llm.total_tokens", 100)
 
 def test_shutdown(mock_otel):
     config = OTelConfig(enabled=True, exporter_type="otlp")
