@@ -156,6 +156,15 @@ class SentinelCallback(CustomLogger):
 
         logger.info("SentinelCallback initialized")
 
+        if self.settings.policy.post_call_mode != "sync":
+            logger.warning(
+                "POST_CALL mode is '%s' — the first policy violation in each session "
+                "will pass through to the user before intervention is applied on the "
+                "next request. Set post_call_mode='sync' in config for immediate "
+                "enforcement (adds latency).",
+                self.settings.policy.post_call_mode,
+            )
+
     async def _get_interceptor(self) -> Interceptor | None:
         """Lazy-load interceptor with configured checkers."""
         if self._interceptor_initialized:
