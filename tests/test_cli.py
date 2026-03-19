@@ -170,9 +170,10 @@ class TestCompileCommand:
 
             mock_compiler_class = MagicMock(return_value=mock_compiler)
 
-            with patch("opensentinel.policy.registry.PolicyEngineRegistry.get", return_value=None):
-                with patch("opensentinel.policy.compiler.PolicyCompilerRegistry.get", return_value=mock_compiler_class):
-                    result = runner.invoke(main, ["compile", "be professional"])
+            with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+                with patch("opensentinel.policy.registry.PolicyEngineRegistry.get", return_value=None):
+                    with patch("opensentinel.policy.compiler.PolicyCompilerRegistry.get", return_value=mock_compiler_class):
+                        result = runner.invoke(main, ["compile", "be professional"])
 
             # Model should have been set from yaml (gpt-4o), not gpt-4o-mini
             assert mock_compiler.model == "gpt-4o"
