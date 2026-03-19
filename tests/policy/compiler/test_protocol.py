@@ -86,21 +86,9 @@ class TestPolicyCompilerRegistry:
         assert PolicyCompilerRegistry.is_registered("mock")
         assert PolicyCompilerRegistry.get("mock") == MockCompiler
 
-    def test_create_compiler(self):
-        """Test creating a compiler instance (deprecated path)."""
-        PolicyCompilerRegistry.register("mock", MockCompiler)
-
-        with pytest.warns(DeprecationWarning, match="deprecated"):
-            compiler = PolicyCompilerRegistry.create("mock")
-
-        assert isinstance(compiler, MockCompiler)
-        assert compiler.engine_type == "mock"
-
-    def test_create_unknown_compiler_raises(self):
-        """Test creating unknown compiler raises ValueError."""
-        with pytest.warns(DeprecationWarning, match="deprecated"):
-            with pytest.raises(ValueError, match="No compiler registered"):
-                PolicyCompilerRegistry.create("unknown")
+    def test_get_unknown_compiler_returns_none(self):
+        """Test getting unknown compiler returns None."""
+        assert PolicyCompilerRegistry.get("unknown") is None
 
     def test_list_compilers(self):
         """Test listing registered compilers."""
@@ -122,8 +110,9 @@ class TestPolicyCompilerRegistry:
                 return "decorated"
 
         assert PolicyCompilerRegistry.is_registered("decorated")
-        with pytest.warns(DeprecationWarning, match="deprecated"):
-            compiler = PolicyCompilerRegistry.create("decorated")
+        compiler_class = PolicyCompilerRegistry.get("decorated")
+        assert compiler_class is not None
+        compiler = compiler_class()
         assert compiler.engine_type == "decorated"
 
 

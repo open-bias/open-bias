@@ -520,10 +520,6 @@ class SentinelTracer:
             "gen_ai.system": "openai",  # or derive from model
             "gen_ai.request.model": model,
             "gen_ai.response.model": response_model or model,
-            # Legacy attributes for backward compatibility
-            "llm.model": response_model or model,
-            "llm.requested_model": model,
-            "llm.message_count": len(messages) if messages else 0,
         }
 
         start_time_ns = self._to_timestamp_ns(start_time)
@@ -537,21 +533,14 @@ class SentinelTracer:
         )
 
         with trace.use_span(span, end_on_exit=False) as current_span:
-            # Set input (messages) using multiple attribute formats for compatibility
+            # Set input (messages)
             if messages:
                 messages_json = self._safe_json(messages)
-                span.set_attribute("input.value", messages_json)
-                span.set_attribute("langfuse.span.input", messages_json)
                 span.set_attribute("gen_ai.content.prompt", messages_json)
-            
-            # Set output (response) using multiple attribute formats
+
+            # Set output (response)
             if response_content:
-                span.set_attribute("output.value", response_content)
-                span.set_attribute("langfuse.span.output", response_content)
                 span.set_attribute("gen_ai.content.completion", response_content)
-                # Also keep truncated preview for quick viewing
-                truncated = response_content[:1000] + "..." if len(response_content) > 1000 else response_content
-                span.set_attribute("llm.response_preview", truncated)
 
             # Add usage info with GenAI semantic conventions
             if usage:
@@ -562,14 +551,6 @@ class SentinelTracer:
                 # GenAI semantic conventions
                 span.set_attribute("gen_ai.usage.prompt_tokens", prompt_tokens)
                 span.set_attribute("gen_ai.usage.completion_tokens", completion_tokens)
-                # Legacy attributes
-                span.set_attribute("llm.prompt_tokens", prompt_tokens)
-                span.set_attribute("llm.completion_tokens", completion_tokens)
-                span.set_attribute("llm.total_tokens", total_tokens)
-
-            # Add latency
-            if latency_ms:
-                span.set_attribute("llm.latency_ms", latency_ms)
 
             # Add metadata
             if metadata:

@@ -672,7 +672,14 @@ def compile(
                 )
 
             if compiler is None:
-                compiler = PolicyCompilerRegistry.create(engine)
+                compiler_class = PolicyCompilerRegistry.get(engine)
+                if not compiler_class:
+                    available = PolicyCompilerRegistry.list_compilers()
+                    raise click.ClickException(
+                        f"No compiler registered for engine type: '{engine}'. "
+                        f"Available compilers: {', '.join(available) or 'none'}"
+                    )
+                compiler = compiler_class()
                 if hasattr(compiler, "model"):
                     compiler.model = resolved_model
                 if resolved_api_key and hasattr(compiler, "_api_key"):

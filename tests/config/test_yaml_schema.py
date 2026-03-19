@@ -370,21 +370,6 @@ class TestInterventionMapping:
         assert cfg["intervention"]["default_strategy"] == "user_message_inject"
         assert cfg["intervention"]["max_intervention_attempts"] == 3
 
-    def test_toplevel_intervention_deprecated_fallback(self):
-        """Top-level intervention: should still work via backward-compat fallback."""
-        result = _build_source(
-            {
-                "engine": "fsm",
-                "intervention": {
-                    "default_strategy": "user_message_inject",
-                    "max_intervention_attempts": 5,
-                },
-            }
-        )._map_to_settings()
-        cfg = _get_engine_config(result)
-        assert cfg["intervention"]["default_strategy"] == "user_message_inject"
-        assert cfg["intervention"]["max_intervention_attempts"] == 5
-
 
 # =========================================================================
 # Classifier section
@@ -414,20 +399,6 @@ class TestClassifierMapping:
         assert cfg["classifier"]["cache_embeddings"] is False
         assert cfg["classifier"]["device"] == "cuda"
 
-    def test_toplevel_classifier_deprecated_fallback(self):
-        """Top-level classifier: should still work via backward-compat fallback."""
-        result = _build_source(
-            {
-                "engine": "fsm",
-                "classifier": {
-                    "model_name": "custom-model",
-                    "backend": "onnx",
-                },
-            }
-        )._map_to_settings()
-        cfg = _get_engine_config(result)
-        assert cfg["classifier"]["model_name"] == "custom-model"
-        assert cfg["classifier"]["backend"] == "onnx"
 
 
 # =========================================================================

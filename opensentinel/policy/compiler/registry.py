@@ -9,7 +9,6 @@ Mirrors PolicyEngineRegistry pattern.
 
 from typing import Dict, Type, Optional, List, Callable
 import logging
-import warnings
 
 from opensentinel.policy.compiler.protocol import PolicyCompiler
 
@@ -29,9 +28,6 @@ class PolicyCompilerRegistry:
 
         # Lookup
         compiler_class = PolicyCompilerRegistry.get("fsm")
-
-        # Factory
-        compiler = PolicyCompilerRegistry.create("fsm")
     """
 
     _compilers: Dict[str, Type[PolicyCompiler]] = {}
@@ -64,36 +60,6 @@ class PolicyCompilerRegistry:
             Compiler class or None if not found
         """
         return cls._compilers.get(engine_type)
-
-    @classmethod
-    def create(cls, engine_type: str) -> PolicyCompiler:
-        """
-        Create a policy compiler instance.
-
-        Args:
-            engine_type: Engine type identifier
-
-        Returns:
-            Compiler instance
-
-        Raises:
-            ValueError: If engine type has no registered compiler
-        """
-        warnings.warn(
-            "PolicyCompilerRegistry.create() is deprecated. "
-            "Use engine.get_compiler() instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        compiler_class = cls.get(engine_type)
-        if not compiler_class:
-            available = ", ".join(cls._compilers.keys()) or "none"
-            raise ValueError(
-                f"No compiler registered for engine type: '{engine_type}'. "
-                f"Available compilers: {available}"
-            )
-
-        return compiler_class()
 
     @classmethod
     def list_compilers(cls) -> List[str]:

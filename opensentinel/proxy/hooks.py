@@ -8,11 +8,7 @@ This module implements the core hook system that intercepts LLM calls:
    - Runs sync PRE_CALL checkers
    - Modifies request if WARN with modified_data
 
-2. async_moderation_hook: Runs IN PARALLEL with LLM call (non-blocking)
-   - Legacy hook for backward compatibility
-   - Records pending interventions for next call
-
-3. async_post_call_success_hook: Runs AFTER LLM call succeeds
+2. async_post_call_success_hook: Runs AFTER LLM call succeeds
    - Runs sync POST_CALL checkers (can modify response on WARN)
    - Starts async checkers in background
    - Completes tracing
@@ -439,30 +435,6 @@ class SentinelCallback(CustomLogger):
         data["metadata"]["_opensentinel_llm_start_time"] = time.time()
 
         return data
-
-    async def async_moderation_hook(
-        self,
-        data: dict,
-        user_api_key_dict: UserAPIKeyAuth,
-        call_type: CallType,
-    ) -> None:
-        """Execute IN PARALLEL with LLM call. Currently unused. Wrapped fail-open."""
-        return await safe_hook(
-            self._moderation_impl,
-            data, user_api_key_dict, call_type,
-            timeout=self.settings.policy.hook_timeout_seconds,
-            fallback=None,
-            hook_name="async_moderation_hook",
-        )
-
-    async def _moderation_impl(
-        self,
-        data: dict,
-        user_api_key_dict: UserAPIKeyAuth,
-        call_type: CallType,
-    ) -> None:
-        """Inner implementation for async_moderation_hook."""
-        pass
 
     async def async_post_call_success_hook(
         self,

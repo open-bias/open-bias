@@ -12,8 +12,9 @@ Usage:
     ```python
     from opensentinel.policy.compiler import PolicyCompilerRegistry
 
-    # Create FSM compiler
-    compiler = PolicyCompilerRegistry.create("fsm")
+    # Get FSM compiler class and instantiate
+    compiler_class = PolicyCompilerRegistry.get("fsm")
+    compiler = compiler_class()
 
     # Compile natural language policy
     result = await compiler.compile(

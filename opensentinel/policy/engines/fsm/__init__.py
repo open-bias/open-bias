@@ -75,7 +75,6 @@ __all__ = [
     "ConstraintViolation",
     "ConstraintEvaluator",
     # Monitor
-    "ClassificationResult",
     "StateClassifier",
 
     # Intervention

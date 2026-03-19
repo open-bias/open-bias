@@ -168,8 +168,10 @@ class TestCompileCommand:
             mock_compiler.validate_result = MagicMock(return_value=[])
             mock_compiler.export = MagicMock()
 
+            mock_compiler_class = MagicMock(return_value=mock_compiler)
+
             with patch("opensentinel.policy.registry.PolicyEngineRegistry.get", return_value=None):
-                with patch("opensentinel.policy.compiler.PolicyCompilerRegistry.create", return_value=mock_compiler):
+                with patch("opensentinel.policy.compiler.PolicyCompilerRegistry.get", return_value=mock_compiler_class):
                     result = runner.invoke(main, ["compile", "be professional"])
 
             # Model should have been set from yaml (gpt-4o), not gpt-4o-mini
@@ -191,8 +193,10 @@ class TestCompileCommand:
             mock_compiler.validate_result = MagicMock(return_value=[])
             mock_compiler.export = MagicMock()
 
+            mock_compiler_class = MagicMock(return_value=mock_compiler)
+
             with patch("opensentinel.policy.registry.PolicyEngineRegistry.get", return_value=None):
-                with patch("opensentinel.policy.compiler.PolicyCompilerRegistry.create", return_value=mock_compiler):
+                with patch("opensentinel.policy.compiler.PolicyCompilerRegistry.get", return_value=mock_compiler_class):
                     with patch("opensentinel.cli_init.ensure_model_and_key", return_value=("claude-3-haiku", None)) as mock_ensure:
                         result = runner.invoke(main, ["compile", "be professional"])
 

@@ -464,25 +464,6 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             if "langfuse_host" in tracing_cfg:
                 otel["langfuse_host"] = tracing_cfg["langfuse_host"]
 
-        # -----------------------------------------------------------------
-        # Backward-compat: top-level classifier/intervention -> engine config
-        # These are deprecated; users should nest under engine sections.
-        # -----------------------------------------------------------------
-        for section in ("classifier", "intervention"):
-            section_cfg = data.get(section, {})
-            if isinstance(section_cfg, dict) and section_cfg:
-                logger.warning(
-                    f"Top-level '{section}:' is deprecated. "
-                    f"Move it under the engine section (e.g., "
-                    f"'{engine_type}: {section}: ...')"
-                )
-                engine_config = (
-                    result.setdefault("policy", {})
-                    .setdefault("engine", {})
-                    .setdefault("config", {})
-                )
-                engine_config.setdefault(section, {}).update(section_cfg)
-
         return result
 
     def get_field_value(self, field: Any, field_name: str) -> Tuple[Any, str, bool]:
