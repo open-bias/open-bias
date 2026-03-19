@@ -15,7 +15,7 @@ import re
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 
-from opensentinel.policy.protocols import StateClassificationResult
+from opensentinel.policy.engines.stateful import StateClassificationResult
 from opensentinel.policy.engines.fsm.workflow.schema import State, ClassificationHint
 from opensentinel.config.settings import ClassifierConfig
 from opensentinel.core.utils import extract_response_content, extract_tool_call_names

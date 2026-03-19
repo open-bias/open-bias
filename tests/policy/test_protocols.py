@@ -11,9 +11,11 @@ from opensentinel.policy.protocols import (
     Decision,
     EngineResult,
     PolicyEngine,
+    require_initialized,
+)
+from opensentinel.policy.engines.stateful import (
     StateClassificationResult,
     StatefulPolicyEngine,
-    require_initialized,
 )
 
 

@@ -8,7 +8,7 @@ description: Guide for creating a new policy engine under opensentinel/policy/en
 ## Decision: PolicyEngine vs StatefulPolicyEngine
 
 - **`PolicyEngine`** — Use when each request/response is evaluated independently against policy. No state transitions between turns. Examples: Judge (rubric scoring), NeMo (guardrails).
-- **`StatefulPolicyEngine`** — Use when you need to track state transitions across turns (e.g., FSM workflows). Adds `classify_response`, `get_current_state`, `get_state_history`, `get_valid_next_states`.
+- **`StatefulPolicyEngine`** (from `opensentinel.policy.engines.stateful`) — Use when you need to track state transitions across turns (e.g., FSM workflows). Adds `classify_response`, `get_current_state`, `get_state_history`, `get_valid_next_states`.
 
 If you're unsure, start with `PolicyEngine`. You can always extend later.
 
@@ -130,6 +130,7 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
 | File | What to look at |
 |------|----------------|
 | `opensentinel/policy/protocols.py` | `PolicyEngine` ABC, `Decision` enum, `EngineResult` dataclass |
+| `opensentinel/policy/engines/stateful.py` | `StatefulPolicyEngine` ABC, `StateClassificationResult` dataclass |
 | `opensentinel/policy/registry.py` | `@register_engine` decorator, `PolicyEngineRegistry` |
 | `opensentinel/policy/engines/__init__.py` | Where to add your import |
 | `opensentinel/policy/engines/fsm/` | Stateful engine example (smallest engine at ~340 lines) |

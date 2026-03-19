@@ -12,11 +12,13 @@ if TYPE_CHECKING:
     from opensentinel.policy.compiler.protocol import PolicyCompiler
 
 from opensentinel.policy.protocols import (
-    StatefulPolicyEngine,
     Decision,
     EngineResult,
-    StateClassificationResult,
     require_initialized,
+)
+from opensentinel.policy.engines.stateful import (
+    StatefulPolicyEngine,
+    StateClassificationResult,
 )
 from opensentinel.policy.registry import register_engine
 from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition

@@ -30,11 +30,13 @@ Usage:
 
 from opensentinel.policy.protocols import (
     PolicyEngine,
-    StatefulPolicyEngine,
     Decision,
     EngineResult,
-    StateClassificationResult,
     require_initialized,
+)
+from opensentinel.policy.engines.stateful import (
+    StatefulPolicyEngine,
+    StateClassificationResult,
 )
 from opensentinel.policy.registry import GenericRegistry, PolicyEngineRegistry, register_engine
 

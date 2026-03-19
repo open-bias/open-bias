@@ -2,7 +2,7 @@
 
 import pytest
 
-from opensentinel.policy.protocols import StateClassificationResult
+from opensentinel.policy.engines.stateful import StateClassificationResult
 from opensentinel.policy.engines.fsm.classifier import StateClassifier
 from opensentinel.policy.engines.fsm.workflow.schema import State, ClassificationHint
 from opensentinel.core.utils import extract_response_content, extract_tool_call_names
