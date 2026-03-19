@@ -304,6 +304,88 @@ class JudgePolicyEngine(PolicyEngine):
             kwargs["base_url"] = base_url
         return JudgeCompiler(**kwargs)
 
+    @classmethod
+    def validate_config(cls, config: Dict[str, Any]) -> List[str]:
+        """Validate judge engine configuration without needing an LLM connection.
+
+        Runs the same checks as initialize() but collects errors into a list
+        instead of raising on the first one.
+
+        Returns:
+            List of error strings. Empty list means config is valid.
+        """
+        errors: List[str] = []
+
+        # Check models
+        models = config.get("models", [])
+        if not models:
+            errors.append(
+                "No model configured. Set 'model' in osentinel.yaml or configure judge.model."
+            )
+        else:
+            for i, m in enumerate(models):
+                if not isinstance(m, dict) or not m.get("model"):
+                    errors.append(f"models[{i}]: missing 'model' field.")
+
+        # Check fail_action
+        fail_action = config.get("fail_action", "block")
+        valid_actions = {"block", "intervene", "pass"}
+        if fail_action not in valid_actions:
+            errors.append(
+                f"Invalid fail_action '{fail_action}'. Must be one of: {', '.join(sorted(valid_actions))}"
+            )
+
+        # Build a temporary registry and load inline policy to check rubrics
+        registry = RubricRegistry()
+
+        custom_path = config.get("custom_rubrics_path")
+        if custom_path:
+            from pathlib import Path as _Path
+
+            p = _Path(custom_path)
+            if not p.exists():
+                errors.append(f"custom_rubrics_path '{custom_path}' does not exist.")
+            else:
+                registry.load_from_yaml(custom_path)
+
+        inline_policy = config.get("inline_policy")
+        if inline_policy is not None:
+            try:
+                # Validate inline policy by attempting to parse it
+                temp_engine = cls()
+                temp_engine._registry = registry
+                temp_engine._load_inline_policy(inline_policy)
+                registry = temp_engine._registry
+            except (ValueError, TypeError) as e:
+                errors.append(f"Invalid inline policy: {e}")
+
+        # Check default rubric exists
+        default_rubric = config.get("default_rubric", "agent_behavior")
+        if not registry.get(default_rubric):
+            available = registry.list_rubrics()
+            errors.append(
+                f"Default rubric '{default_rubric}' not found. Available: {available}"
+            )
+
+        # Check conversation rubric if set
+        conv_rubric = config.get("conversation_rubric", "conversation_policy")
+        if conv_rubric and not registry.get(conv_rubric):
+            available = registry.list_rubrics()
+            errors.append(
+                f"Conversation rubric '{conv_rubric}' not found. Available: {available}"
+            )
+
+        # Check pre_call_rubric if pre_call is enabled
+        if config.get("pre_call_enabled", False):
+            pre_rubric = config.get("pre_call_rubric", "safety")
+            if not registry.get(pre_rubric):
+                available = registry.list_rubrics()
+                errors.append(
+                    f"Pre-call rubric '{pre_rubric}' not found. Available: {available}"
+                )
+
+        return errors
+
     async def shutdown(self) -> None:
         """Cleanup resources."""
         self._sessions.clear()

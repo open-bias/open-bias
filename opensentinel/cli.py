@@ -193,13 +193,33 @@ def init(quick: bool) -> None:
     type=click.Path(exists=True, path_type=Path),
 )
 def validate(config_path: Path) -> None:
-    """Validate a workflow definition file.
+    """Validate a workflow or osentinel.yaml configuration file.
 
-    Checks that the workflow YAML is valid and all references are correct.
+    For osentinel.yaml: validates engine config (model, rubrics, policy).
+    For workflow YAML: validates workflow structure and references.
 
-    Example:
+    Examples:
+        osentinel validate osentinel.yaml
         osentinel validate workflow.yaml
     """
+    import yaml
+
+    # Detect whether this is an osentinel.yaml or a workflow file
+    try:
+        with open(config_path) as f:
+            raw = yaml.safe_load(f) or {}
+    except Exception as e:
+        error(f"Failed to read {config_path}: {e}")
+        raise SystemExit(1)
+
+    if isinstance(raw, dict) and "engine" in raw:
+        _validate_osentinel_config(config_path, raw)
+    else:
+        _validate_workflow(config_path)
+
+
+def _validate_workflow(config_path: Path) -> None:
+    """Validate a workflow definition file."""
     from opensentinel.policy.engines.fsm.workflow.parser import WorkflowParser
 
     try:
@@ -222,6 +242,76 @@ def validate(config_path: Path) -> None:
     except Exception as e:
         error(f"Validation error: {e}")
         raise SystemExit(1)
+
+
+def _validate_osentinel_config(config_path: Path, raw: dict) -> None:
+    """Validate an osentinel.yaml configuration file."""
+    from opensentinel.config.settings import SentinelSettings
+
+    engine_type = raw.get("engine", "judge")
+
+    try:
+        with spinner("Loading configuration..."):
+            settings = SentinelSettings(_config_path=str(config_path))
+            policy_config = settings.get_policy_config()
+    except Exception as e:
+        error(f"Configuration error: {e}")
+        raise SystemExit(1)
+
+    engine_config = policy_config.get("config", {})
+
+    if engine_type == "judge":
+        from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
+
+        errors = JudgePolicyEngine.validate_config(engine_config)
+        if errors:
+            error("Judge engine configuration errors:")
+            for err in errors:
+                console.print(f"    [dim]{err}[/]")
+            raise SystemExit(1)
+
+        # Build summary
+        models = engine_config.get("models", [])
+        model_name = models[0]["model"] if models else "(none)"
+        fail_action = engine_config.get("fail_action", "block")
+
+        # Count rubrics and criteria
+        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
+
+        registry = RubricRegistry()
+        inline_policy = engine_config.get("inline_policy")
+        if inline_policy is not None:
+            temp = JudgePolicyEngine()
+            temp._registry = registry
+            temp._load_inline_policy(inline_policy)
+            registry = temp._registry
+
+        rubric_names = registry.list_rubrics()
+        total_criteria = 0
+        for name in rubric_names:
+            rubric = registry.get(name)
+            if rubric is not None:
+                total_criteria += len(rubric.criteria)
+
+        config_panel(
+            "\u2713 Valid Configuration",
+            {
+                "Engine": engine_type,
+                "Model": model_name,
+                "Fail Action": fail_action,
+                "Rubrics": str(len(rubric_names)),
+                "Criteria": str(total_criteria),
+            },
+        )
+    else:
+        # For non-judge engines, just verify settings loaded
+        config_panel(
+            "\u2713 Valid Configuration",
+            {
+                "Engine": engine_type,
+                "Model": str(settings.proxy.default_model or "(none)"),
+            },
+        )
 
 
 @main.command()

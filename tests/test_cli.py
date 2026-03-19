@@ -78,6 +78,84 @@ class TestValidateCommand:
             assert result.exit_code == 0
             assert "Valid Workflow" in combined
 
+    def test_validate_good_judge_config(self):
+        """validate with a valid osentinel.yaml should show summary."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("osentinel.yaml").write_text(
+                "engine: judge\n"
+                "model: gpt-4o-mini\n"
+                "policy:\n"
+                '  - "Be professional"\n'
+                '  - "No PII"\n'
+                "tracing:\n  type: none\n"
+            )
+
+            buf = StringIO()
+            from opensentinel.cli_ui import console
+
+            old_file = console.file
+            console.file = buf
+            try:
+                result = runner.invoke(main, ["validate", "osentinel.yaml"])
+            finally:
+                console.file = old_file
+
+            combined = result.output + buf.getvalue()
+            assert result.exit_code == 0
+            assert "Valid Configuration" in combined
+
+    def test_validate_judge_config_no_model(self):
+        """validate with no model should fail with clear error."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("osentinel.yaml").write_text(
+                "engine: judge\n"
+                "policy:\n"
+                '  - "Be professional"\n'
+                "tracing:\n  type: none\n"
+            )
+
+            buf = StringIO()
+            from opensentinel.cli_ui import console
+
+            old_file = console.file
+            console.file = buf
+            try:
+                result = runner.invoke(main, ["validate", "osentinel.yaml"])
+            finally:
+                console.file = old_file
+
+            combined = result.output + buf.getvalue()
+            assert result.exit_code != 0
+            assert "No model configured" in combined
+
+    def test_validate_judge_config_bad_rubric(self):
+        """validate with a nonexistent default rubric should fail."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("osentinel.yaml").write_text(
+                "engine: judge\n"
+                "model: gpt-4o-mini\n"
+                "judge:\n"
+                "  default_rubric: nonexistent_rubric\n"
+                "tracing:\n  type: none\n"
+            )
+
+            buf = StringIO()
+            from opensentinel.cli_ui import console
+
+            old_file = console.file
+            console.file = buf
+            try:
+                result = runner.invoke(main, ["validate", "osentinel.yaml"])
+            finally:
+                console.file = old_file
+
+            combined = result.output + buf.getvalue()
+            assert result.exit_code != 0
+            assert "nonexistent_rubric" in combined
+
 
 class TestInitCommand:
     def test_init_no_interactive_flag(self):

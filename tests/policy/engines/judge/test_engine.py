@@ -1002,3 +1002,82 @@ class TestRubricIsolation:
         # But should still have built-ins
         assert fresh.get("agent_behavior") is not None
 
+
+class TestValidateConfig:
+    """Tests for JudgePolicyEngine.validate_config() classmethod."""
+
+    def test_valid_config_no_errors(self):
+        errors = JudgePolicyEngine.validate_config({
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+        })
+        assert errors == []
+
+    def test_valid_config_with_inline_policy(self):
+        errors = JudgePolicyEngine.validate_config({
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "inline_policy": ["Be professional", "No PII"],
+        })
+        assert errors == []
+
+    def test_no_model_returns_error(self):
+        errors = JudgePolicyEngine.validate_config({})
+        assert any("No model configured" in e for e in errors)
+
+    def test_empty_model_field_returns_error(self):
+        errors = JudgePolicyEngine.validate_config({
+            "models": [{"name": "primary"}],
+        })
+        assert any("missing 'model' field" in e for e in errors)
+
+    def test_invalid_fail_action(self):
+        errors = JudgePolicyEngine.validate_config({
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "fail_action": "explode",
+        })
+        assert any("Invalid fail_action" in e for e in errors)
+
+    def test_nonexistent_default_rubric(self):
+        errors = JudgePolicyEngine.validate_config({
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "default_rubric": "does_not_exist",
+        })
+        assert any("does_not_exist" in e for e in errors)
+
+    def test_nonexistent_conversation_rubric(self):
+        errors = JudgePolicyEngine.validate_config({
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "conversation_rubric": "nope",
+        })
+        assert any("nope" in e for e in errors)
+
+    def test_nonexistent_pre_call_rubric_when_enabled(self):
+        errors = JudgePolicyEngine.validate_config({
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "pre_call_enabled": True,
+            "pre_call_rubric": "missing_rubric",
+        })
+        assert any("missing_rubric" in e for e in errors)
+
+    def test_pre_call_rubric_not_checked_when_disabled(self):
+        errors = JudgePolicyEngine.validate_config({
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "pre_call_enabled": False,
+            "pre_call_rubric": "missing_rubric",
+        })
+        assert not any("missing_rubric" in e for e in errors)
+
+    def test_invalid_inline_policy_type(self):
+        errors = JudgePolicyEngine.validate_config({
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "inline_policy": {"rules": ["bad format"]},
+        })
+        assert any("Invalid inline policy" in e for e in errors)
+
+    def test_multiple_errors_collected(self):
+        errors = JudgePolicyEngine.validate_config({
+            "fail_action": "nope",
+            "default_rubric": "nonexistent",
+        })
+        # Should have at least: no model + invalid fail_action + missing rubric
+        assert len(errors) >= 3
+
