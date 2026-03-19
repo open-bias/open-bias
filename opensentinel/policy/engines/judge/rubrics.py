@@ -22,30 +22,31 @@ logger = logging.getLogger(__name__)
 
 
 class RubricRegistry:
-    """Registry for looking up rubrics by name."""
+    """Registry for looking up rubrics by name.
 
-    _rubrics: Dict[str, Rubric] = {}
+    Each instance holds its own copy of the built-in rubrics, preventing
+    cross-contamination between engine instances in multi-tenant deployments.
+    """
 
-    @classmethod
-    def register(cls, rubric: Rubric) -> None:
+    def __init__(self) -> None:
+        self._rubrics: Dict[str, Rubric] = dict(_BUILTIN_RUBRICS)
+
+    def register(self, rubric: Rubric) -> None:
         """Register a rubric."""
-        if rubric.name in cls._rubrics:
+        if rubric.name in self._rubrics:
             logger.warning(f"Overwriting rubric: {rubric.name}")
-        cls._rubrics[rubric.name] = rubric
+        self._rubrics[rubric.name] = rubric
         logger.debug(f"Registered rubric: {rubric.name}")
 
-    @classmethod
-    def get(cls, name: str) -> Optional[Rubric]:
+    def get(self, name: str) -> Optional[Rubric]:
         """Get a rubric by name."""
-        return cls._rubrics.get(name)
+        return self._rubrics.get(name)
 
-    @classmethod
-    def list_rubrics(cls) -> List[str]:
+    def list_rubrics(self) -> List[str]:
         """List all registered rubric names."""
-        return list(cls._rubrics.keys())
+        return list(self._rubrics.keys())
 
-    @classmethod
-    def load_from_yaml(cls, path: str) -> None:
+    def load_from_yaml(self, path: str) -> None:
         """Load custom rubrics from a YAML file or directory.
 
         Args:
@@ -70,7 +71,7 @@ class RubricRegistry:
 
                 for rubric_def in rubric_defs:
                     rubric = _parse_rubric_dict(rubric_def)
-                    cls.register(rubric)
+                    self.register(rubric)
                     logger.info(f"Loaded custom rubric '{rubric.name}' from {file}")
 
             except (OSError, yaml.YAMLError, KeyError, ValueError) as e:
@@ -155,11 +156,19 @@ def create_rules_rubric(rules: List[str], name: str = "inline_policy") -> Rubric
 # BUILT-IN RUBRICS
 # =============================================================================
 
+# Module-level dict populated once at import time. Each RubricRegistry instance
+# copies this on construction so built-ins are always available without mutation.
+_BUILTIN_RUBRICS: Dict[str, Rubric] = {}
+
+
 def _register_builtins() -> None:
-    """Register all built-in rubrics."""
+    """Populate the _BUILTIN_RUBRICS dict."""
+
+    def _add(rubric: Rubric) -> None:
+        _BUILTIN_RUBRICS[rubric.name] = rubric
 
     # --- general_quality ---
-    RubricRegistry.register(Rubric(
+    _add(Rubric(
         name="general_quality",
         description="General response quality assessment.",
         criteria=[
@@ -199,7 +208,7 @@ def _register_builtins() -> None:
     ))
 
     # --- instruction_following ---
-    RubricRegistry.register(Rubric(
+    _add(Rubric(
         name="instruction_following",
         description="Whether the response follows the given instructions.",
         criteria=[
@@ -218,7 +227,7 @@ def _register_builtins() -> None:
     ))
 
     # --- safety ---
-    RubricRegistry.register(Rubric(
+    _add(Rubric(
         name="safety",
         description="Safety screening for harmful content, PII leaks, and unauthorized actions.",
         criteria=[
@@ -254,7 +263,7 @@ def _register_builtins() -> None:
     ))
 
     # --- agent_behavior ---
-    RubricRegistry.register(Rubric(
+    _add(Rubric(
         name="agent_behavior",
         description="Evaluates AI agent behavior for autonomous task execution.",
         criteria=[
@@ -296,7 +305,7 @@ def _register_builtins() -> None:
     ))
 
     # --- conversation_policy ---
-    RubricRegistry.register(Rubric(
+    _add(Rubric(
         name="conversation_policy",
         description="Evaluates agent behavior across the entire conversation trajectory.",
         criteria=[
@@ -336,7 +345,7 @@ def _register_builtins() -> None:
     ))
 
     # --- comparison ---
-    RubricRegistry.register(Rubric(
+    _add(Rubric(
         name="comparison",
         description="Pairwise comparison of two responses.",
         criteria=[

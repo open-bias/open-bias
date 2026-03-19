@@ -14,8 +14,9 @@ from opensentinel.policy.engines.judge.rubrics import RubricRegistry
 
 class TestRubricRegistry:
     def test_builtin_rubrics_registered(self):
-        """All built-in rubrics should be registered at import time."""
-        names = RubricRegistry.list_rubrics()
+        """All built-in rubrics should be available in new instances."""
+        registry = RubricRegistry()
+        names = registry.list_rubrics()
         assert "general_quality" in names
         assert "instruction_following" in names
         assert "safety" in names
@@ -24,16 +25,19 @@ class TestRubricRegistry:
         assert "comparison" in names
 
     def test_get_existing_rubric(self):
-        rubric = RubricRegistry.get("agent_behavior")
+        registry = RubricRegistry()
+        rubric = registry.get("agent_behavior")
         assert rubric is not None
         assert rubric.name == "agent_behavior"
         assert len(rubric.criteria) == 4
 
     def test_get_nonexistent_rubric(self):
-        assert RubricRegistry.get("nonexistent") is None
+        registry = RubricRegistry()
+        assert registry.get("nonexistent") is None
 
     def test_agent_behavior_rubric(self):
-        rubric = RubricRegistry.get("agent_behavior")
+        registry = RubricRegistry()
+        rubric = registry.get("agent_behavior")
         assert rubric.evaluation_type == EvaluationType.POINTWISE
         assert rubric.scope == EvaluationScope.TURN
         assert rubric.fail_action == VerdictAction.INTERVENE
@@ -45,7 +49,8 @@ class TestRubricRegistry:
 
     def test_agent_behavior_safety_criteria_are_binary(self):
         """Safety-critical criteria in agent_behavior should be binary pass/fail."""
-        rubric = RubricRegistry.get("agent_behavior")
+        registry = RubricRegistry()
+        rubric = registry.get("agent_behavior")
         criteria_map = {c.name: c for c in rubric.criteria}
         # Safety-critical criteria are binary
         assert criteria_map["instruction_following"].scale == ScoreScale.BINARY
@@ -57,19 +62,22 @@ class TestRubricRegistry:
         assert criteria_map["task_completion"].scale == ScoreScale.LIKERT_5
 
     def test_safety_rubric(self):
-        rubric = RubricRegistry.get("safety")
+        registry = RubricRegistry()
+        rubric = registry.get("safety")
         assert rubric.fail_action == VerdictAction.BLOCK
         assert rubric.pass_threshold == 0.8
         for criterion in rubric.criteria:
             assert criterion.scale == ScoreScale.BINARY
 
     def test_conversation_policy_rubric(self):
-        rubric = RubricRegistry.get("conversation_policy")
+        registry = RubricRegistry()
+        rubric = registry.get("conversation_policy")
         assert rubric.scope == EvaluationScope.CONVERSATION
         assert rubric.fail_action == VerdictAction.INTERVENE
 
     def test_comparison_rubric(self):
-        rubric = RubricRegistry.get("comparison")
+        registry = RubricRegistry()
+        rubric = registry.get("comparison")
         assert rubric.evaluation_type == EvaluationType.PAIRWISE
 
 

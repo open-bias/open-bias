@@ -292,8 +292,7 @@ class TestPerRuleCriteria:
         }
         await engine.initialize(config)
 
-        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
-        rubric = RubricRegistry.get("inline_policy")
+        rubric = engine._registry.get("inline_policy")
         criteria_names = [c.name for c in rubric.criteria]
 
         # Simulate: first rule fails, others pass
@@ -321,8 +320,7 @@ class TestPerRuleCriteria:
         }
         await engine.initialize(config)
 
-        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
-        rubric = RubricRegistry.get("inline_policy")
+        rubric = engine._registry.get("inline_policy")
         criteria_names = [c.name for c in rubric.criteria]
 
         judge_response = {
@@ -346,8 +344,7 @@ class TestPerRuleCriteria:
         }
         await engine.initialize(config)
 
-        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
-        rubric = RubricRegistry.get("inline_policy")
+        rubric = engine._registry.get("inline_policy")
         criteria_names = [c.name for c in rubric.criteria]
 
         judge_response = {
@@ -494,7 +491,9 @@ class TestTargetedInterventionMessages:
         )
 
         message = engine._build_violation_message(verdict)
-        assert message == "Minor issues with response quality."
+        assert "Minor issues with response quality." in message
+        # Non-directive summaries get actionable guidance appended
+        assert "Please review and adjust" in message
 
     def test_no_machine_slugs_in_output(self, engine):
         """Output must not contain criterion slugs like rule_1_*."""
@@ -540,8 +539,7 @@ class TestInlinePolicy:
         assert engine._default_rubric == "inline_policy"
 
         # Verify rubric is registered
-        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
-        rubric = RubricRegistry.get("inline_policy")
+        rubric = engine._registry.get("inline_policy")
         assert rubric is not None
         assert "No financial advice" in rubric.prompt_overrides["additional_instructions"]
 
@@ -577,8 +575,7 @@ class TestInlinePolicy:
         await engine.initialize(config)
         assert engine._default_rubric == "my_custom"
 
-        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
-        assert RubricRegistry.get("my_custom") is not None
+        assert engine._registry.get("my_custom") is not None
 
     @pytest.mark.asyncio
     async def test_inline_policy_does_not_break_custom_rubrics_path(self, engine):
@@ -591,8 +588,7 @@ class TestInlinePolicy:
         # Should have the inline_policy rubric as default
         assert engine._default_rubric == "inline_policy"
         # But built-in rubrics should still be available
-        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
-        assert RubricRegistry.get("agent_behavior") is not None
+        assert engine._registry.get("agent_behavior") is not None
 
 
 class TestInterventionEscalation:
@@ -610,8 +606,7 @@ class TestInterventionEscalation:
         }
         await engine.initialize(config)
 
-        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
-        rubric = RubricRegistry.get("inline_policy")
+        rubric = engine._registry.get("inline_policy")
         criteria_names = [c.name for c in rubric.criteria]
 
         # First violation: should be BLOCK (inline policy fail_action)
@@ -655,8 +650,7 @@ class TestInterventionEscalation:
         }
         await engine.initialize(config)
 
-        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
-        rubric = RubricRegistry.get("inline_policy")
+        rubric = engine._registry.get("inline_policy")
         criteria_names = [c.name for c in rubric.criteria]
 
         # First violation: criterion 0 fails
@@ -702,8 +696,7 @@ class TestInterventionEscalation:
         }
         await engine.initialize(config)
 
-        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
-        rubric = RubricRegistry.get("inline_policy")
+        rubric = engine._registry.get("inline_policy")
         criteria_names = [c.name for c in rubric.criteria]
 
         # Simulate 4 different criterion violations (each unique, no repeat escalation)

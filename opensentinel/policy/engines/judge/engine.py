@@ -68,6 +68,7 @@ class JudgePolicyEngine(PolicyEngine):
         self._sessions: OrderedDict[str, JudgeSessionContext] = OrderedDict()
         self._session_timestamps: OrderedDict[str, float] = OrderedDict()
         self._tracer: Optional[Any] = None
+        self._registry = RubricRegistry()
 
         # Session memory config (can be overridden in initialize())
         self._session_ttl = self.DEFAULT_SESSION_TTL
@@ -168,7 +169,7 @@ class JudgePolicyEngine(PolicyEngine):
         # Load custom rubrics if configured
         custom_path = config.get("custom_rubrics_path")
         if custom_path:
-            RubricRegistry.load_from_yaml(custom_path)
+            self._registry.load_from_yaml(custom_path)
 
         # Load inline policy if provided
         inline_policy = config.get("inline_policy")
@@ -235,7 +236,7 @@ class JudgePolicyEngine(PolicyEngine):
         verdicts: List[JudgeVerdict] = []
 
         # 1. Turn-scope evaluation (always runs)
-        turn_rubric = RubricRegistry.get(self._default_rubric)
+        turn_rubric = self._registry.get(self._default_rubric)
         if turn_rubric:
             try:
                 if self._ensemble_enabled and self._ensemble:
@@ -291,7 +292,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         # 2. Conversation-scope evaluation (on interval or trigger)
         if self._should_run_conversation_eval(session, verdicts):
-            conv_rubric = RubricRegistry.get(self._conversation_rubric)
+            conv_rubric = self._registry.get(self._conversation_rubric)
             if conv_rubric:
                 try:
                     if self._ensemble_enabled and self._ensemble:
@@ -403,7 +404,7 @@ class JudgePolicyEngine(PolicyEngine):
             rules = [line.strip() for line in policy_data.strip().splitlines() if line.strip()]
             if rules:
                 rubric = create_rules_rubric(rules)
-                RubricRegistry.register(rubric)
+                self._registry.register(rubric)
                 self._default_rubric = rubric.name
                 logger.info(f"Loaded {len(rules)} inline policy rules as '{rubric.name}'")
             return
@@ -414,7 +415,7 @@ class JudgePolicyEngine(PolicyEngine):
             # List of strings → plain-text rules
             if all(isinstance(item, str) for item in policy_data):
                 rubric = create_rules_rubric(policy_data)
-                RubricRegistry.register(rubric)
+                self._registry.register(rubric)
                 self._default_rubric = rubric.name
                 logger.info(f"Loaded {len(policy_data)} inline policy rules as '{rubric.name}'")
                 return
@@ -423,7 +424,7 @@ class JudgePolicyEngine(PolicyEngine):
                 if isinstance(item, dict):
                     try:
                         rubric = _parse_rubric_dict(item)
-                        RubricRegistry.register(rubric)
+                        self._registry.register(rubric)
                         # First rubric becomes default
                         if policy_data.index(item) == 0:
                             self._default_rubric = rubric.name
@@ -437,7 +438,7 @@ class JudgePolicyEngine(PolicyEngine):
                 rules = policy_data["rules"]
                 if isinstance(rules, list):
                     rubric = create_rules_rubric(rules)
-                    RubricRegistry.register(rubric)
+                    self._registry.register(rubric)
                     self._default_rubric = rubric.name
                     logger.info(f"Loaded {len(rules)} inline policy rules as '{rubric.name}'")
                 return
@@ -445,7 +446,7 @@ class JudgePolicyEngine(PolicyEngine):
                 for rubric_def in policy_data["rubrics"]:
                     try:
                         rubric = _parse_rubric_dict(rubric_def)
-                        RubricRegistry.register(rubric)
+                        self._registry.register(rubric)
                         logger.info(f"Loaded inline rubric '{rubric.name}'")
                     except Exception as e:
                         logger.error(f"Failed to parse inline rubric: {e}")
@@ -566,7 +567,7 @@ class JudgePolicyEngine(PolicyEngine):
         context: Optional[Dict[str, Any]] = None,
     ) -> EngineResult:
         """Run pre-call safety screening on user message."""
-        rubric = RubricRegistry.get(self._pre_call_rubric)
+        rubric = self._registry.get(self._pre_call_rubric)
         if not rubric:
             return EngineResult(decision=Decision.ALLOW)
 
@@ -846,7 +847,14 @@ class JudgePolicyEngine(PolicyEngine):
         """
         failed_criteria: List[str] = verdict.metadata.get("criterion_failures", [])
         if not failed_criteria:
-            return verdict.summary or "Policy violation detected."
+            summary = verdict.summary or "Policy violation detected."
+            # If the summary lacks directive language, append actionable guidance
+            directive_markers = ("must", "should", "please", "stop", "avoid", "do not", "don't")
+            if not any(marker in summary.lower() for marker in directive_markers):
+                summary += (
+                    " Please review and adjust your response to comply with the policy."
+                )
+            return summary
 
         score_map = {s.criterion: s for s in verdict.scores}
 

@@ -180,7 +180,7 @@ class UserMessageInjectStrategy(InterventionStrategy):
                 break
 
         if last_user_idx is not None:
-            messages.insert(last_user_idx, guidance)
+            messages.insert(last_user_idx + 1, guidance)
         else:
             messages.append(guidance)
 

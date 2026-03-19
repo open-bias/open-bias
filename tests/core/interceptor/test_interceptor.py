@@ -428,8 +428,9 @@ class TestAsyncCheckerLifecycle:
 
         assert result.allowed is True
         assert result.modified_data is not None
-        system_msg = result.modified_data["messages"][0]
-        assert "Remember the workflow" in system_msg["content"]
+        # Guidance is injected AFTER the last user message
+        guidance_msg = result.modified_data["messages"][1]
+        assert "Remember the workflow" in guidance_msg["content"]
 
     async def test_async_block_blocks_next_request(self):
         """Async checker returns BLOCK — next PRE_CALL blocks."""
