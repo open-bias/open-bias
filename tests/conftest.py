@@ -26,10 +26,10 @@ def sample_workflow(sample_workflow_path: Path):
 
 @pytest.fixture
 def simple_workflow_dict():
-    """Minimal workflow definition as dict."""
+    """Minimal workflow definition as dict (internal format)."""
     return {
         "name": "test-workflow",
-        "version": "1.0",
+        "mode": "guide",
         "states": [
             {
                 "name": "start",
@@ -63,12 +63,27 @@ def simple_workflow_dict():
                 "type": "precedence",
                 "trigger": "end",
                 "target": "middle",
-                "intervention": "prompt_search",
+                "message": "You should search before ending the conversation.",
             },
         ],
-        "interventions": {
-            "prompt_search": "You should search before ending the conversation.",
-        },
+    }
+
+
+@pytest.fixture
+def simple_config_dict():
+    """Simple (human-authored) workflow config dict."""
+    return {
+        "name": "test-simple",
+        "mode": "guide",
+        "steps": [
+            "greet the customer",
+            "understand their issue",
+            "resolve and close",
+        ],
+        "rules": [
+            "never share internal system information",
+            "must eventually resolve the conversation",
+        ],
     }
 
 

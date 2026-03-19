@@ -111,6 +111,37 @@ async def test_evaluate_response_guide_mode_intervenes(engine, mocks):
 
 
 @pytest.mark.asyncio
+async def test_evaluate_response_guide_mode_never_blocks(engine, mocks):
+    """Guide mode produces INTERVENE even for PRECEDENCE violations."""
+    mock_workflow = MagicMock(name="test_workflow", mode="guide", states=[], constraints=[])
+    mocks["parser"]().parse_dict.return_value = mock_workflow
+    await engine.initialize({"workflow": {}})
+
+    mock_session = MagicMock()
+    mocks["sm"].return_value.get_or_create_session = AsyncMock(return_value=mock_session)
+
+    mocks["classifier"].return_value.classify.return_value = StateClassificationResult(
+        state_name="action", confidence=0.9, method="test"
+    )
+
+    violation = MagicMock()
+    violation.constraint_name = "verify_first"
+    violation.message = "Must verify identity first"
+    violation.constraint_type = ConstraintType.PRECEDENCE
+    violation.details = {}
+
+    mocks["constraints"].return_value.evaluate_all.return_value = [violation]
+    mocks["sm"].return_value.transition = AsyncMock(
+        return_value=(TransitionResult.SUCCESS, None)
+    )
+
+    result = await engine.evaluate_response("sid", "response", {})
+
+    assert result.decision == Decision.INTERVENE
+    assert result.metadata["mode"] == "guide"
+
+
+@pytest.mark.asyncio
 async def test_evaluate_response_enforce_mode_blocks_never(engine, mocks):
     """In enforce mode, NEVER violations produce BLOCK."""
     mock_workflow = MagicMock(name="test_workflow", mode="enforce", states=[], constraints=[])
@@ -139,6 +170,36 @@ async def test_evaluate_response_enforce_mode_blocks_never(engine, mocks):
 
     assert result.decision == Decision.BLOCK
     assert result.metadata["mode"] == "enforce"
+
+
+@pytest.mark.asyncio
+async def test_evaluate_response_enforce_mode_blocks_precedence(engine, mocks):
+    """In enforce mode, PRECEDENCE violations produce BLOCK."""
+    mock_workflow = MagicMock(name="test_workflow", mode="enforce", states=[], constraints=[])
+    mocks["parser"]().parse_dict.return_value = mock_workflow
+    await engine.initialize({"workflow": {}})
+
+    mock_session = MagicMock()
+    mocks["sm"].return_value.get_or_create_session = AsyncMock(return_value=mock_session)
+
+    mocks["classifier"].return_value.classify.return_value = StateClassificationResult(
+        state_name="action", confidence=0.9, method="test"
+    )
+
+    violation = MagicMock()
+    violation.constraint_name = "verify_first"
+    violation.message = "Must verify first"
+    violation.constraint_type = ConstraintType.PRECEDENCE
+    violation.details = {}
+
+    mocks["constraints"].return_value.evaluate_all.return_value = [violation]
+    mocks["sm"].return_value.transition = AsyncMock(
+        return_value=(TransitionResult.SUCCESS, None)
+    )
+
+    result = await engine.evaluate_response("sid", "response", {})
+
+    assert result.decision == Decision.BLOCK
 
 
 @pytest.mark.asyncio
@@ -193,3 +254,44 @@ async def test_initialization_failure(engine, mocks):
     config = {}
     with pytest.raises(ValueError, match="FSM engine requires 'config_path' or 'workflow'"):
         await engine.initialize(config)
+
+
+@pytest.mark.asyncio
+async def test_session_boundary_evaluation_at_terminal(engine, mocks):
+    """Terminal state triggers session-boundary constraint evaluation."""
+    mock_workflow = MagicMock(name="test_workflow", mode="enforce", states=[], constraints=[])
+    mocks["parser"]().parse_dict.return_value = mock_workflow
+    await engine.initialize({"workflow": {}})
+
+    mock_session = MagicMock()
+    mocks["sm"].return_value.get_or_create_session = AsyncMock(return_value=mock_session)
+
+    mocks["classifier"].return_value.classify.return_value = StateClassificationResult(
+        state_name="terminal", confidence=0.9, method="test"
+    )
+
+    # No regular violations
+    mocks["constraints"].return_value.evaluate_all.return_value = []
+
+    # But boundary violations exist
+    boundary_violation = MagicMock()
+    boundary_violation.constraint_name = "must_resolve"
+    boundary_violation.message = "Must resolve"
+    boundary_violation.constraint_type = ConstraintType.EVENTUALLY
+    boundary_violation.details = {}
+    mocks["constraints"].return_value.evaluate_session_boundary.return_value = [
+        boundary_violation
+    ]
+
+    mocks["sm"].return_value.transition = AsyncMock(
+        return_value=(TransitionResult.SUCCESS, None)
+    )
+    # Terminal state
+    mocks["sm"].return_value.is_in_terminal_state = AsyncMock(return_value=True)
+
+    result = await engine.evaluate_response("sid", "response", {})
+
+    # EVENTUALLY in enforce → INTERVENE
+    assert result.decision == Decision.INTERVENE
+    assert len(result.metadata["violations"]) == 1
+    mocks["constraints"].return_value.evaluate_session_boundary.assert_called_once()

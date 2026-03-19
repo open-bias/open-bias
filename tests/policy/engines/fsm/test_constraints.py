@@ -5,11 +5,13 @@ from datetime import datetime, timezone
 
 from opensentinel.policy.engines.fsm.workflow.constraints import (
     ConstraintEvaluator,
-    EvaluationResult,
     ConstraintViolation,
+    EvaluationResult,
+    get_decision,
 )
 from opensentinel.policy.engines.fsm.workflow.schema import Constraint, ConstraintType
 from opensentinel.policy.engines.fsm.workflow.state_machine import SessionState, StateHistoryEntry
+from opensentinel.policy.protocols import Decision
 
 
 def make_session(states: list[str]) -> SessionState:
@@ -25,79 +27,79 @@ def make_session(states: list[str]) -> SessionState:
     )
 
 
-class TestConstraintEvaluator:
-    """Tests for ConstraintEvaluator."""
+class TestConstraintTypes:
+    """Tests for the 4 constraint types: PRECEDENCE, NEVER, EVENTUALLY, RESPONSE."""
+
+    def test_constraint_type_values(self):
+        """Only 4 constraint types exist."""
+        assert set(ct.value for ct in ConstraintType) == {
+            "precedence", "never", "eventually", "response",
+        }
+
+    # --- EVENTUALLY ---
 
     def test_eventually_satisfied(self):
-        """Test EVENTUALLY constraint when target is reached."""
         constraints = [
-            Constraint(
-                name="test",
-                type=ConstraintType.EVENTUALLY,
-                target="goal",
-            )
+            Constraint(name="test", type=ConstraintType.EVENTUALLY, target="goal")
         ]
         evaluator = ConstraintEvaluator(constraints)
         session = make_session(["start", "middle", "goal"])
 
-        violations = evaluator.evaluate_all(session)
-
-        assert len(violations) == 0
+        assert evaluator.evaluate_all(session) == []
 
     def test_eventually_pending(self):
-        """Test EVENTUALLY constraint when target not yet reached."""
+        """EVENTUALLY returns no violations mid-session (PENDING, not VIOLATED)."""
         constraints = [
-            Constraint(
-                name="test",
-                type=ConstraintType.EVENTUALLY,
-                target="goal",
-            )
+            Constraint(name="test", type=ConstraintType.EVENTUALLY, target="goal")
         ]
         evaluator = ConstraintEvaluator(constraints)
         session = make_session(["start", "middle"])
 
-        violations = evaluator.evaluate_all(session)
+        assert evaluator.evaluate_all(session) == []
 
-        # EVENTUALLY is PENDING, not VIOLATED, when target not reached
-        assert len(violations) == 0
+    # --- NEVER ---
 
     def test_never_satisfied(self):
-        """Test NEVER constraint when forbidden state not reached."""
         constraints = [
-            Constraint(
-                name="test",
-                type=ConstraintType.NEVER,
-                target="forbidden",
-            )
+            Constraint(name="test", type=ConstraintType.NEVER, target="forbidden")
         ]
         evaluator = ConstraintEvaluator(constraints)
         session = make_session(["start", "middle", "end"])
 
-        violations = evaluator.evaluate_all(session)
-
-        assert len(violations) == 0
+        assert evaluator.evaluate_all(session) == []
 
     def test_never_violated(self):
-        """Test NEVER constraint when forbidden state is reached."""
         constraints = [
             Constraint(
                 name="test",
                 type=ConstraintType.NEVER,
                 target="forbidden",
-                intervention="fix_it",
+                message="Do not enter forbidden state",
             )
         ]
         evaluator = ConstraintEvaluator(constraints)
         session = make_session(["start", "forbidden", "end"])
 
         violations = evaluator.evaluate_all(session)
-
         assert len(violations) == 1
         assert violations[0].constraint_name == "test"
-        assert violations[0].intervention == "fix_it"
+        assert violations[0].constraint_type == ConstraintType.NEVER
+        assert violations[0].message == "Do not enter forbidden state"
+
+    def test_never_with_proposed_state(self):
+        """NEVER fires when the proposed state is the forbidden one."""
+        constraints = [
+            Constraint(name="test", type=ConstraintType.NEVER, target="forbidden")
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start"])
+
+        violations = evaluator.evaluate_all(session, proposed_state="forbidden")
+        assert len(violations) == 1
+
+    # --- PRECEDENCE ---
 
     def test_precedence_satisfied(self):
-        """Test PRECEDENCE constraint when order is correct."""
         constraints = [
             Constraint(
                 name="test",
@@ -107,54 +109,62 @@ class TestConstraintEvaluator:
             )
         ]
         evaluator = ConstraintEvaluator(constraints)
-        # verify comes before action
         session = make_session(["start", "verify", "action", "end"])
 
-        violations = evaluator.evaluate_all(session)
-
-        assert len(violations) == 0
+        assert evaluator.evaluate_all(session) == []
 
     def test_precedence_violated(self):
-        """Test PRECEDENCE constraint when order is wrong."""
         constraints = [
             Constraint(
                 name="test",
                 type=ConstraintType.PRECEDENCE,
                 trigger="action",
                 target="verify",
-                intervention="must_verify",
+                message="Must verify first",
             )
         ]
         evaluator = ConstraintEvaluator(constraints)
-        # action comes before verify - violation!
         session = make_session(["start", "action", "verify", "end"])
 
         violations = evaluator.evaluate_all(session)
-
         assert len(violations) == 1
         assert violations[0].constraint_name == "test"
 
     def test_precedence_with_proposed_state(self):
-        """Test PRECEDENCE with proposed transition."""
+        """PRECEDENCE fires when proposing trigger without prior target."""
         constraints = [
             Constraint(
                 name="test",
                 type=ConstraintType.PRECEDENCE,
                 trigger="action",
                 target="verify",
-                intervention="must_verify",
+                message="Must verify first",
             )
         ]
         evaluator = ConstraintEvaluator(constraints)
         session = make_session(["start"])
 
-        # Proposing to go to action without verify
         violations = evaluator.evaluate_all(session, proposed_state="action")
-
         assert len(violations) == 1
 
+    def test_precedence_vacuously_satisfied(self):
+        """If trigger never appears, PRECEDENCE is satisfied."""
+        constraints = [
+            Constraint(
+                name="test",
+                type=ConstraintType.PRECEDENCE,
+                trigger="action",
+                target="verify",
+            )
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start", "middle", "end"])
+
+        assert evaluator.evaluate_all(session) == []
+
+    # --- RESPONSE ---
+
     def test_response_satisfied(self):
-        """Test RESPONSE constraint when response follows trigger."""
         constraints = [
             Constraint(
                 name="test",
@@ -166,12 +176,10 @@ class TestConstraintEvaluator:
         evaluator = ConstraintEvaluator(constraints)
         session = make_session(["start", "request", "acknowledge", "end"])
 
-        violations = evaluator.evaluate_all(session)
-
-        assert len(violations) == 0
+        assert evaluator.evaluate_all(session) == []
 
     def test_response_no_trigger(self):
-        """Test RESPONSE constraint when trigger never occurs."""
+        """Vacuously satisfied when trigger never occurs."""
         constraints = [
             Constraint(
                 name="test",
@@ -183,82 +191,199 @@ class TestConstraintEvaluator:
         evaluator = ConstraintEvaluator(constraints)
         session = make_session(["start", "middle", "end"])
 
-        violations = evaluator.evaluate_all(session)
+        assert evaluator.evaluate_all(session) == []
 
-        # Vacuously satisfied - trigger never occurred
-        assert len(violations) == 0
-
-    def test_until_satisfied(self):
-        """Test UNTIL constraint when satisfied."""
+    def test_response_pending(self):
+        """RESPONSE is PENDING when trigger seen but target not yet."""
         constraints = [
             Constraint(
                 name="test",
-                type=ConstraintType.UNTIL,
-                trigger="waiting",
-                target="done",
+                type=ConstraintType.RESPONSE,
+                trigger="request",
+                target="acknowledge",
             )
         ]
         evaluator = ConstraintEvaluator(constraints)
-        session = make_session(["waiting", "waiting", "done"])
+        session = make_session(["start", "request", "middle"])
+
+        # Mid-session: PENDING, no violation
+        assert evaluator.evaluate_all(session) == []
+
+    # --- Multiple constraints ---
+
+    def test_multiple_constraints_all_satisfied(self):
+        constraints = [
+            Constraint(name="never_bad", type=ConstraintType.NEVER, target="bad"),
+            Constraint(
+                name="verify_first",
+                type=ConstraintType.PRECEDENCE,
+                trigger="action",
+                target="verify",
+            ),
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start", "verify", "action", "end"])
+
+        assert evaluator.evaluate_all(session) == []
+
+    def test_multiple_violations(self):
+        constraints = [
+            Constraint(name="never_bad", type=ConstraintType.NEVER, target="bad"),
+            Constraint(
+                name="verify_first",
+                type=ConstraintType.PRECEDENCE,
+                trigger="action",
+                target="verify",
+            ),
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start", "action", "bad"])
 
         violations = evaluator.evaluate_all(session)
+        assert len(violations) == 2
 
-        assert len(violations) == 0
+    # --- Violation details ---
 
-    def test_until_violated(self):
-        """Test UNTIL constraint when violated."""
+    def test_violation_fields(self):
         constraints = [
             Constraint(
                 name="test",
-                type=ConstraintType.UNTIL,
-                trigger="waiting",
-                target="done",
-                intervention="keep_waiting",
+                type=ConstraintType.NEVER,
+                target="forbidden",
+                message="Do not go there",
             )
         ]
         evaluator = ConstraintEvaluator(constraints)
-        # Interrupted by "other" before "done"
-        session = make_session(["waiting", "other", "done"])
+        session = make_session(["start", "forbidden"])
 
         violations = evaluator.evaluate_all(session)
-
         assert len(violations) == 1
+        v = violations[0]
+        assert v.constraint_name == "test"
+        assert v.constraint_type == ConstraintType.NEVER
+        assert v.message == "Do not go there"
+        assert "forbidden" in str(v.details)
 
-    def test_next_satisfied(self):
-        """Test NEXT constraint when satisfied."""
+    def test_violation_auto_message(self):
+        """When no message is set, a descriptive one is auto-generated."""
         constraints = [
             Constraint(
                 name="test",
-                type=ConstraintType.NEXT,
-                target="second",
+                type=ConstraintType.NEVER,
+                target="forbidden",
             )
         ]
         evaluator = ConstraintEvaluator(constraints)
-        session = make_session(["first", "second", "third"])
+        session = make_session(["start", "forbidden"])
 
         violations = evaluator.evaluate_all(session)
-
-        assert len(violations) == 0
-
-    def test_next_violated(self):
-        """Test NEXT constraint when violated."""
-        constraints = [
-            Constraint(
-                name="test",
-                type=ConstraintType.NEXT,
-                target="second",
-                intervention="wrong_order",
-            )
-        ]
-        evaluator = ConstraintEvaluator(constraints)
-        session = make_session(["first", "wrong", "second"])
-
-        violations = evaluator.evaluate_all(session)
-
         assert len(violations) == 1
+        assert "forbidden" in violations[0].message
 
-    def test_multiple_constraints(self):
-        """Test evaluating multiple constraints."""
+
+class TestModeAwareDecisions:
+    """Tests for get_decision() — mode × constraint_type → Decision."""
+
+    def test_guide_always_intervenes(self):
+        for ct in ConstraintType:
+            assert get_decision("guide", ct) == Decision.INTERVENE
+
+    def test_enforce_precedence_blocks(self):
+        assert get_decision("enforce", ConstraintType.PRECEDENCE) == Decision.BLOCK
+
+    def test_enforce_never_blocks(self):
+        assert get_decision("enforce", ConstraintType.NEVER) == Decision.BLOCK
+
+    def test_enforce_eventually_intervenes(self):
+        assert get_decision("enforce", ConstraintType.EVENTUALLY) == Decision.INTERVENE
+
+    def test_enforce_response_intervenes(self):
+        assert get_decision("enforce", ConstraintType.RESPONSE) == Decision.INTERVENE
+
+
+class TestSessionBoundaryEvaluation:
+    """Tests for evaluate_session_boundary()."""
+
+    def test_eventually_violated_at_boundary(self):
+        """EVENTUALLY that never reached target fires at session boundary."""
+        constraints = [
+            Constraint(
+                name="must_resolve",
+                type=ConstraintType.EVENTUALLY,
+                target="resolve",
+                message="Must resolve",
+            )
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start", "middle", "end"])
+
+        violations = evaluator.evaluate_session_boundary(session)
+        assert len(violations) == 1
+        assert violations[0].constraint_name == "must_resolve"
+
+    def test_eventually_satisfied_no_boundary_violation(self):
+        """EVENTUALLY already satisfied does not fire at boundary."""
+        constraints = [
+            Constraint(
+                name="must_resolve",
+                type=ConstraintType.EVENTUALLY,
+                target="resolve",
+            )
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start", "resolve", "end"])
+
+        assert evaluator.evaluate_session_boundary(session) == []
+
+    def test_response_pending_at_boundary(self):
+        """RESPONSE with unresolved trigger fires at boundary."""
+        constraints = [
+            Constraint(
+                name="if_escalate_notify",
+                type=ConstraintType.RESPONSE,
+                trigger="escalate",
+                target="notify",
+                message="Must notify after escalation",
+            )
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start", "escalate", "end"])
+
+        violations = evaluator.evaluate_session_boundary(session)
+        assert len(violations) == 1
+        assert violations[0].constraint_name == "if_escalate_notify"
+
+    def test_response_satisfied_no_boundary_violation(self):
+        constraints = [
+            Constraint(
+                name="if_escalate_notify",
+                type=ConstraintType.RESPONSE,
+                trigger="escalate",
+                target="notify",
+            )
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start", "escalate", "notify", "end"])
+
+        assert evaluator.evaluate_session_boundary(session) == []
+
+    def test_response_no_trigger_no_boundary_violation(self):
+        """If trigger never occurred, RESPONSE is vacuously satisfied at boundary."""
+        constraints = [
+            Constraint(
+                name="if_escalate_notify",
+                type=ConstraintType.RESPONSE,
+                trigger="escalate",
+                target="notify",
+            )
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start", "middle", "end"])
+
+        assert evaluator.evaluate_session_boundary(session) == []
+
+    def test_boundary_ignores_precedence_and_never(self):
+        """Session boundary only checks EVENTUALLY and RESPONSE."""
         constraints = [
             Constraint(
                 name="never_bad",
@@ -273,33 +398,6 @@ class TestConstraintEvaluator:
             ),
         ]
         evaluator = ConstraintEvaluator(constraints)
-        # Both constraints satisfied
-        session = make_session(["start", "verify", "action", "end"])
+        session = make_session(["start", "end"])
 
-        violations = evaluator.evaluate_all(session)
-
-        assert len(violations) == 0
-
-    def test_violation_details(self):
-        """Test that violations include useful details."""
-        constraints = [
-            Constraint(
-                name="test",
-                type=ConstraintType.NEVER,
-                target="forbidden",
-                severity="critical",
-                intervention="fix_it",
-            )
-        ]
-        evaluator = ConstraintEvaluator(constraints)
-        session = make_session(["start", "forbidden"])
-
-        violations = evaluator.evaluate_all(session)
-
-        assert len(violations) == 1
-        v = violations[0]
-        assert v.constraint_name == "test"
-        assert v.constraint_type == ConstraintType.NEVER
-        assert v.severity == "critical"
-        assert v.intervention == "fix_it"
-        assert "forbidden" in v.message
+        assert evaluator.evaluate_session_boundary(session) == []
