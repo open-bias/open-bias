@@ -36,7 +36,7 @@ from opensentinel.policy.protocols import (
     StateClassificationResult,
     require_initialized,
 )
-from opensentinel.policy.registry import PolicyEngineRegistry, register_engine
+from opensentinel.policy.registry import GenericRegistry, PolicyEngineRegistry, register_engine
 
 # Compiler imports
 from opensentinel.policy.compiler import (
@@ -75,7 +75,8 @@ __all__ = [
     "Decision",
     "EngineResult",
     "StateClassificationResult",
-    # Engine registry
+    # Registry
+    "GenericRegistry",
     "PolicyEngineRegistry",
     "register_engine",
     # Engines (may be None if not available)

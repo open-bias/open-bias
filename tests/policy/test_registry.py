@@ -57,13 +57,13 @@ class _AnotherEngine(_DummyEngine):
 class TestPolicyEngineRegistry:
     def setup_method(self):
         """Save and clear registry before each test."""
-        self._saved = dict(PolicyEngineRegistry._engines)
+        self._saved = dict(PolicyEngineRegistry._registry)
         PolicyEngineRegistry.clear()
 
     def teardown_method(self):
         """Restore original registry after each test."""
-        PolicyEngineRegistry._engines.clear()
-        PolicyEngineRegistry._engines.update(self._saved)
+        PolicyEngineRegistry._registry.clear()
+        PolicyEngineRegistry._registry.update(self._saved)
 
     # register / get
     def test_register_and_get(self):
@@ -137,12 +137,12 @@ class TestPolicyEngineRegistry:
 
 class TestRegisterEngineDecorator:
     def setup_method(self):
-        self._saved = dict(PolicyEngineRegistry._engines)
+        self._saved = dict(PolicyEngineRegistry._registry)
         PolicyEngineRegistry.clear()
 
     def teardown_method(self):
-        PolicyEngineRegistry._engines.clear()
-        PolicyEngineRegistry._engines.update(self._saved)
+        PolicyEngineRegistry._registry.clear()
+        PolicyEngineRegistry._registry.update(self._saved)
 
     def test_decorator_registers_class(self):
         @register_engine("decorated_test")
