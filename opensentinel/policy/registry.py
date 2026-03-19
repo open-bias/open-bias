@@ -81,8 +81,9 @@ class PolicyEngineRegistry(GenericRegistry[PolicyEngine]):
         await engine.initialize(config)
         return engine
 
-    # Backwards-compatible alias
-    list_engines = GenericRegistry.list_registered
+    @classmethod
+    def list_engines(cls) -> List[str]:
+        return cls.list_registered()
 
 
 def register_engine(engine_type: str) -> Callable[[Type[PolicyEngine]], Type[PolicyEngine]]:
