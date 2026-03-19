@@ -25,7 +25,6 @@ judge/
 ├── models.py            # Data types: Rubric, JudgeScore, JudgeVerdict
 ├── prompts.py           # Prompt templates for evaluation
 ├── bias.py              # Position randomization (pairwise bias mitigation)
-├── ensemble.py          # Multi-model aggregation (P1)
 └── __init__.py          # Exports and registration
 ```
 
@@ -68,7 +67,7 @@ A **Rubric** defines *how* to judge. It contains a list of **Criteria**.
 
 The result of an evaluation is a `JudgeVerdict`:
 - **Scores**: Detailed scores per criterion with reasoning and evidence.
-- **Action**: The recommended policy action (`pass`, `warn`, `intervene`, `block`, `escalate`).
+- **Action**: The recommended policy action (`pass`, `intervene`, `block`).
 - **Summary**: A high-level explanation of the verdict.
 
 ## Configuration
@@ -103,9 +102,7 @@ await engine.initialize({
 | `checker_mode` | `str` | `async` | `async` (evaluate after response) or `sync` (block response until evaluated). |
 | `pre_call_enabled` | `bool` | `false` | Whether to run an evaluation on the *user's* request (input railing). |
 | `pre_call_rubric` | `str` | `safety` | Rubric to use for pre-call evaluation. |
-| `ensemble_enabled` | `bool` | `false` | Whether to use multiple models and aggregate results. |
 | `conversation_eval_interval` | `int` | `5` | How often (in turns) to run conversation-scope rubrics. |
-| `pass_threshold` | `float` | `0.6` | Normalized score required to pass (if not using specific actions). |
 
 ## Evaluation Flow
 
@@ -127,7 +124,7 @@ Inside `evaluate_response()`:
     -   The judge evaluates the *entire trajectory* for patterns.
 4.  **Aggregation**:
     -   Combines verdicts from all run rubrics.
-    -   Takes the **most restrictive** action (e.g., if Turn says `PASS` but Conversation says `WARN`, result is `WARN`).
+    -   Takes the **most restrictive** action (e.g., if Turn says `PASS` but Conversation says `INTERVENE`, result is `INTERVENE`).
 5.  **Mapping**:
     -   Converts `VerdictAction` to Open Sentinel `EngineResult`.
 
@@ -136,10 +133,8 @@ Inside `evaluate_response()`:
 | Judge Action | `Decision` | Intervention |
 |--------------|------------|--------------|
 | `pass` | `ALLOW` | None |
-| `warn` | `ALLOW` | None (logged in metadata) |
 | `intervene` | `INTERVENE` | Interceptor injects judge feedback into system prompt. |
 | `block` | `BLOCK` | Interceptor returns `allowed=False`, raises `WorkflowViolationError`. |
-| `escalate` | `INTERVENE` | `metadata["escalate"]=True` for human-in-the-loop handling. |
 
 ## Built-in Rubrics
 
