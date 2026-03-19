@@ -539,8 +539,6 @@ class SentinelTracer:
         scores: Optional[List[Dict[str, Any]]] = None,
         latency_ms: Optional[float] = None,
         token_usage: Optional[int] = None,
-        ensemble: bool = False,
-        agreement_rate: Optional[float] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
@@ -551,13 +549,11 @@ class SentinelTracer:
             rubric_name: Name of the rubric used for evaluation.
             scope: Evaluation scope ("turn" or "conversation").
             composite_score: Normalized composite score (0-1).
-            action: Verdict action (pass/warn/intervene/block/escalate).
+            action: Verdict action (pass/intervene/block).
             judge_model: Model used for evaluation.
             scores: Per-criterion score details.
             latency_ms: Evaluation latency in milliseconds.
             token_usage: Total tokens consumed.
-            ensemble: Whether this was an ensemble evaluation.
-            agreement_rate: Inter-judge agreement rate (ensemble only).
             metadata: Additional metadata.
         """
         if not self._enabled or not self._tracer:
@@ -573,15 +569,12 @@ class SentinelTracer:
             "opensentinel.judge.composite_score": composite_score,
             "opensentinel.judge.action": action,
             "opensentinel.judge.model": judge_model,
-            "opensentinel.judge.ensemble": ensemble,
         }
 
         if latency_ms is not None:
             span_attrs["opensentinel.judge.latency_ms"] = latency_ms
         if token_usage is not None:
             span_attrs["opensentinel.judge.token_usage"] = token_usage
-        if agreement_rate is not None:
-            span_attrs["opensentinel.judge.agreement_rate"] = agreement_rate
 
         with self._tracer.start_as_current_span(
             f"judge_evaluation_{scope}",

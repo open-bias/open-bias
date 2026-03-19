@@ -69,16 +69,9 @@ judge:
   # LLM model for the judge (overrides global `model`).
   model: anthropic/claude-sonnet-4-5
 
-  # Reliability preset: safe | balanced | aggressive
-  # Sets sensible defaults for thresholds and behavior.
-  # Individual keys below override the preset.
-  mode: balanced
-
-  # Score thresholds (0.0–1.0)
+  # Score threshold (0.0–1.0) — the sole decision threshold.
+  # Scores >= pass_threshold → PASS, below → rubric's fail_action.
   pass_threshold: 0.6          # default: 0.6
-  warn_threshold: 0.4          # default: 0.4
-  block_threshold: 0.2         # default: 0.2
-  confidence_threshold: 0.5    # default: 0.5
 
   # Pre-call evaluation (evaluate requests BEFORE the LLM call)
   pre_call_enabled: false      # default: false
@@ -92,21 +85,13 @@ judge:
   # Conversation evaluation
   conversation_eval_interval: 5  # run conversation eval every N turns
 
-  # Ensemble (multi-model judging)
-  ensemble_enabled: false        # default: false
-  aggregation_strategy: mean_score  # mean_score | conservative
-  min_agreement: 0.6             # default: 0.6
-
-  # Advanced: explicit multi-model config (overrides `model` above)
+  # Advanced: explicit model config (overrides `model` above)
   # models:
   #   - name: primary
   #     model: anthropic/claude-sonnet-4-5
   #     temperature: 0.0
   #     max_tokens: 2048
   #     timeout: 15.0
-  #   - name: secondary
-  #     model: gpt-4o-mini
-  #     temperature: 0.0
 
 # ---------------------------------------------------------------------------
 # LLM Engine — engine: llm

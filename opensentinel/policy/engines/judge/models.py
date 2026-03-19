@@ -51,10 +51,8 @@ class ScoreScale(Enum):
 class VerdictAction(Enum):
     """Action to take based on judge verdict."""
     PASS = "pass"
-    WARN = "warn"
     INTERVENE = "intervene"
     BLOCK = "block"
-    ESCALATE = "escalate"
 
 
 @dataclass
@@ -77,7 +75,7 @@ class Rubric:
     evaluation_type: EvaluationType = EvaluationType.POINTWISE
     scope: EvaluationScope = EvaluationScope.TURN
     pass_threshold: float = 0.6
-    fail_action: VerdictAction = VerdictAction.WARN
+    fail_action: VerdictAction = VerdictAction.INTERVENE
     prompt_overrides: Dict[str, str] = field(default_factory=dict)
 
 
@@ -116,9 +114,6 @@ class JudgeVerdict:
     token_usage: int = 0
     scope: EvaluationScope = EvaluationScope.TURN
     metadata: Dict[str, Any] = field(default_factory=dict)
-    overall_confidence: float = 1.0  # Weighted confidence across criteria
-    low_confidence: bool = False  # Flag when confidence is below threshold
-
     def to_dict(self) -> Dict[str, Any]:
         return {
             "scores": [
@@ -141,30 +136,6 @@ class JudgeVerdict:
             "latency_ms": self.latency_ms,
             "token_usage": self.token_usage,
             "scope": self.scope.value,
-            "overall_confidence": self.overall_confidence,
-            "low_confidence": self.low_confidence,
-        }
-
-
-@dataclass
-class EnsembleVerdict:
-    """Aggregated verdict from multiple judges."""
-    individual_verdicts: List[JudgeVerdict]
-    final_scores: List[JudgeScore]
-    final_composite: float
-    final_action: VerdictAction
-    agreement_rate: float
-    criterion_agreement: Dict[str, float] = field(default_factory=dict)
-    aggregation_strategy: str = "mean_score"
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "individual_verdicts": [v.to_dict() for v in self.individual_verdicts],
-            "final_composite": self.final_composite,
-            "final_action": self.final_action.value,
-            "agreement_rate": self.agreement_rate,
-            "criterion_agreement": self.criterion_agreement,
-            "aggregation_strategy": self.aggregation_strategy,
         }
 
 
@@ -204,7 +175,7 @@ class JudgeSessionContext:
         self.turn_count += 1
         self.last_updated_at = datetime.now(tz=timezone.utc)
 
-        if verdict.action in (VerdictAction.WARN, VerdictAction.INTERVENE, VerdictAction.BLOCK):
+        if verdict.action in (VerdictAction.INTERVENE, VerdictAction.BLOCK):
             action_key = verdict.action.value
             self.violation_counts[action_key] = self.violation_counts.get(action_key, 0) + 1
 

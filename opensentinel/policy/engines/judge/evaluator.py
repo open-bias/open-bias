@@ -55,17 +55,9 @@ class JudgeEvaluator:
     def __init__(
         self,
         client: JudgeClient,
-        pass_threshold: float = 0.6,
-        warn_threshold: float = 0.4,
-        block_threshold: float = 0.2,
-        confidence_threshold: float = 0.5,
         verbose: bool = False,
     ) -> None:
         self._client = client
-        self._pass_threshold = pass_threshold
-        self._warn_threshold = warn_threshold
-        self._block_threshold = block_threshold
-        self._confidence_threshold = confidence_threshold
         self.verbose = verbose
 
     async def evaluate_turn(
@@ -157,8 +149,6 @@ class JudgeEvaluator:
         composite = self._compute_composite(scores, rubric.criteria)
         action = self._map_action(composite, rubric)
         model_id = self._client.get_model_id(model_name)
-        overall_confidence = self._compute_confidence(scores, rubric.criteria)
-        low_confidence = overall_confidence < self._confidence_threshold
 
         # If any criterion failed, override action
         if failed_criteria and action != VerdictAction.BLOCK:
@@ -173,8 +163,6 @@ class JudgeEvaluator:
             latency_ms=latency_ms,
             token_usage=self._client.get_tokens_for_model(model_name),
             scope=EvaluationScope.TURN,
-            overall_confidence=overall_confidence,
-            low_confidence=low_confidence,
             metadata={"criterion_failures": failed_criteria} if failed_criteria else {},
         )
 
@@ -251,8 +239,6 @@ class JudgeEvaluator:
         composite = self._compute_composite(scores, rubric.criteria)
         action = self._map_action(composite, rubric)
         model_id = self._client.get_model_id(model_name)
-        overall_confidence = self._compute_confidence(scores, rubric.criteria)
-        low_confidence = overall_confidence < self._confidence_threshold
 
         if failed_criteria and action != VerdictAction.BLOCK:
             action = rubric.fail_action
@@ -266,8 +252,6 @@ class JudgeEvaluator:
             latency_ms=latency_ms,
             token_usage=self._client.get_tokens_for_model(model_name),
             scope=EvaluationScope.CONVERSATION,
-            overall_confidence=overall_confidence,
-            low_confidence=low_confidence,
             metadata={"criterion_failures": failed_criteria} if failed_criteria else {},
         )
 
@@ -336,8 +320,6 @@ class JudgeEvaluator:
         composite = self._compute_composite(scores, rubric.criteria)
         action = self._map_action(composite, rubric)
         model_id = self._client.get_model_id(model_name)
-        overall_confidence = self._compute_confidence(scores, rubric.criteria)
-        low_confidence = overall_confidence < self._confidence_threshold
 
         if failed_criteria and action != VerdictAction.BLOCK:
             action = rubric.fail_action
@@ -351,8 +333,6 @@ class JudgeEvaluator:
             latency_ms=latency_ms,
             token_usage=self._client.get_tokens_for_model(model_name),
             scope=EvaluationScope.TURN,
-            overall_confidence=overall_confidence,
-            low_confidence=low_confidence,
             metadata={
                 "pairwise": True,
                 "overall_winner": raw.get("overall_winner", "tie"),
@@ -408,8 +388,6 @@ class JudgeEvaluator:
         composite = self._compute_composite(scores, rubric.criteria)
         action = self._map_action(composite, rubric)
         model_id = self._client.get_model_id(model_name)
-        overall_confidence = self._compute_confidence(scores, rubric.criteria)
-        low_confidence = overall_confidence < self._confidence_threshold
 
         if failed_criteria and action != VerdictAction.BLOCK:
             action = rubric.fail_action
@@ -423,8 +401,6 @@ class JudgeEvaluator:
             latency_ms=latency_ms,
             token_usage=self._client.get_tokens_for_model(model_name),
             scope=EvaluationScope.TURN,
-            overall_confidence=overall_confidence,
-            low_confidence=low_confidence,
             metadata={
                 "reference_based": True,
                 "criterion_failures": failed_criteria,
@@ -543,51 +519,14 @@ class JudgeEvaluator:
 
         return weighted_sum / total_weight
 
-    def _compute_confidence(
-        self,
-        scores: List[JudgeScore],
-        criteria: List[RubricCriterion],
-    ) -> float:
-        """Compute weighted overall confidence from per-criterion confidences.
-
-        Each score's confidence is weighted by its criterion weight,
-        mirroring how composite scores are computed.
-
-        Returns:
-            Overall confidence as a float in [0, 1].
-        """
-        if not scores:
-            return 0.0
-
-        criteria_map = {c.name: c for c in criteria}
-        total_weight = 0.0
-        weighted_sum = 0.0
-
-        for score in scores:
-            criterion = criteria_map.get(score.criterion)
-            weight = criterion.weight if criterion else 1.0
-            weighted_sum += score.confidence * weight
-            total_weight += weight
-
-        if total_weight == 0.0:
-            return 0.0
-
-        return weighted_sum / total_weight
-
     def _map_action(self, composite: float, rubric: Rubric) -> VerdictAction:
         """Map composite score to a verdict action.
 
-        Uses rubric's pass_threshold as the primary gate, then falls
-        back to engine-level thresholds for finer grading.
+        Binary: pass if above rubric threshold, otherwise rubric's fail_action.
         """
         if composite >= rubric.pass_threshold:
             return VerdictAction.PASS
-        elif composite >= self._warn_threshold:
-            return VerdictAction.WARN
-        elif composite >= self._block_threshold:
-            return rubric.fail_action
-        else:
-            return VerdictAction.BLOCK
+        return rubric.fail_action
 
     def _check_criterion_failures(
         self,

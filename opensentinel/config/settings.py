@@ -14,7 +14,7 @@ The simplified osentinel.yaml format:
     model: gemini/gemini-2.5-flash   # optional — auto-detected from API keys
     port: 4000
     judge:
-      mode: balanced
+      pass_threshold: 0.6
     policy:
       - "Must NOT provide financial advice"
       - "Be professional and helpful"
@@ -289,7 +289,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
     )
 
     # Keys within judge: that receive special handling
-    _JUDGE_SPECIAL_KEYS = frozenset({"model", "mode"})
+    _JUDGE_SPECIAL_KEYS = frozenset({"model"})
 
     # Keys within llm: that need renaming for the engine config
     _LLM_KEY_RENAMES = {"model": "llm_model"}
@@ -375,21 +375,6 @@ class YamlConfigSource(PydanticBaseSettingsSource):
                 engine_config["models"] = [
                     {"name": "primary", "model": judge_cfg["model"]}
                 ]
-
-            # Special: judge.mode -> apply reliability preset defaults
-            if "mode" in judge_cfg:
-                try:
-                    from opensentinel.policy.engines.judge.modes import (
-                        build_mode_config,
-                    )
-
-                    mode_config = build_mode_config(judge_cfg["mode"])
-                    for k, v in mode_config.items():
-                        engine_config.setdefault(k, v)
-                except (ImportError, ValueError) as e:
-                    logger.warning(
-                        f"Failed to apply judge mode '{judge_cfg['mode']}': {e}"
-                    )
 
             # Pass through all remaining keys directly
             for k, v in judge_cfg.items():
