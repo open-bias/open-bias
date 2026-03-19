@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # Valid values for validation
 VALID_SCALES = {"binary", "likert_3", "likert_5", "likert_7", "likert_10"}
-VALID_ACTIONS = {"pass", "warn", "intervene", "block", "escalate"}
+VALID_ACTIONS = {"pass", "intervene", "block"}
 VALID_SCOPES = {"turn", "conversation"}
 VALID_EVAL_TYPES = {"pointwise", "pairwise", "reference", "reference_free"}
 
@@ -47,7 +47,7 @@ Generate a JSON object with this structure:
       "scope": "turn",
       "evaluation_type": "pointwise",
       "pass_threshold": 0.6,
-      "fail_action": "warn",
+      "fail_action": "intervene",
       "criteria": [
         {
           "name": "criterion_name",
@@ -68,10 +68,9 @@ Field descriptions:
 - evaluation_type: "pointwise" (score one response)
 - pass_threshold: 0.0-1.0, normalized score needed to pass (default 0.6)
 - fail_action: What happens when score is below threshold
-  - "warn": Log a warning but allow the response
-  - "block": Block the response entirely
+  - "pass": Allow the response through
   - "intervene": Modify the system prompt to guide the agent
-  - "escalate": Flag for human review
+  - "block": Block the response entirely
 - scale: Scoring scale for each criterion
   - "binary": 0 or 1 (use for hard prohibitions)
   - "likert_5": 1-5 (use for quality assessments)
@@ -81,8 +80,8 @@ Field descriptions:
 
 Rules for converting natural language policies:
 1. Prohibitions ("never", "do not", "must not") -> binary scale, fail_action: "block", fail_threshold: 0.5
-2. Quality requirements ("be professional", "clear", "helpful") -> likert_5 scale, fail_action: "warn"
-3. Mandatory behaviors ("always", "must", "ensure") -> likert_5 scale, weight: 1.5, fail_action: "warn"
+2. Quality requirements ("be professional", "clear", "helpful") -> likert_5 scale, fail_action: "intervene"
+3. Mandatory behaviors ("always", "must", "ensure") -> likert_5 scale, weight: 1.5, fail_action: "intervene"
 4. Safety requirements ("safe", "secure", "protect") -> binary scale, fail_action: "block", fail_threshold: 0.5
 5. Group related criteria into a single rubric
 6. Use snake_case for all names
@@ -130,7 +129,7 @@ Example 2 - Agent behavior rubric (for quality requirements):
       "scope": "turn",
       "evaluation_type": "pointwise",
       "pass_threshold": 0.6,
-      "fail_action": "warn",
+      "fail_action": "intervene",
       "criteria": [
         {
           "name": "instruction_following",
@@ -302,12 +301,13 @@ class JudgeCompiler(LLMPolicyCompiler):
                         }
                     )
 
-                fail_action = rubric.get("fail_action", "warn")
+                fail_action = rubric.get("fail_action", "intervene")
                 if fail_action not in VALID_ACTIONS:
                     warnings.append(
-                        f"Invalid fail_action '{fail_action}' for rubric '{name}', using 'warn'"
+                        f"Invalid fail_action '{fail_action}' for rubric '{name}',"
+                        f" using 'intervene'"
                     )
-                    fail_action = "warn"
+                    fail_action = "intervene"
 
                 scope = rubric.get("scope", "turn")
                 if scope not in VALID_SCOPES:
