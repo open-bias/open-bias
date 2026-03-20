@@ -6,7 +6,6 @@ drift detection, and soft constraint evaluation. Registered via
 @register_engine("llm") for use with PolicyEngineRegistry.
 """
 
-import json
 import logging
 from typing import Any
 
@@ -31,7 +30,7 @@ from opensentinel.policy.engines.llm.state_classifier import LLMStateClassifier
 from opensentinel.policy.engines.llm.drift_detector import DriftDetector
 from opensentinel.policy.engines.llm.constraint_evaluator import LLMConstraintEvaluator
 from opensentinel.policy.engines.llm.intervention import InterventionHandler
-from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+from opensentinel.policy.engines.fsm.workflow.parser import WorkflowParser
 from opensentinel.core.utils import extract_response_content, extract_tool_call_names
 
 logger = logging.getLogger(__name__)
@@ -104,28 +103,16 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                 - temporal_weight: Weight for temporal drift (default: 0.55)
                 - cooldown_turns: Intervention cooldown (default: 2)
         """
-        import yaml
-        from pathlib import Path
-        
         # Load workflow
         workflow_path = config.get("config_path")
         workflow_dict = config.get("workflow")
-        
+
         if workflow_path:
-            path = Path(workflow_path)
-            if not path.exists():
-                raise ValueError(f"Workflow file not found: {workflow_path}")
-            
-            with open(path) as f:
-                if path.suffix in (".yaml", ".yml"):
-                    workflow_dict = yaml.safe_load(f)
-                else:
-                    workflow_dict = json.load(f)
-        
-        if not workflow_dict:
+            self._workflow = WorkflowParser.parse_file(workflow_path)
+        elif workflow_dict:
+            self._workflow = WorkflowParser.parse_dict(workflow_dict)
+        else:
             raise ValueError("Either config_path or workflow must be provided")
-        
-        self._workflow = WorkflowDefinition(**workflow_dict)
         
         # Create LLM client
         # model comes from config (injected by SentinelSettings.get_policy_config)
