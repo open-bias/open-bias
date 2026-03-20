@@ -24,9 +24,11 @@ https://docs.litellm.ai/docs/observability/custom_callback
 """
 
 import asyncio
+import json
 import logging
 import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from datetime import datetime
 from typing import Any, Literal
 
@@ -392,8 +394,6 @@ class SentinelCallback(CustomLogger):
                     },
                 )
             else:
-                from contextlib import nullcontext
-
                 cm = nullcontext()
 
             with cm as span:
@@ -405,8 +405,6 @@ class SentinelCallback(CustomLogger):
 
                 # Set output on span
                 if span is not None:
-                    import json
-
                     output_data = {
                         "allowed": result.allowed,
                         "has_modifications": result.modified_data is not None,
@@ -436,8 +434,6 @@ class SentinelCallback(CustomLogger):
                     )
 
         # Capture start time at the end of pre-call to accurately measure LLM latency in trace
-        if "metadata" not in data:
-             data["metadata"] = {}
         data["metadata"]["_opensentinel_llm_start_time"] = time.time()
 
         return data
@@ -515,8 +511,6 @@ class SentinelCallback(CustomLogger):
                     },
                 )
             else:
-                from contextlib import nullcontext
-
                 cm = nullcontext()
 
             with cm as span:
@@ -529,8 +523,6 @@ class SentinelCallback(CustomLogger):
 
                 # Set output on span
                 if span is not None:
-                    import json
-
                     output_data = {
                         "allowed": result.allowed,
                         "has_modifications": result.modified_data is not None,
