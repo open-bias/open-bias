@@ -59,17 +59,11 @@ policy:
   - "Be professional"
 ```
 
-**Inline rubrics** (dict) -- judge engine only:
+**Inline rules with dicts** (list of dicts) -- judge engine only:
 ```yaml
 policy:
-  rules: ["No financial advice"]
-  rubrics:
-    - name: my_rubric
-      description: Custom rubric
-      criteria:
-        - name: tone
-          description: Professional tone
-          scale: binary
+  - rule: "No financial advice"
+  - rule: "Be professional"
 ```
 
 ## Judge Engine
@@ -79,7 +73,7 @@ Set `engine: judge` at the top level. Configure under the `judge:` section.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `judge.model` | string | global `model` | LLM model for evaluation. Overrides the global model setting. |
-| `judge.pass_threshold` | float | `0.6` | Score above which a response passes (0.0-1.0) |
+| `judge.fail_action` | string | `block` | What happens on violation: `block` or `intervene` |
 | `judge.pre_call_enabled` | bool | `false` | Evaluate requests before forwarding to the LLM |
 | `judge.pre_call_rubric` | string | `safety` | Which rubric to use for pre-call evaluation |
 | `judge.default_rubric` | string | `agent_behavior` | Default rubric for per-turn evaluation |
@@ -260,7 +254,7 @@ policy: ./policy.yaml
 
 judge:
   model: anthropic/claude-3-5-sonnet-latest
-  pass_threshold: 0.6
+  fail_action: block
   pre_call_enabled: false
 
 tracing:

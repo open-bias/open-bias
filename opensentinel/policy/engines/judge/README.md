@@ -9,8 +9,7 @@ The Judge engine provides a "just tell me if this response is okay" primitive fo
 It supports:
 - **Turn-level evaluation**: Judging the latest response (fast, cheap).
 - **Conversation-level evaluation**: Judging the entire interaction trajectory for drift, goal progression, and cumulative policy violations.
-- **Reference-free & Reference-based**: Can judge with or without a "golden" answer.
-- **Pointwise & Pairwise**: Can score a single response or compare two responses (A/B testing).
+- **Pointwise evaluation**: Scores a single response against rubric criteria.
 
 ## Architecture
 
@@ -61,7 +60,7 @@ A **Rubric** defines *how* to judge. It contains a list of **Criteria**.
 
 - **Rubrics**: Named collections of criteria (e.g., `safety`, `helpfulness`, `agent_behavior`).
 - **Criteria**: Individual dimensions to score (e.g., "Instruction Following", "No PII Leaked").
-- **Scales**: Scoring systems (e.g., `binary` (pass/fail), `likert_5` (1-5), `likert_10`).
+- **Scales**: Scoring systems (e.g., `binary` (pass/fail), `likert_5` (1-5)).
 
 ### Verdicts
 
@@ -96,10 +95,9 @@ await engine.initialize({
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `models` | `list` | auto-detected | List of model configs. If omitted, a `primary` model is created using the system default (auto-detected from API keys). |
+| `models` | `list` | -- | List of model configs. Must be provided or set via `judge.model` in YAML. |
 | `default_rubric` | `str` | `agent_behavior` | Rubric to use if none specified in request. |
 | `custom_rubrics_path` | `str` | `None` | Path to directory containing custom rubric YAMLs. |
-| `checker_mode` | `str` | `async` | `async` (evaluate after response) or `sync` (block response until evaluated). |
 | `pre_call_enabled` | `bool` | `false` | Whether to run an evaluation on the *user's* request (input railing). |
 | `pre_call_rubric` | `str` | `safety` | Rubric to use for pre-call evaluation. |
 | `conversation_eval_interval` | `int` | `5` | How often (in turns) to run conversation-scope rubrics. |
@@ -140,12 +138,9 @@ Inside `evaluate_response()`:
 
 | Rubric | Scope | Type | Description |
 |--------|-------|------|-------------|
-| `general_quality` | turn | pointwise/5-pt | Basic helpfulness, accuracy, coherence. |
-| `instruction_following` | turn | pointwise/5-pt | Checks if agent followed user instructions. |
 | `safety` | turn | pointwise/binary | Checks for harm, PII, unauthorized actions. |
 | `agent_behavior` | turn | pointwise/5-pt | **Default**. Checks instructions, tool use, hallucinations. |
 | `conversation_policy` | conversation | pointwise/5-pt | Checks goal progression, consistency, drift. |
-| `comparison` | turn | pairwise/5-pt | A/B testing preference (A vs B). |
 
 ## Modes: Sync vs Async
 

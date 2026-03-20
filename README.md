@@ -69,7 +69,7 @@ response = client.chat.completions.create(
 )
 ```
 
-Every call now runs through your policy. The judge engine (default) scores each response against your rules using a sidecar LLM, and intervenes (warn, modify, or block) when scores fall below threshold. Engine, model, port, and tracing are all auto-configured with smart defaults.
+Every call now runs through your policy. The judge engine (default) scores each response against your rules using a sidecar LLM, and intervenes (warn, modify, or block) when violations are detected. Engine, model, port, and tracing are all auto-configured with smart defaults.
 
 You can also compile rules from natural language:
 
@@ -129,7 +129,6 @@ Write rules in plain English. The judge LLM evaluates every response against bui
 ```yaml
 engine: judge
 judge:
-  mode: balanced    # safe | balanced | aggressive
   model: anthropic/claude-sonnet-4-5
 policy:
   - "No harmful content"
@@ -165,7 +164,6 @@ debug: false
 
 judge:
   model: anthropic/claude-sonnet-4-5       # auto-detected from API keys if omitted
-  mode: balanced            # safe | balanced | aggressive
 
 tracing:
   type: none                # none | console | otlp | langfuse

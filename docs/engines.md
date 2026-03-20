@@ -44,9 +44,9 @@ Uses an LLM to evaluate every agent response against configurable rubrics. The j
 ### How it works
 
 1. After the agent responds, the judge LLM receives the conversation history and the response
-2. It scores the response on each criterion in the active rubric (binary pass/fail, 5-point Likert, or 10-point)
-3. Scores are normalized and aggregated into a weighted average
-4. The aggregate score maps to an action based on thresholds (pass > 0.6, warn > 0.4, block < 0.2 by default)
+2. It scores the response on each criterion in the active rubric (binary pass/fail or 5-point Likert)
+3. Binary rubrics: any criterion failure triggers the configured `fail_action` (block or intervene)
+4. Likert rubrics: scores are normalized and aggregated; the aggregate maps to an action based on thresholds
 5. Optionally, a conversation-level rubric runs every N turns to catch gradual drift
 
 ### Evaluation scopes
@@ -60,10 +60,7 @@ Uses an LLM to evaluate every agent response against configurable rubrics. The j
 |--------|-------|-------|----------------|
 | `agent_behavior` | turn | 5-point | Instruction following, tool use, hallucinations (default) |
 | `safety` | turn | binary | Harm, PII, unauthorized actions |
-| `general_quality` | turn | 5-point | Helpfulness, accuracy, coherence |
-| `instruction_following` | turn | 5-point | Whether the agent followed user instructions |
 | `conversation_policy` | conversation | 5-point | Goal progression, consistency, drift |
-| `comparison` | turn | 5-point (pairwise) | A/B preference comparison |
 
 Custom rubrics are defined as YAML files. See the [judge engine README](../opensentinel/policy/engines/judge/README.md) for the rubric schema.
 
@@ -85,7 +82,6 @@ policy:
   - "Be professional"
 judge:
   model: anthropic/claude-3-5-sonnet-latest
-  mode: balanced
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#judge-engine)
