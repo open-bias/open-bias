@@ -17,6 +17,7 @@ from opensentinel.core.intervention.strategies import (
     InterventionStrategy,
     SystemPromptAppendStrategy,
     UserMessageInjectStrategy,
+    ResponseModificationStrategy,
     WorkflowViolationError,
 )
 
@@ -26,5 +27,6 @@ __all__ = [
     "InterventionStrategy",
     "SystemPromptAppendStrategy",
     "UserMessageInjectStrategy",
+    "ResponseModificationStrategy",
     "WorkflowViolationError",
 ]
