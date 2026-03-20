@@ -20,6 +20,7 @@ from opensentinel.policy.engines.stateful import (
     StatefulPolicyEngine,
     StateClassificationResult,
 )
+from opensentinel.core.session import SessionStore
 from opensentinel.policy.engines.llm.models import (
     SessionContext,
     ConfidenceTier,
@@ -63,6 +64,9 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         )
     """
 
+    DEFAULT_SESSION_TTL = 3600  # 1 hour
+    DEFAULT_MAX_SESSIONS = 10_000
+
     def __init__(self):
         self._workflow: WorkflowDefinition | None = None
         self._llm_client: LLMClient | None = None
@@ -70,7 +74,10 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         self._drift_detector: DriftDetector | None = None
         self._constraint_evaluator: LLMConstraintEvaluator | None = None
         self._intervention_engine: InterventionHandler | None = None
-        self._sessions: dict[str, SessionContext] = {}
+        self._sessions: SessionStore[SessionContext] = SessionStore(
+            ttl=self.DEFAULT_SESSION_TTL,
+            max_sessions=self.DEFAULT_MAX_SESSIONS,
+        )
         self._initialized = False
 
     @property
@@ -351,9 +358,9 @@ class LLMPolicyEngine(StatefulPolicyEngine):
     async def get_current_state(self, session_id: str) -> str:
         """Get current state name for session."""
         session = self._sessions.get(session_id)
-        if session:
+        if session is not None:
             return session.current_state
-        
+
         # Return initial state
         if self._workflow:
             initial = self._workflow.get_initial_states()
@@ -364,7 +371,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
     async def get_state_history(self, session_id: str) -> list[str]:
         """Get state transition history."""
         session = self._sessions.get(session_id)
-        if session:
+        if session is not None:
             return session.get_state_sequence()
         return []
 
@@ -379,14 +386,13 @@ class LLMPolicyEngine(StatefulPolicyEngine):
     async def get_session_state(self, session_id: str) -> dict[str, Any] | None:
         """Get current session state for debugging/tracing."""
         session = self._sessions.get(session_id)
-        if session:
+        if session is not None:
             return session.to_dict()
         return None
 
     async def reset_session(self, session_id: str) -> None:
         """Reset session state."""
-        if session_id in self._sessions:
-            del self._sessions[session_id]
+        if self._sessions.remove(session_id) is not None:
             logger.debug(f"Reset session: {session_id}")
 
     async def shutdown(self) -> None:
@@ -396,22 +402,26 @@ class LLMPolicyEngine(StatefulPolicyEngine):
 
     def _get_or_create_session(self, session_id: str) -> SessionContext:
         """Get existing session or create new one."""
-        if session_id not in self._sessions:
-            # Get initial state
-            initial_state = "unknown"
-            if self._workflow:
-                initial = self._workflow.get_initial_states()
-                if initial:
-                    initial_state = initial[0].name
-            
-            self._sessions[session_id] = SessionContext(
-                session_id=session_id,
-                workflow_name=self._workflow.name if self._workflow else "unknown",
-                current_state=initial_state,
-            )
-            logger.debug(f"Created session: {session_id}")
-        
-        return self._sessions[session_id]
+        session = self._sessions.get(session_id)
+        if session is not None:
+            self._sessions.touch(session_id)
+            return session
+
+        # Get initial state
+        initial_state = "unknown"
+        if self._workflow:
+            initial = self._workflow.get_initial_states()
+            if initial:
+                initial_state = initial[0].name
+
+        session = SessionContext(
+            session_id=session_id,
+            workflow_name=self._workflow.name if self._workflow else "unknown",
+            current_state=initial_state,
+        )
+        self._sessions.put(session_id, session)
+        logger.debug(f"Created session: {session_id}")
+        return session
 
     def _get_expected_tools(self, state_name: str) -> list[str]:
         """Get expected tool calls for a state."""
