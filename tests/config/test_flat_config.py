@@ -14,8 +14,8 @@ def test_osntl_config_env_var_discovery():
     
     os.environ["OSNTL_DEBUG"] = "true"
     settings = SentinelSettings()
-    assert settings.debug is False  # Should NOT be picked up anymore
-    
+    assert settings.debug is True  # OSNTL_ prefix maps to settings fields
+
     del os.environ["OSNTL_CONFIG"]
     del os.environ["OSNTL_DEBUG"]
 

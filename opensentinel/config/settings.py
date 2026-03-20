@@ -469,10 +469,12 @@ class SentinelSettings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
+        env_prefix="OSNTL_",
+        env_nested_delimiter="__",
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
-        populate_by_name=True, # Allow initializing with field names even if aliases are set
+        populate_by_name=True,  # Allow initializing with field names even if aliases are set
     )
 
     # _config_path is passed via contextvars to settings_customise_sources
