@@ -19,8 +19,6 @@ Strategies define HOW to modify LLM requests or responses when deviation is dete
 import logging
 from typing import Any
 from enum import Enum
-from dataclasses import dataclass
-from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
@@ -33,88 +31,22 @@ class StrategyType(Enum):
     RESPONSE_MODIFICATION = "response_modification"
 
 
-@dataclass
-class StrategyConfig:
-    """Configuration for an intervention."""
-
-    strategy_type: StrategyType
-    message_template: str
-    priority: int = 0  # Higher = more important
-    max_applications: int = 3  # Informational; used by engine handlers for config display
-
-
-class InterventionStrategy(ABC):
-    """
-    Base class for intervention strategies.
-
-    Strategies modify LLM request data to guide the agent
-    back to the expected workflow path.
-    """
-
-    @abstractmethod
-    def apply(
-        self,
-        data: dict,
-        config: StrategyConfig,
-        context: dict[str, Any],
-    ) -> dict:
-        """
-        Apply intervention to request data.
-
-        Args:
-            data: LLM request data (messages, model, etc.)
-            config: Intervention configuration
-            context: Additional context (states, violations, etc.)
-
-        Returns:
-            Modified request data
-        """
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def merge(messages: list[dict[str, Any]], value: str) -> list[dict[str, Any]]:
-        """
-        Merge an intervention value into a messages list.
-
-        Low-level operation used when applying deferred interventions
-        from async checkers. Unlike apply(), takes a pre-formatted string
-        and operates directly on messages.
-
-        Args:
-            messages: The messages list (will be copied, not mutated).
-            value: The pre-formatted intervention text.
-
-        Returns:
-            New messages list with the intervention applied.
-        """
-        pass
-
-    @staticmethod
-    def format_message(template: str, context: dict[str, Any]) -> str:
-        """Format message template with context."""
-        try:
-            return template.format(**context)
-        except KeyError as e:
-            logger.warning(f"Missing context key in template: {e}")
-            # Return template with unfilled placeholders rather than failing
-            return template
+def format_message(template: str, context: dict[str, Any]) -> str:
+    """Format message template with context."""
+    try:
+        return template.format(**context)
+    except KeyError as e:
+        logger.warning(f"Missing context key in template: {e}")
+        # Return template with unfilled placeholders rather than failing
+        return template
 
 
-class SystemPromptAppendStrategy(InterventionStrategy):
+class SystemPromptAppendStrategy:
     """
     Append correction guidance to system message.
 
     This is the least disruptive strategy - it adds guidance
     to the system message without altering the conversation flow.
-
-    Example output:
-    ```
-    System: You are a helpful assistant.
-
-    [WORKFLOW GUIDANCE]: You must verify the customer's identity
-    before performing any account actions.
-    ```
     """
 
     @staticmethod
@@ -141,31 +73,13 @@ class SystemPromptAppendStrategy(InterventionStrategy):
 
         return messages
 
-    def apply(
-        self,
-        data: dict,
-        config: StrategyConfig,
-        context: dict[str, Any],
-    ) -> dict:
-        data = dict(data)
-        correction = self.format_message(config.message_template, context)
-        data["messages"] = self.merge(data.get("messages", []), correction)
-        logger.debug("Applied system_prompt_append intervention")
-        return data
 
-
-class UserMessageInjectStrategy(InterventionStrategy):
+class UserMessageInjectStrategy:
     """
     Inject a user message with guidance.
 
     More visible than system prompt, appears as if the user
     is providing additional instructions.
-
-    Example output:
-    ```
-    User: [System Note] Before proceeding, please verify
-    the customer's identity as required by the workflow.
-    ```
     """
 
     @staticmethod
@@ -185,18 +99,6 @@ class UserMessageInjectStrategy(InterventionStrategy):
             messages.append(guidance)
 
         return messages
-
-    def apply(
-        self,
-        data: dict,
-        config: StrategyConfig,
-        context: dict[str, Any],
-    ) -> dict:
-        data = dict(data)
-        correction = self.format_message(config.message_template, context)
-        data["messages"] = self.merge(data.get("messages", []), correction)
-        logger.debug("Applied user_message_inject intervention")
-        return data
 
 
 class ResponseModificationStrategy:

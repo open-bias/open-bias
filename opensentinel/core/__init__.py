@@ -5,15 +5,13 @@ Contains shared abstractions used across all policy engines.
 """
 
 from opensentinel.core.intervention import (
-    InterventionStrategy,
     StrategyType,
-    StrategyConfig,
+    format_message,
     WorkflowViolationError,
 )
 
 __all__ = [
-    "InterventionStrategy",
     "StrategyType",
-    "StrategyConfig",
+    "format_message",
     "WorkflowViolationError",
 ]

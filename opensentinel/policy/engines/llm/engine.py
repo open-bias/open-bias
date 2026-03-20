@@ -282,16 +282,15 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             result_message: str | None = None
 
             if intervention_message:
-                from opensentinel.core.intervention.strategies import (
-                    InterventionStrategy,
-                )
+                from opensentinel.core.intervention.strategies import format_message
+
                 decision = Decision.INTERVENE
                 template_context = {
                     "state": classification.best_state,
                     "drift": drift.composite,
                     "drift_level": drift.level.value,
                 }
-                result_message = InterventionStrategy.format_message(
+                result_message = format_message(
                     intervention_message, template_context
                 )
 
