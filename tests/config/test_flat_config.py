@@ -72,10 +72,9 @@ class TestInlinePolicyMapping:
 class TestInterventionDefaults:
 
     def test_default_strategy_is_user_message_inject(self):
-        """InterventionConfig defaults to user_message_inject strategy."""
-        from opensentinel.config.settings import InterventionConfig
-        config = InterventionConfig()
-        assert config.default_strategy == "user_message_inject"
+        """PolicyConfig defaults to user_message_inject strategy."""
+        settings = SentinelSettings()
+        assert settings.policy.default_strategy == "user_message_inject"
 
 
 class TestGetPolicyConfig:

@@ -96,19 +96,6 @@ class ClassifierConfig(BaseModel):
     device: str = "cpu"
 
 
-class InterventionConfig(BaseModel):
-    """Intervention system configuration."""
-
-    # Default strategy when not specified in workflow
-    default_strategy: Literal[
-        "system_prompt_append", "user_message_inject"
-    ] = "user_message_inject"
-    # Maximum times to apply same intervention before escalating
-    max_intervention_attempts: int = 3
-    # Include intervention metadata in response headers
-    include_headers: bool = True
-
-
 class PolicyEngineConfig(BaseModel):
     """Configuration for a single policy engine.
 
@@ -170,8 +157,10 @@ class PolicyConfig(BaseModel):
     # Primary engine configuration
     engine: PolicyEngineConfig = Field(default_factory=PolicyEngineConfig)
 
-    # Intervention configuration
-    intervention: InterventionConfig = Field(default_factory=InterventionConfig)
+    # Default strategy when not specified in workflow
+    default_strategy: Literal[
+        "system_prompt_append", "user_message_inject"
+    ] = "user_message_inject"
 
     # Fallback behavior when engine evaluation fails
     # True = allow request on error (fail open)

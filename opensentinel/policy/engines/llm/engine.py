@@ -164,6 +164,12 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             max_intervention_attempts=intervention_cfg.get("max_intervention_attempts", 3),
         )
         
+        # Session memory management
+        self._sessions.configure(
+            ttl=int(config["session_ttl"]) if "session_ttl" in config else None,
+            max_sessions=int(config["max_sessions"]) if "max_sessions" in config else None,
+        )
+
         self._initialized = True
         logger.info(f"LLMPolicyEngine initialized: {self.name}")
 
@@ -422,6 +428,15 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         self._sessions.put(session_id, session)
         logger.debug(f"Created session: {session_id}")
         return session
+
+    def get_compiler(
+        self,
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> None:
+        """LLM engine has no dedicated compiler."""
+        return None
 
     def _get_expected_tools(self, state_name: str) -> list[str]:
         """Get expected tool calls for a state."""

@@ -132,10 +132,10 @@ class JudgePolicyEngine(PolicyEngine):
         self._conversation_eval_interval = config.get("conversation_eval_interval", 5)
 
         # Session memory management
-        if "session_ttl" in config:
-            self._sessions._ttl = int(config["session_ttl"])
-        if "max_sessions" in config:
-            self._sessions._max_sessions = int(config["max_sessions"])
+        self._sessions.configure(
+            ttl=int(config["session_ttl"]) if "session_ttl" in config else None,
+            max_sessions=int(config["max_sessions"]) if "max_sessions" in config else None,
+        )
 
         # Load custom rubrics if configured
         custom_path = config.get("custom_rubrics_path")

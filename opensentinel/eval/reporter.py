@@ -7,6 +7,7 @@ from typing import Any
 
 from opensentinel.eval.metrics import compute_metrics
 from opensentinel.eval.runner import EvalResult
+from opensentinel.policy.protocols import Decision
 
 
 def print_report(results: list[EvalResult], verbose: bool = False) -> None:
@@ -92,7 +93,7 @@ def export_json(results: list[EvalResult]) -> dict[str, Any]:
                     "request_decision": turn.request_eval.decision.value,
                     "response_decision": turn.response_eval.decision.value,
                     "violations": turn.response_eval.metadata.get("violations", []),
-                    "intervention_needed": turn.response_eval.decision.value in ("intervene", "block"),
+                    "intervention_needed": turn.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK),
                 }
             )
 

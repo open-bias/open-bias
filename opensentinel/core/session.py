@@ -110,6 +110,13 @@ class SessionStore(Generic[V]):
         self._data.clear()
         self._timestamps.clear()
 
+    def configure(self, ttl: int | None = None, max_sessions: int | None = None) -> None:
+        """Update TTL and/or max-sessions at runtime."""
+        if ttl is not None:
+            self._ttl = ttl
+        if max_sessions is not None:
+            self._max_sessions = max_sessions
+
     def __len__(self) -> int:
         return len(self._data)
 

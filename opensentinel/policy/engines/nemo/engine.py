@@ -390,7 +390,12 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
 
     async def get_session_state(self, session_id: str) -> dict[str, Any] | None:
         """Get current session state for debugging/tracing."""
-        return None
+        return {
+            "engine": "nemo",
+            "session_id": session_id,
+            "initialized": self._initialized,
+            "enabled_rails": self._enabled_rails,
+        }
 
     async def reset_session(self, session_id: str) -> None:
         """Reset session state."""

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from opensentinel.eval.runner import EvalResult
+from opensentinel.policy.protocols import Decision
 
 
 @dataclass
@@ -32,7 +33,7 @@ def compute_metrics(results: list[EvalResult]) -> EvalMetrics:
                 turn.response_eval.metadata.get("violations", [])
             )
 
-            if turn.response_eval.decision.value in ("intervene", "block"):
+            if turn.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK):
                 metrics.intervention_count += 1
 
     return metrics

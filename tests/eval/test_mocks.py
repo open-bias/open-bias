@@ -110,7 +110,7 @@ class TestApplyMockProvider:
         engine = MagicMock(spec=[])  # no _client attribute
         with caplog.at_level(logging.WARNING, logger="opensentinel.eval.mocks"):
             apply_mock_provider(engine, "judge", responses=['{}'])
-        assert "cannot apply mock" in caplog.text.lower() or True  # just no raise
+        assert "cannot apply mock" in caplog.text.lower()
 
     async def test_nemo_patches_rails_generate_async(self):
         rails = MagicMock()

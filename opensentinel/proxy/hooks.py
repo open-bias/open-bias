@@ -206,7 +206,7 @@ class SentinelCallback(CustomLogger):
 
             self._interceptor = Interceptor(
                 checkers,
-                default_strategy=self.settings.policy.intervention.default_strategy,
+                default_strategy=self.settings.policy.default_strategy,
             )
             self._interceptor_initialized = True
             logger.info(f"Interceptor initialized with {len(checkers)} checkers")
@@ -227,7 +227,7 @@ class SentinelCallback(CustomLogger):
             from opensentinel.policy.registry import PolicyEngineRegistry
 
             policy_config = self.settings.get_policy_config()
-            engine_type = policy_config.get("type", "nemo")
+            engine_type = policy_config.get("type", "judge")
             engine_config = policy_config.get("config", {})
 
             # Only initialize if we have configuration

@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from abc import ABC, abstractmethod
 import functools
-import inspect
 
 if TYPE_CHECKING:
     from opensentinel.policy.compiler.protocol import PolicyCompiler
@@ -164,8 +163,5 @@ def require_initialized(method):
         if not getattr(self, "_initialized", False):
             raise RuntimeError(f"{type(self).__name__} not initialized. Call initialize() first.")
 
-        # Check if original method is coroutine
-        if inspect.iscoroutinefunction(method):
-            return await method(self, *args, **kwargs)
-        return method(self, *args, **kwargs)
+        return await method(self, *args, **kwargs)
     return wrapper
