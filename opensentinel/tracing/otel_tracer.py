@@ -208,19 +208,17 @@ class SentinelTracer:
         session_id: str,
         attributes: dict[str, Any] | None = None,
         input_data: Any | None = None,
-        output_data: Any | None = None,
         metadata: dict[str, Any] | None = None,
     ):
         """
         Context manager to trace a block of code.
         Useful for capturing logs emitted during execution as span events.
-        
+
         Args:
             name: Span name
             session_id: Session identifier
             attributes: Additional span attributes
             input_data: Input data to record (will be JSON serialized)
-            output_data: Output data to record (will be JSON serialized)
             metadata: Additional metadata for the span
         """
         if not self._enabled or not self._tracer:
@@ -253,12 +251,6 @@ class SentinelTracer:
                     span.set_attribute(f"opensentinel.metadata.{key}", str(value))
             
             yield span
-            
-            # Set output data after the block executes (allows for dynamic output)
-            if output_data is not None:
-                output_json = self._safe_json(output_data)
-                span.set_attribute("output.value", output_json)
-                span.set_attribute("langfuse.span.output", output_json)
 
     def log_event(
         self,
@@ -427,16 +419,24 @@ class SentinelTracer:
             # Add violations as structured data
             if violations:
                 span.set_attribute("opensentinel.policy.violation_count", len(violations))
-                violation_names = [getattr(v, "name", "unknown") for v in violations]
+                violation_names = [v.get("name", "unknown") if isinstance(v, dict) else getattr(v, "name", "unknown") for v in violations]
                 span.set_attribute("opensentinel.policy.violations", self._safe_json(violation_names))
 
                 # Add each violation as an event
                 for violation in violations:
+                    if isinstance(violation, dict):
+                        v_name = violation.get("name", "unknown")
+                        v_severity = violation.get("severity", "unknown")
+                        v_message = violation.get("message", "")
+                    else:
+                        v_name = getattr(violation, "name", "unknown")
+                        v_severity = getattr(violation, "severity", "unknown")
+                        v_message = getattr(violation, "message", "")
                     span.add_event(
-                        f"violation:{getattr(violation, 'name', 'unknown')}",
+                        f"violation:{v_name}",
                         attributes={
-                            "severity": getattr(violation, "severity", "unknown"),
-                            "message": getattr(violation, "message", ""),
+                            "severity": v_severity,
+                            "message": v_message,
                         }
                     )
             

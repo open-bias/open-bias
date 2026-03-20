@@ -26,14 +26,15 @@ def compute_metrics(results: list[EvalResult]) -> EvalMetrics:
         for turn in result.turns:
             metrics.total_turns += 1
 
-            decision_name = turn.response_eval.decision.value
-            metrics.decisions[decision_name] = metrics.decisions.get(decision_name, 0) + 1
+            for eval_result in (turn.request_eval, turn.response_eval):
+                decision_name = eval_result.decision.value
+                metrics.decisions[decision_name] = metrics.decisions.get(decision_name, 0) + 1
 
-            metrics.violation_count += len(
-                turn.response_eval.metadata.get("violations", [])
-            )
+                metrics.violation_count += len(
+                    eval_result.metadata.get("violations", [])
+                )
 
-            if turn.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK):
-                metrics.intervention_count += 1
+                if eval_result.decision in (Decision.INTERVENE, Decision.BLOCK):
+                    metrics.intervention_count += 1
 
     return metrics
