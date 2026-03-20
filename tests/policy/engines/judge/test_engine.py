@@ -133,9 +133,9 @@ class TestInitialization:
 
 class TestEvaluateRequest:
     @pytest.mark.asyncio
-    async def test_allow_when_uninitialized(self, engine, sample_request):
-        result = await engine.evaluate_request("s1", sample_request)
-        assert result.decision == Decision.ALLOW
+    async def test_raises_when_uninitialized(self, engine, sample_request):
+        with pytest.raises(RuntimeError, match="not initialized"):
+            await engine.evaluate_request("s1", sample_request)
 
     @pytest.mark.asyncio
     async def test_allow_by_default(self, engine, judge_config, sample_request):
@@ -147,9 +147,9 @@ class TestEvaluateRequest:
 
 class TestEvaluateResponse:
     @pytest.mark.asyncio
-    async def test_allow_when_uninitialized(self, engine, sample_request, sample_response):
-        result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == Decision.ALLOW
+    async def test_raises_when_uninitialized(self, engine, sample_request, sample_response):
+        with pytest.raises(RuntimeError, match="not initialized"):
+            await engine.evaluate_response("s1", sample_response, sample_request)
 
     @pytest.mark.asyncio
     async def test_passing_response(self, engine, judge_config, sample_request, sample_response):

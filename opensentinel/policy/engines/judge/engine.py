@@ -162,6 +162,7 @@ class JudgePolicyEngine(PolicyEngine):
         """Set an optional SentinelTracer for OTEL tracing."""
         self._tracer = tracer
 
+    @require_initialized
     async def evaluate_request(
         self,
         session_id: str,
@@ -173,15 +174,13 @@ class JudgePolicyEngine(PolicyEngine):
         Default: ALLOW (most judgment happens post-call).
         If pre_call_enabled, run safety screening.
         """
-        if not self._initialized:
-            return EngineResult(decision=Decision.ALLOW)
-
         # Optional pre-call screening
         if self._pre_call_enabled:
             return await self._evaluate_pre_call(session_id, request_data, context)
 
         return EngineResult(decision=Decision.ALLOW)
 
+    @require_initialized
     async def evaluate_response(
         self,
         session_id: str,
@@ -197,9 +196,6 @@ class JudgePolicyEngine(PolicyEngine):
         3. Merge verdicts (most restrictive action wins)
         4. Map to EngineResult
         """
-        if not self._initialized:
-            return EngineResult(decision=Decision.ALLOW)
-
         session = self._get_or_create_session(session_id)
         response_content = extract_response_content(response_data)
         tool_calls = extract_tool_calls(response_data)
