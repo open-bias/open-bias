@@ -328,7 +328,7 @@ class JudgeEvaluator:
                 "pairwise": True,
                 "overall_winner": raw.get("overall_winner", "tie"),
                 "position_mapping": mapping,
-                "criterion_failures": failed_criteria,
+                **({"criterion_failures": failed_criteria} if failed_criteria else {}),
             },
         )
 
@@ -392,7 +392,7 @@ class JudgeEvaluator:
             scope=EvaluationScope.TURN,
             metadata={
                 "reference_based": True,
-                "criterion_failures": failed_criteria,
+                **({"criterion_failures": failed_criteria} if failed_criteria else {}),
             },
         )
 
