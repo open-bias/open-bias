@@ -230,6 +230,7 @@ class Interceptor:
         3. Return result with optional modified_data for response modification
         """
         self._sessions.touch(session_id)
+        self._sessions.evict_stale()
 
         all_metadata: dict[str, Any] = {"results": [], "interventions": []}
         modified_data: dict[str, Any] | None = None
