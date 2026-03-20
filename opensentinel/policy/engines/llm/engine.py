@@ -160,6 +160,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         self._initialized = True
         logger.info(f"LLMPolicyEngine initialized: {self.name}")
 
+    @require_initialized
     async def evaluate_request(
         self,
         session_id: str,
@@ -169,6 +170,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         """Evaluate incoming request — pass-through, evaluation happens post-call."""
         return EngineResult(decision=Decision.ALLOW)
 
+    @require_initialized
     async def evaluate_response(
         self,
         session_id: str,
@@ -177,9 +179,6 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         context: Optional[Dict[str, Any]] = None,
     ) -> EngineResult:
         """Evaluate LLM response — classify, detect drift, check constraints."""
-        if not self._initialized:
-            return EngineResult(decision=Decision.ALLOW)
-
         session = self._get_or_create_session(session_id)
 
         # Extract content from response
