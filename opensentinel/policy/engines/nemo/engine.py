@@ -82,7 +82,6 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         self._initialized = False
         self._fail_closed = False
         self._enabled_rails = ["input", "output"]
-        self._session_contexts: dict[str, dict[str, Any]] = {}
 
     @property
     def name(self) -> str:
@@ -391,12 +390,10 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
 
     async def get_session_state(self, session_id: str) -> dict[str, Any] | None:
         """Get current session state for debugging/tracing."""
-        return self._session_contexts.get(session_id)
+        return None
 
     async def reset_session(self, session_id: str) -> None:
         """Reset session state."""
-        if session_id in self._session_contexts:
-            del self._session_contexts[session_id]
         logger.debug(f"NeMo session {session_id} reset")
 
     def get_compiler(
@@ -420,6 +417,5 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         """Cleanup resources."""
         self._rails = None
         self._config = None
-        self._session_contexts.clear()
         self._initialized = False
         logger.info("NemoGuardrailsPolicyEngine shutdown")
