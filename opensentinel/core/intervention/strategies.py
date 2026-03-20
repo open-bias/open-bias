@@ -34,7 +34,7 @@ class StrategyType(Enum):
 
 
 @dataclass
-class InterventionConfig:
+class StrategyConfig:
     """Configuration for an intervention."""
 
     strategy_type: StrategyType
@@ -55,7 +55,7 @@ class InterventionStrategy(ABC):
     def apply(
         self,
         data: dict,
-        config: InterventionConfig,
+        config: StrategyConfig,
         context: dict[str, Any],
     ) -> dict:
         """
@@ -144,7 +144,7 @@ class SystemPromptAppendStrategy(InterventionStrategy):
     def apply(
         self,
         data: dict,
-        config: InterventionConfig,
+        config: StrategyConfig,
         context: dict[str, Any],
     ) -> dict:
         data = dict(data)
@@ -189,7 +189,7 @@ class UserMessageInjectStrategy(InterventionStrategy):
     def apply(
         self,
         data: dict,
-        config: InterventionConfig,
+        config: StrategyConfig,
         context: dict[str, Any],
     ) -> dict:
         data = dict(data)

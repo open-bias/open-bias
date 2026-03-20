@@ -13,7 +13,7 @@ are detected:
 
 from opensentinel.core.intervention.strategies import (
     StrategyType,
-    InterventionConfig,
+    StrategyConfig,
     InterventionStrategy,
     SystemPromptAppendStrategy,
     UserMessageInjectStrategy,
@@ -23,7 +23,7 @@ from opensentinel.core.intervention.strategies import (
 
 __all__ = [
     "StrategyType",
-    "InterventionConfig",
+    "StrategyConfig",
     "InterventionStrategy",
     "SystemPromptAppendStrategy",
     "UserMessageInjectStrategy",

@@ -4,7 +4,7 @@ import pytest
 
 from opensentinel.core.intervention.strategies import (
     StrategyType,
-    InterventionConfig,
+    StrategyConfig,
     SystemPromptAppendStrategy,
     UserMessageInjectStrategy,
     ResponseModificationStrategy,
@@ -30,7 +30,7 @@ class TestInterventionStrategies:
     @pytest.fixture
     def config(self):
         """Sample intervention config."""
-        return InterventionConfig(
+        return StrategyConfig(
             strategy_type=StrategyType.SYSTEM_PROMPT_APPEND,
             message_template="Please verify identity first. Current state: {current_state}",
         )
@@ -67,7 +67,7 @@ class TestInterventionStrategies:
 
     def test_user_message_inject(self, sample_data):
         """Test user message inject strategy."""
-        config = InterventionConfig(
+        config = StrategyConfig(
             strategy_type=StrategyType.USER_MESSAGE_INJECT,
             message_template="Please check this first.",
         )
@@ -256,7 +256,7 @@ class TestInterventionHandler:
         )
 
     def test_get_config_for_violation(self, handler, violation):
-        """Test building InterventionConfig from a violation."""
+        """Test building StrategyConfig from a violation."""
         config = handler.get_config_for_violation(violation)
 
         assert config is not None
