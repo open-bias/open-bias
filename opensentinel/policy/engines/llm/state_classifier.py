@@ -8,7 +8,6 @@ detection.
 
 import logging
 from collections import deque
-from typing import Dict, List
 
 from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
 from opensentinel.policy.engines.llm.llm_client import LLMClient, LLMClientError
@@ -174,7 +173,7 @@ class LLMStateClassifier:
             return "(none)"
         return ", ".join(tool_calls)
 
-    def _format_conversation(self, turn_window: list[Dict]) -> str:
+    def _format_conversation(self, turn_window: list[dict]) -> str:
         """Format recent conversation for the prompt."""
         if not turn_window:
             return "(no previous turns)"

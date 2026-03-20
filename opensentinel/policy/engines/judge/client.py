@@ -7,7 +7,7 @@ Supports single-model and parallel multi-model calls.
 
 import asyncio
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from opensentinel.policy.engines.llm.llm_client import LLMClient, LLMClientError
 

@@ -5,7 +5,7 @@ Extends PolicyEngine with state classification capabilities for engines
 that track state across requests (FSM, LLM).
 """
 
-from typing import Any, List
+from typing import Any
 from dataclasses import dataclass, field
 from abc import abstractmethod
 

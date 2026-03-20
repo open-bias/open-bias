@@ -6,13 +6,12 @@ in LLM-as-a-Judge pairwise comparisons.
 """
 
 import random
-from typing import Tuple, Dict, Any
 
 
 def randomize_positions(
     response_a: str,
     response_b: str,
-) -> Tuple[str, str, Dict[str, str]]:
+) -> tuple[str, str, dict[str, str]]:
     """Randomly swap response positions to mitigate position bias.
 
     Args:
@@ -32,7 +31,7 @@ def randomize_positions(
         return response_a, response_b, {"first": "a", "second": "b"}
 
 
-def demap_winner(winner: str, mapping: Dict[str, str]) -> str:
+def demap_winner(winner: str, mapping: dict[str, str]) -> str:
     """Map the positional winner back to original labels.
 
     Args:
@@ -56,7 +55,7 @@ def demap_winner(winner: str, mapping: Dict[str, str]) -> str:
 
 def demap_pairwise_scores(
     scores: list,
-    mapping: Dict[str, str],
+    mapping: dict[str, str],
 ) -> list:
     """De-map all pairwise scores back to original positions.
 

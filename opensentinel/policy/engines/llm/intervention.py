@@ -7,7 +7,7 @@ template string; strategy selection is handled by the interceptor layer.
 """
 
 import logging
-from typing import List
+
 
 from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
 from opensentinel.policy.engines.llm.models import (

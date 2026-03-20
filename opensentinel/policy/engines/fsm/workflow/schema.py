@@ -45,7 +45,7 @@ constraints:
 ```
 """
 
-from typing import Optional, Any, Literal
+from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 from enum import Enum
 

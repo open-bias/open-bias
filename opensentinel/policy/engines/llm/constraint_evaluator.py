@@ -6,7 +6,7 @@ deterministically, with evidence memory for context accumulation.
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from opensentinel.policy.engines.fsm.workflow.schema import (
     Constraint,
@@ -211,7 +211,7 @@ class LLMConstraintEvaluator:
             lines.append("")
         return "\n".join(lines)
 
-    def _format_conversation(self, turn_window: list[Dict]) -> str:
+    def _format_conversation(self, turn_window: list[dict]) -> str:
         """Format recent conversation for the prompt."""
         if not turn_window:
             return "(no previous turns)"
