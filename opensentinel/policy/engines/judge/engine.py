@@ -74,7 +74,7 @@ class JudgePolicyEngine(PolicyEngine):
         self._pre_call_enabled: bool = False
         self._pre_call_rubric: str = "safety"
         self._conversation_eval_interval: int = 5
-        self._fail_action: VerdictAction = VerdictAction.BLOCK
+        self._fail_action: VerdictAction = VerdictAction.INTERVENE
 
     @property
     def name(self) -> str:
@@ -124,7 +124,7 @@ class JudgePolicyEngine(PolicyEngine):
         )
 
         # Config
-        self._fail_action = VerdictAction(config.get("fail_action", "block"))
+        self._fail_action = VerdictAction(config.get("fail_action", "intervene"))
         self._default_rubric = config.get("default_rubric", "agent_behavior")
         self._conversation_rubric = config.get("conversation_rubric", "conversation_policy")
         self._pre_call_enabled = config.get("pre_call_enabled", False)
@@ -326,7 +326,7 @@ class JudgePolicyEngine(PolicyEngine):
         # Check fail_action
         from opensentinel.policy.engines.judge.compiler import VALID_ACTIONS
 
-        fail_action = config.get("fail_action", "block")
+        fail_action = config.get("fail_action", "intervene")
         if fail_action not in VALID_ACTIONS:
             errors.append(
                 f"Invalid fail_action '{fail_action}'. Must be one of: {', '.join(sorted(VALID_ACTIONS))}"
@@ -508,7 +508,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         # Run when a turn verdict is intervene or worse
         for v in turn_verdicts:
-            if v.action in (VerdictAction.INTERVENE, VerdictAction.BLOCK):
+            if v.action != VerdictAction.PASS:
                 return True
 
         return False
@@ -577,8 +577,8 @@ class JudgePolicyEngine(PolicyEngine):
         # Check for escalation conditions
         escalation_info = self._check_escalation(worst_verdict, session)
 
-        if escalation_info["should_escalate"] and decision != Decision.BLOCK:
-            decision = Decision.BLOCK
+        if escalation_info["should_escalate"] and decision != Decision.INTERVENE:
+            decision = Decision.INTERVENE
 
         # message = guidance for INTERVENE, reason for BLOCK
         message: str | None = None

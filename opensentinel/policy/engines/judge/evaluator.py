@@ -73,7 +73,7 @@ class JudgeEvaluator:
         tool_calls: list[dict[str, Any]] | None = None,
         session_context: JudgeSessionContext | None = None,
         tool_definitions: dict[str, dict[str, Any]] | None = None,
-        fail_action: VerdictAction = VerdictAction.BLOCK,
+        fail_action: VerdictAction = VerdictAction.INTERVENE,
     ) -> JudgeVerdict:
         """Evaluate a single turn (latest assistant response).
 
@@ -171,7 +171,7 @@ class JudgeEvaluator:
         metadata: dict[str, Any] | None = None,
         session_id: str | None = None,
         session_context: JudgeSessionContext | None = None,
-        fail_action: VerdictAction = VerdictAction.BLOCK,
+        fail_action: VerdictAction = VerdictAction.INTERVENE,
     ) -> JudgeVerdict:
         """Evaluate the entire conversation trajectory.
 
@@ -258,7 +258,7 @@ class JudgeEvaluator:
         conversation: list[dict[str, Any]],
         metadata: dict[str, Any] | None = None,
         session_id: str | None = None,
-        fail_action: VerdictAction = VerdictAction.BLOCK,
+        fail_action: VerdictAction = VerdictAction.INTERVENE,
     ) -> JudgeVerdict:
         """Compare two responses using pairwise evaluation.
 
@@ -342,7 +342,7 @@ class JudgeEvaluator:
         metadata: dict[str, Any] | None = None,
         session_id: str | None = None,
         session_context: JudgeSessionContext | None = None,
-        fail_action: VerdictAction = VerdictAction.BLOCK,
+        fail_action: VerdictAction = VerdictAction.INTERVENE,
     ) -> JudgeVerdict:
         """Evaluate a response against a reference answer."""
         criteria_block = format_criteria_block(rubric.criteria)
@@ -423,7 +423,7 @@ class JudgeEvaluator:
             failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
             composite = self._compute_composite(scores, rubric.criteria)
             action = self._map_action(composite, rubric, fail_action)
-            if failed_criteria and action != VerdictAction.BLOCK:
+            if failed_criteria and action == VerdictAction.PASS:
                 action = fail_action
         return action, composite, failed_criteria
 

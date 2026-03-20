@@ -169,12 +169,12 @@ class JudgeSessionContext:
         self.turn_count += 1
         self.last_updated_at = datetime.now(tz=timezone.utc)
 
-        if verdict.action in (VerdictAction.INTERVENE, VerdictAction.BLOCK):
+        if verdict.action != VerdictAction.PASS:
             action_key = verdict.action.value
             self.violation_counts[action_key] = self.violation_counts.get(action_key, 0) + 1
 
         # Track intervention criteria for escalation
-        if verdict.action in (VerdictAction.INTERVENE, VerdictAction.BLOCK):
+        if verdict.action != VerdictAction.PASS:
             self.intervention_count += 1
             failed = verdict.metadata.get("criterion_failures", [])
             if failed:
