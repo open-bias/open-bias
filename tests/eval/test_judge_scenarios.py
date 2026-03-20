@@ -52,6 +52,7 @@ async def engine():
         {
             "inline_policy": INLINE_POLICY,
             "conversation_eval_interval": 999,
+            "models": [{"model": "mock-model"}],
         },
     )
     yield eng
@@ -203,6 +204,7 @@ async def test_recovery_after_intervention(runner):
             "inline_policy": INLINE_POLICY,
             "conversation_eval_interval": 999,
             "conversation_rubric": None,
+            "models": [{"model": "mock-model"}],
         },
     )
 

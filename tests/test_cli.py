@@ -105,6 +105,7 @@ class TestValidateCommand:
             assert result.exit_code == 0
             assert "Valid Configuration" in combined
 
+    @patch.dict("os.environ", {}, clear=True)
     def test_validate_judge_config_no_model(self):
         """validate with no model should fail with clear error."""
         runner = CliRunner()
