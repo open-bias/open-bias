@@ -353,7 +353,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
 
         # judge.* -> policy.engine.config.*
         judge_cfg = data.get("judge", {})
-        if isinstance(judge_cfg, dict) and judge_cfg:
+        if engine_type == "judge" and isinstance(judge_cfg, dict) and judge_cfg:
             engine_config = (
                 result.setdefault("policy", {})
                 .setdefault("engine", {})
@@ -373,7 +373,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
 
         # llm.* -> policy.engine.config.*
         llm_cfg = data.get("llm", {})
-        if isinstance(llm_cfg, dict) and llm_cfg:
+        if engine_type == "llm" and isinstance(llm_cfg, dict) and llm_cfg:
             engine_config = (
                 result.setdefault("policy", {})
                 .setdefault("engine", {})
@@ -386,7 +386,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
 
         # nemo.* -> policy.engine.config.*
         nemo_cfg = data.get("nemo", {})
-        if isinstance(nemo_cfg, dict) and nemo_cfg:
+        if engine_type == "nemo" and isinstance(nemo_cfg, dict) and nemo_cfg:
             engine_config = (
                 result.setdefault("policy", {})
                 .setdefault("engine", {})
@@ -397,9 +397,9 @@ class YamlConfigSource(PydanticBaseSettingsSource):
                     v = self._resolve_path(v)
                 engine_config[k] = v
 
-        # fsm.* -> policy.engine.config.* (future extensibility)
+        # fsm.* -> policy.engine.config.*
         fsm_cfg = data.get("fsm", {})
-        if isinstance(fsm_cfg, dict) and fsm_cfg:
+        if engine_type == "fsm" and isinstance(fsm_cfg, dict) and fsm_cfg:
             engine_config = (
                 result.setdefault("policy", {})
                 .setdefault("engine", {})
