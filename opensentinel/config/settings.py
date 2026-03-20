@@ -163,6 +163,11 @@ class PolicyConfig(BaseModel):
         "system_prompt_append", "user_message_inject"
     ] = "user_message_inject"
 
+    # What happens when a policy violation is detected.
+    # "intervene": modify the next request to steer the agent (default)
+    # "block": reject the request outright
+    fail_action: Literal["intervene", "block"] = "intervene"
+
     # Fallback behavior when engine evaluation fails
     # True = allow request on error (fail open)
     # False = deny request on error (fail closed)
@@ -270,6 +275,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             "tracing",
             "eval",
             "post_call_mode",
+            "fail_action",
             # Engine-specific sections are handled below
             "judge",
             "llm",
@@ -327,6 +333,10 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             result.setdefault("policy", {})["post_call_mode"] = data[
                 "post_call_mode"
             ]
+
+        # fail_action -> policy.fail_action
+        if "fail_action" in data:
+            result.setdefault("policy", {})["fail_action"] = data["fail_action"]
 
         # port -> proxy.port
         if "port" in data:

@@ -8,7 +8,7 @@ handles async checker task management, and applies interventions.
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from opensentinel.core.intervention.strategies import (
     StrategyType,
@@ -56,6 +56,7 @@ class Interceptor:
         self,
         checkers: list[PolicyEngineChecker],
         default_strategy: str = "user_message_inject",
+        fail_action: Literal["intervene", "block"] = "intervene",
         session_ttl: int | None = None,
         max_sessions: int | None = None,
         max_async_tasks_per_session: int | None = None,
@@ -78,6 +79,7 @@ class Interceptor:
 
         # Intervention strategy
         self._default_strategy = default_strategy
+        self._fail_action = fail_action
 
         # Session memory management
         self._max_async_tasks = (
@@ -128,11 +130,12 @@ class Interceptor:
         pending_results = self._collect_completed_async(session_id)
         for pending in pending_results:
             result = pending.result
+            decision = self._effective_decision(result.decision)
             all_metadata["results"].append(
-                {"checker": pending.checker_name, "decision": result.decision.value}
+                {"checker": pending.checker_name, "decision": decision.value}
             )
 
-            if result.decision == Decision.BLOCK:
+            if decision == Decision.BLOCK:
                 logger.warning(
                     f"Request blocked by async checker '{pending.checker_name}': "
                     f"{result.message}"
@@ -144,7 +147,7 @@ class Interceptor:
                     metadata=all_metadata,
                 )
 
-            if result.decision == Decision.INTERVENE:
+            if decision == Decision.INTERVENE:
                 if result.modified_messages is not None:
                     logger.info(
                         f"Applying async message replacement from '{pending.checker_name}'"
@@ -172,11 +175,12 @@ class Interceptor:
                     request_data=modified_data,
                     context={"user_request_id": user_request_id},
                 )
+                decision = self._effective_decision(result.decision)
                 all_metadata["results"].append(
-                    {"checker": checker.name, "decision": result.decision.value}
+                    {"checker": checker.name, "decision": decision.value}
                 )
 
-                if result.decision == Decision.BLOCK:
+                if decision == Decision.BLOCK:
                     logger.warning(
                         f"Request blocked by sync checker '{checker.name}': "
                         f"{result.message}"
@@ -187,7 +191,7 @@ class Interceptor:
                         metadata=all_metadata,
                     )
 
-                if result.decision == Decision.INTERVENE:
+                if decision == Decision.INTERVENE:
                     if result.modified_messages is not None:
                         logger.info(
                             f"Applying sync message replacement from '{checker.name}'"
@@ -251,11 +255,12 @@ class Interceptor:
                     response_data=response_data,
                     context={"user_request_id": user_request_id},
                 )
+                decision = self._effective_decision(result.decision)
                 all_metadata["results"].append(
-                    {"checker": checker.name, "decision": result.decision.value}
+                    {"checker": checker.name, "decision": decision.value}
                 )
 
-                if result.decision == Decision.BLOCK:
+                if decision == Decision.BLOCK:
                     logger.warning(
                         f"Response blocked by sync checker '{checker.name}': "
                         f"{result.message}"
@@ -266,7 +271,7 @@ class Interceptor:
                         metadata=all_metadata,
                     )
 
-                if result.decision == Decision.INTERVENE:
+                if decision == Decision.INTERVENE:
                     logger.info(
                         f"Sync POST_CALL checker '{checker.name}' returned INTERVENE: "
                         f"{result.message}"
@@ -308,6 +313,12 @@ class Interceptor:
             modified_data=modified_data,
             metadata=all_metadata,
         )
+
+    def _effective_decision(self, decision: Decision) -> Decision:
+        """Upgrade INTERVENE → BLOCK when fail_action is 'block'."""
+        if decision == Decision.INTERVENE and self._fail_action == "block":
+            return Decision.BLOCK
+        return decision
 
     def _collect_completed_async(self, session_id: str) -> list[_PendingResult]:
         """Collect results from completed async tasks for a session.
