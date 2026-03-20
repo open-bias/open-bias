@@ -7,7 +7,6 @@ for common evaluation scenarios.
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional, List
 
 from opensentinel.policy.engines.judge.models import (
     Rubric,
@@ -28,7 +27,7 @@ class RubricRegistry:
     """
 
     def __init__(self) -> None:
-        self._rubrics: Dict[str, Rubric] = dict(_BUILTIN_RUBRICS)
+        self._rubrics: dict[str, Rubric] = dict(_BUILTIN_RUBRICS)
 
     def register(self, rubric: Rubric) -> None:
         """Register a rubric."""
@@ -37,11 +36,11 @@ class RubricRegistry:
         self._rubrics[rubric.name] = rubric
         logger.debug(f"Registered rubric: {rubric.name}")
 
-    def get(self, name: str) -> Optional[Rubric]:
+    def get(self, name: str) -> Rubric | None:
         """Get a rubric by name."""
         return self._rubrics.get(name)
 
-    def list_rubrics(self) -> List[str]:
+    def list_rubrics(self) -> list[str]:
         """List all registered rubric names."""
         return list(self._rubrics.keys())
 
@@ -110,7 +109,7 @@ def _slugify_rule(index: int, rule: str) -> str:
     return f"rule_{index}_{'_'.join(words)}"
 
 
-def create_rules_rubric(rules: List[str], name: str = "inline_policy") -> Rubric:
+def create_rules_rubric(rules: list[str], name: str = "inline_policy") -> Rubric:
     """Convert a list of plain-text policy rules into a Rubric.
 
     Creates one binary criterion per rule so that the judge evaluates
@@ -153,7 +152,7 @@ def create_rules_rubric(rules: List[str], name: str = "inline_policy") -> Rubric
 
 # Module-level dict populated once at import time. Each RubricRegistry instance
 # copies this on construction so built-ins are always available without mutation.
-_BUILTIN_RUBRICS: Dict[str, Rubric] = {}
+_BUILTIN_RUBRICS: dict[str, Rubric] = {}
 
 
 def _register_builtins() -> None:

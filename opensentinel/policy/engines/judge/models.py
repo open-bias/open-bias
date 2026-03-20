@@ -8,7 +8,7 @@ for rubric-based evaluation, scoring, and verdict generation.
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 
 class EvaluationType(Enum):
@@ -57,8 +57,8 @@ class RubricCriterion:
     description: str
     scale: ScoreScale = ScoreScale.LIKERT_5
     weight: float = 1.0
-    fail_threshold: Optional[float] = None
-    score_descriptions: Dict[int, str] = field(default_factory=dict)
+    fail_threshold: float | None = None
+    score_descriptions: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -66,11 +66,11 @@ class Rubric:
     """Collection of criteria for evaluation."""
     name: str
     description: str
-    criteria: List[RubricCriterion]
+    criteria: list[RubricCriterion]
     evaluation_type: EvaluationType = EvaluationType.POINTWISE
     scope: EvaluationScope = EvaluationScope.TURN
     pass_threshold: float = 0.6
-    prompt_overrides: Dict[str, str] = field(default_factory=dict)
+    prompt_overrides: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -80,9 +80,9 @@ class JudgeScore:
     score: int
     max_score: int
     reasoning: str
-    evidence: List[str] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
     confidence: float = 1.0
-    corrective_actions: Optional[str] = None
+    corrective_actions: str | None = None
 
     @property
     def normalized(self) -> float:
@@ -99,7 +99,7 @@ class JudgeScore:
 @dataclass
 class JudgeVerdict:
     """Full verdict from a single judge evaluation."""
-    scores: List[JudgeScore]
+    scores: list[JudgeScore]
     composite_score: float  # 0-1 normalized weighted average
     action: VerdictAction
     summary: str
@@ -107,8 +107,8 @@ class JudgeVerdict:
     latency_ms: float = 0.0
     token_usage: int = 0
     scope: EvaluationScope = EvaluationScope.TURN
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    def to_dict(self) -> Dict[str, Any]:
+    metadata: dict[str, Any] = field(default_factory=dict)
+    def to_dict(self) -> dict[str, Any]:
         return {
             "scores": [
                 {
@@ -138,28 +138,28 @@ class EvaluationRequest:
     """Input for a judge evaluation."""
     session_id: str
     response_content: str
-    full_conversation: List[Dict[str, Any]]
-    rubric_name: Optional[str] = None
-    candidate_b: Optional[str] = None
-    reference_answer: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    full_conversation: list[dict[str, Any]]
+    rubric_name: str | None = None
+    candidate_b: str | None = None
+    reference_answer: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class JudgeSessionContext:
     """Per-session state for the judge engine."""
     session_id: str
-    evaluation_history: List[JudgeVerdict] = field(default_factory=list)
-    score_trend: List[float] = field(default_factory=list)
-    violation_counts: Dict[str, int] = field(default_factory=dict)
+    evaluation_history: list[JudgeVerdict] = field(default_factory=list)
+    score_trend: list[float] = field(default_factory=list)
+    violation_counts: dict[str, int] = field(default_factory=dict)
     turn_count: int = 0
     total_tokens_used: int = 0
     created_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
     last_updated_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
     # Intervention tracking for escalation
     intervention_count: int = 0
-    last_intervention_criteria: List[str] = field(default_factory=list)
-    criterion_intervention_counts: Dict[str, int] = field(default_factory=dict)
+    last_intervention_criteria: list[str] = field(default_factory=list)
+    criterion_intervention_counts: dict[str, int] = field(default_factory=dict)
 
     def record_verdict(self, verdict: JudgeVerdict) -> None:
         """Record a verdict and update trends."""
@@ -184,7 +184,7 @@ class JudgeSessionContext:
                         self.criterion_intervention_counts.get(criterion, 0) + 1
                     )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "session_id": self.session_id,
             "turn_count": self.turn_count,

@@ -19,7 +19,7 @@ Example:
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -178,7 +178,7 @@ class JudgeCompiler(LLMPolicyCompiler):
     def _build_compilation_prompt(
         self,
         natural_language: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> str:
         """
         Build the prompt for judge rubric compilation.
@@ -220,7 +220,7 @@ class JudgeCompiler(LLMPolicyCompiler):
 
     def _parse_compilation_response(
         self,
-        response: Dict[str, Any],
+        response: dict[str, Any],
         natural_language: str,
     ) -> CompilationResult:
         """
@@ -233,8 +233,8 @@ class JudgeCompiler(LLMPolicyCompiler):
         Returns:
             CompilationResult with rubric config
         """
-        warnings: List[str] = []
-        errors: List[str] = []
+        warnings: list[str] = []
+        errors: list[str] = []
 
         try:
             rubrics_data = response.get("rubrics", [])
@@ -345,7 +345,7 @@ class JudgeCompiler(LLMPolicyCompiler):
             errors.append(f"Parse error: {type(e).__name__}: {e}")
             return CompilationResult.failure(errors, warnings)
 
-    def validate_result(self, result: CompilationResult) -> List[str]:
+    def validate_result(self, result: CompilationResult) -> list[str]:
         """
         Validate the compiled rubric configuration.
 

@@ -8,7 +8,7 @@ into structured verdicts.
 
 import logging
 import time
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 from opensentinel.policy.engines.judge.models import (
     Rubric,
@@ -66,13 +66,13 @@ class JudgeEvaluator:
         model_name: str,
         rubric: Rubric,
         response_content: str,
-        conversation: List[Dict[str, Any]],
-        reference: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        session_id: Optional[str] = None,
-        tool_calls: Optional[List[Dict[str, Any]]] = None,
-        session_context: Optional[JudgeSessionContext] = None,
-        tool_definitions: Optional[Dict[str, Dict[str, Any]]] = None,
+        conversation: list[dict[str, Any]],
+        reference: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        session_id: str | None = None,
+        tool_calls: list[dict[str, Any]] | None = None,
+        session_context: JudgeSessionContext | None = None,
+        tool_definitions: dict[str, dict[str, Any]] | None = None,
         fail_action: VerdictAction = VerdictAction.BLOCK,
     ) -> JudgeVerdict:
         """Evaluate a single turn (latest assistant response).
@@ -167,10 +167,10 @@ class JudgeEvaluator:
         self,
         model_name: str,
         rubric: Rubric,
-        full_conversation: List[Dict[str, Any]],
-        metadata: Optional[Dict[str, Any]] = None,
-        session_id: Optional[str] = None,
-        session_context: Optional[JudgeSessionContext] = None,
+        full_conversation: list[dict[str, Any]],
+        metadata: dict[str, Any] | None = None,
+        session_id: str | None = None,
+        session_context: JudgeSessionContext | None = None,
         fail_action: VerdictAction = VerdictAction.BLOCK,
     ) -> JudgeVerdict:
         """Evaluate the entire conversation trajectory.
@@ -255,9 +255,9 @@ class JudgeEvaluator:
         rubric: Rubric,
         response_a: str,
         response_b: str,
-        conversation: List[Dict[str, Any]],
-        metadata: Optional[Dict[str, Any]] = None,
-        session_id: Optional[str] = None,
+        conversation: list[dict[str, Any]],
+        metadata: dict[str, Any] | None = None,
+        session_id: str | None = None,
         fail_action: VerdictAction = VerdictAction.BLOCK,
     ) -> JudgeVerdict:
         """Compare two responses using pairwise evaluation.
@@ -337,11 +337,11 @@ class JudgeEvaluator:
         model_name: str,
         rubric: Rubric,
         response_content: str,
-        conversation: List[Dict[str, Any]],
+        conversation: list[dict[str, Any]],
         reference: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        session_id: Optional[str] = None,
-        session_context: Optional[JudgeSessionContext] = None,
+        metadata: dict[str, Any] | None = None,
+        session_id: str | None = None,
+        session_context: JudgeSessionContext | None = None,
         fail_action: VerdictAction = VerdictAction.BLOCK,
     ) -> JudgeVerdict:
         """Evaluate a response against a reference answer."""
@@ -402,10 +402,10 @@ class JudgeEvaluator:
 
     def _resolve_verdict(
         self,
-        scores: List[JudgeScore],
+        scores: list[JudgeScore],
         rubric: Rubric,
         fail_action: VerdictAction,
-    ) -> tuple[VerdictAction, float, List[str]]:
+    ) -> tuple[VerdictAction, float, list[str]]:
         """Resolve action, composite score, and failed criteria from scores.
 
         Uses a fast binary path when all criteria are binary (0/1),
@@ -428,7 +428,7 @@ class JudgeEvaluator:
         return action, composite, failed_criteria
 
     @staticmethod
-    def _is_all_binary(criteria: List[RubricCriterion]) -> bool:
+    def _is_all_binary(criteria: list[RubricCriterion]) -> bool:
         """Return True if every criterion uses the BINARY scale."""
         return all(c.scale == ScoreScale.BINARY for c in criteria)
 
@@ -438,9 +438,9 @@ class JudgeEvaluator:
 
     def _parse_pointwise_scores(
         self,
-        raw: Dict[str, Any],
-        criteria: List[RubricCriterion],
-    ) -> List[JudgeScore]:
+        raw: dict[str, Any],
+        criteria: list[RubricCriterion],
+    ) -> list[JudgeScore]:
         """Parse pointwise scores from raw LLM JSON response."""
         raw_scores = raw.get("scores", [])
         criteria_map = {c.name: c for c in criteria}
@@ -484,9 +484,9 @@ class JudgeEvaluator:
 
     def _parse_pairwise_scores(
         self,
-        demapped_scores: List[Dict[str, Any]],
-        criteria: List[RubricCriterion],
-    ) -> List[JudgeScore]:
+        demapped_scores: list[dict[str, Any]],
+        criteria: list[RubricCriterion],
+    ) -> list[JudgeScore]:
         """Parse pairwise scores into JudgeScore objects.
 
         Uses score_a as the primary score (evaluating response A).
@@ -518,8 +518,8 @@ class JudgeEvaluator:
 
     def _compute_composite(
         self,
-        scores: List[JudgeScore],
-        criteria: List[RubricCriterion],
+        scores: list[JudgeScore],
+        criteria: list[RubricCriterion],
     ) -> float:
         """Compute weighted normalized composite score (0-1).
 
@@ -557,9 +557,9 @@ class JudgeEvaluator:
 
     def _check_criterion_failures(
         self,
-        scores: List[JudgeScore],
-        criteria: List[RubricCriterion],
-    ) -> List[str]:
+        scores: list[JudgeScore],
+        criteria: list[RubricCriterion],
+    ) -> list[str]:
         """Check if any individual criteria fall below their fail thresholds.
 
         Returns list of criterion names that failed.
@@ -582,8 +582,8 @@ class JudgeEvaluator:
 
     def _validate_judge_response(
         self,
-        raw: Dict[str, Any],
-        criteria: List[RubricCriterion],
+        raw: dict[str, Any],
+        criteria: list[RubricCriterion],
     ) -> None:
         """Validate the structure of the judge LLM response."""
         if "scores" not in raw:

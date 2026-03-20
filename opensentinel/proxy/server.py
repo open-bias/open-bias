@@ -19,7 +19,7 @@ import logging
 import sys
 import tempfile
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any
 
 import yaml
 import litellm
@@ -73,9 +73,9 @@ class SentinelProxy:
         ```
     """
 
-    def __init__(self, settings: Optional[SentinelSettings] = None):
+    def __init__(self, settings: SentinelSettings | None = None):
         self.settings = settings or SentinelSettings()
-        self.router: Optional[Router] = None
+        self.router: Router | None = None
         self._hooks_registered = False
         self._callback = None  # Store reference to callback for shutdown
 
@@ -246,7 +246,7 @@ class SentinelProxy:
         return await self.router.acompletion(**kwargs)
 
 
-def start_proxy(settings: Optional[SentinelSettings] = None) -> None:
+def start_proxy(settings: SentinelSettings | None = None) -> None:
     """
     Start the Open Sentinel proxy server (blocking).
 

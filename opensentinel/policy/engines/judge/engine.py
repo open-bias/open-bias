@@ -7,7 +7,7 @@ policy engine infrastructure via PolicyEngine ABC.
 """
 
 import logging
-from typing import Dict, Any, Optional, List, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from opensentinel.policy.compiler.protocol import PolicyCompiler
@@ -38,7 +38,7 @@ from opensentinel.policy.engines.judge.rubrics import (
 logger = logging.getLogger(__name__)
 
 # Mapping from VerdictAction to Decision
-_VERDICT_MAP: Dict[VerdictAction, Decision] = {
+_VERDICT_MAP: dict[VerdictAction, Decision] = {
     VerdictAction.PASS: Decision.ALLOW,
     VerdictAction.INTERVENE: Decision.INTERVENE,
     VerdictAction.BLOCK: Decision.BLOCK,
@@ -59,18 +59,18 @@ class JudgePolicyEngine(PolicyEngine):
 
     def __init__(self) -> None:
         self._initialized = False
-        self._client: Optional[JudgeClient] = None
-        self._evaluator: Optional[JudgeEvaluator] = None
+        self._client: JudgeClient | None = None
+        self._evaluator: JudgeEvaluator | None = None
         self._sessions: SessionStore[JudgeSessionContext] = SessionStore(
             ttl=self.DEFAULT_SESSION_TTL,
             max_sessions=self.DEFAULT_MAX_SESSIONS,
         )
-        self._tracer: Optional[Any] = None
+        self._tracer: Any | None = None
         self._registry = RubricRegistry()
 
         # Config
         self._default_rubric: str = "agent_behavior"
-        self._conversation_rubric: Optional[str] = "conversation_policy"
+        self._conversation_rubric: str | None = "conversation_policy"
         self._pre_call_enabled: bool = False
         self._pre_call_rubric: str = "safety"
         self._conversation_eval_interval: int = 5
@@ -84,7 +84,7 @@ class JudgePolicyEngine(PolicyEngine):
     def engine_type(self) -> str:
         return "judge"
 
-    async def initialize(self, config: Dict[str, Any]) -> None:
+    async def initialize(self, config: dict[str, Any]) -> None:
         """Initialize the judge engine with configuration.
 
         Args:
@@ -165,8 +165,8 @@ class JudgePolicyEngine(PolicyEngine):
     async def evaluate_request(
         self,
         session_id: str,
-        request_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
     ) -> EngineResult:
         """Evaluate an incoming request (PRE_CALL).
 
@@ -186,8 +186,8 @@ class JudgePolicyEngine(PolicyEngine):
         self,
         session_id: str,
         response_data: Any,
-        request_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
     ) -> EngineResult:
         """Evaluate an LLM response (POST_CALL).
 
@@ -212,7 +212,7 @@ class JudgePolicyEngine(PolicyEngine):
             logger.error("No judge models configured")
             return EngineResult(decision=Decision.ALLOW)
 
-        verdicts: List[JudgeVerdict] = []
+        verdicts: list[JudgeVerdict] = []
 
         # 1. Turn-scope evaluation (always runs)
         turn_rubric = self._registry.get(self._default_rubric)
@@ -276,7 +276,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         return result
 
-    async def get_session_state(self, session_id: str) -> Optional[Dict[str, Any]]:
+    async def get_session_state(self, session_id: str) -> dict[str, Any] | None:
         """Get current session state for debugging/tracing."""
         session = self._sessions.get(session_id)
         if not session:
@@ -289,13 +289,13 @@ class JudgePolicyEngine(PolicyEngine):
 
     def get_compiler(
         self,
-        model: Optional[str] = None,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-    ) -> Optional["PolicyCompiler"]:
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> "PolicyCompiler | None":
         """Return a JudgeCompiler instance."""
         from opensentinel.policy.engines.judge.compiler import JudgeCompiler
-        kwargs: Dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}
         if model:
             kwargs["model"] = model
         if api_key:
@@ -305,7 +305,7 @@ class JudgePolicyEngine(PolicyEngine):
         return JudgeCompiler(**kwargs)
 
     @classmethod
-    def validate_config(cls, config: Dict[str, Any]) -> List[str]:
+    def validate_config(cls, config: dict[str, Any]) -> list[str]:
         """Validate judge engine configuration without needing an LLM connection.
 
         Runs the same checks as initialize() but collects errors into a list
@@ -314,7 +314,7 @@ class JudgePolicyEngine(PolicyEngine):
         Returns:
             List of error strings. Empty list means config is valid.
         """
-        errors: List[str] = []
+        errors: list[str] = []
 
         # Check models
         models = config.get("models", [])
@@ -495,7 +495,7 @@ class JudgePolicyEngine(PolicyEngine):
     def _should_run_conversation_eval(
         self,
         session: JudgeSessionContext,
-        turn_verdicts: List[JudgeVerdict],
+        turn_verdicts: list[JudgeVerdict],
     ) -> bool:
         """Determine if conversation-scope evaluation should run."""
         if not self._conversation_rubric:
@@ -518,8 +518,8 @@ class JudgePolicyEngine(PolicyEngine):
     async def _evaluate_pre_call(
         self,
         session_id: str,
-        request_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
     ) -> EngineResult:
         """Run pre-call safety screening on user message."""
         rubric = self._registry.get(self._pre_call_rubric)
@@ -557,7 +557,7 @@ class JudgePolicyEngine(PolicyEngine):
 
     def _build_result(
         self,
-        verdicts: List[JudgeVerdict],
+        verdicts: list[JudgeVerdict],
         session: JudgeSessionContext,
     ) -> EngineResult:
         """Build EngineResult from judge verdicts.
@@ -583,13 +583,13 @@ class JudgePolicyEngine(PolicyEngine):
             decision = Decision.BLOCK
 
         # message = guidance for INTERVENE, reason for BLOCK
-        message: Optional[str] = None
+        message: str | None = None
         if decision in (Decision.INTERVENE, Decision.BLOCK):
             message = self._build_violation_message(worst_verdict)
             if escalation_info["should_escalate"]:
                 message = escalation_info["escalation_prefix"] + "\n" + message
 
-        metadata: Dict[str, Any] = {
+        metadata: dict[str, Any] = {
             "judge": {
                 "verdicts": [v.to_dict() for v in verdicts],
                 "session_turn": session.turn_count,
@@ -621,7 +621,7 @@ class JudgePolicyEngine(PolicyEngine):
         self,
         verdict: JudgeVerdict,
         session: JudgeSessionContext,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Check if the current violation should be escalated.
 
         Escalation triggers:
@@ -630,7 +630,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         Returns dict with should_escalate, reason, and escalation_prefix.
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "should_escalate": False,
             "reason": "",
             "escalation_prefix": "",
@@ -677,13 +677,13 @@ class JudgePolicyEngine(PolicyEngine):
 
         return result
 
-    def _extract_conversation(self, request_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _extract_conversation(self, request_data: dict[str, Any]) -> list[dict[str, Any]]:
         """Extract conversation messages from request data."""
         return request_data.get("messages", [])
 
     def _extract_tool_definitions(
-        self, request_data: Dict[str, Any]
-    ) -> Dict[str, Dict[str, Any]]:
+        self, request_data: dict[str, Any]
+    ) -> dict[str, dict[str, Any]]:
         """Extract tool schemas from request data (OpenAI API format).
 
         Returns a dict mapping tool name to its definition summary:
@@ -695,7 +695,7 @@ class JudgePolicyEngine(PolicyEngine):
         }
         """
         tools = request_data.get("tools", [])
-        definitions: Dict[str, Dict[str, Any]] = {}
+        definitions: dict[str, dict[str, Any]] = {}
 
         for tool in tools:
             if not isinstance(tool, dict):
@@ -705,13 +705,13 @@ class JudgePolicyEngine(PolicyEngine):
             if not name:
                 continue
 
-            definition: Dict[str, Any] = {}
+            definition: dict[str, Any] = {}
             if func.get("description"):
                 definition["description"] = func["description"]
 
             params = func.get("parameters", {})
             if isinstance(params, dict) and "properties" in params:
-                param_summaries: Dict[str, str] = {}
+                param_summaries: dict[str, str] = {}
                 for pname, pdef in params["properties"].items():
                     ptype = pdef.get("type", "any")
                     pdesc = pdef.get("description", "")
@@ -734,7 +734,7 @@ class JudgePolicyEngine(PolicyEngine):
         Falls back to the verdict summary when no per-criterion failure
         data is available.
         """
-        failed_criteria: List[str] = verdict.metadata.get("criterion_failures", [])
+        failed_criteria: list[str] = verdict.metadata.get("criterion_failures", [])
         if not failed_criteria:
             summary = verdict.summary or "Policy violation detected."
             # If the summary lacks directive language, append actionable guidance
@@ -747,7 +747,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         score_map = {s.criterion: s for s in verdict.scores}
 
-        paragraphs: List[str] = []
+        paragraphs: list[str] = []
         for criterion_name in failed_criteria:
             score = score_map.get(criterion_name)
             if not score:
@@ -756,7 +756,7 @@ class JudgePolicyEngine(PolicyEngine):
 
             if score.corrective_actions:
                 # Lead with the corrective action — this is the most useful signal
-                parts: List[str] = [score.corrective_actions]
+                parts: list[str] = [score.corrective_actions]
                 if score.evidence:
                     quotes = ", ".join(f'"{e}"' for e in score.evidence)
                     parts.append(f"(Evidence from your response: {quotes})")

@@ -17,7 +17,7 @@ Strategies define HOW to modify LLM requests or responses when deviation is dete
 """
 
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Any
 from enum import Enum
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
@@ -56,7 +56,7 @@ class InterventionStrategy(ABC):
         self,
         data: dict,
         config: InterventionConfig,
-        context: Dict[str, Any],
+        context: dict[str, Any],
     ) -> dict:
         """
         Apply intervention to request data.
@@ -73,7 +73,7 @@ class InterventionStrategy(ABC):
 
     @staticmethod
     @abstractmethod
-    def merge(messages: List[Dict[str, Any]], value: str) -> List[Dict[str, Any]]:
+    def merge(messages: list[dict[str, Any]], value: str) -> list[dict[str, Any]]:
         """
         Merge an intervention value into a messages list.
 
@@ -91,7 +91,7 @@ class InterventionStrategy(ABC):
         pass
 
     @staticmethod
-    def format_message(template: str, context: Dict[str, Any]) -> str:
+    def format_message(template: str, context: dict[str, Any]) -> str:
         """Format message template with context."""
         try:
             return template.format(**context)
@@ -118,7 +118,7 @@ class SystemPromptAppendStrategy(InterventionStrategy):
     """
 
     @staticmethod
-    def merge(messages: List[Dict[str, Any]], value: str) -> List[Dict[str, Any]]:
+    def merge(messages: list[dict[str, Any]], value: str) -> list[dict[str, Any]]:
         messages = [dict(m) for m in messages]
 
         system_idx = None
@@ -145,7 +145,7 @@ class SystemPromptAppendStrategy(InterventionStrategy):
         self,
         data: dict,
         config: InterventionConfig,
-        context: Dict[str, Any],
+        context: dict[str, Any],
     ) -> dict:
         data = dict(data)
         correction = self.format_message(config.message_template, context)
@@ -169,7 +169,7 @@ class UserMessageInjectStrategy(InterventionStrategy):
     """
 
     @staticmethod
-    def merge(messages: List[Dict[str, Any]], value: str) -> List[Dict[str, Any]]:
+    def merge(messages: list[dict[str, Any]], value: str) -> list[dict[str, Any]]:
         messages = list(messages)
         guidance = {"role": "user", "content": f"[System Note]: {value}"}
 
@@ -190,7 +190,7 @@ class UserMessageInjectStrategy(InterventionStrategy):
         self,
         data: dict,
         config: InterventionConfig,
-        context: Dict[str, Any],
+        context: dict[str, Any],
     ) -> dict:
         data = dict(data)
         correction = self.format_message(config.message_template, context)
@@ -213,8 +213,8 @@ class ResponseModificationStrategy:
     @staticmethod
     def apply_to_response(
         response: Any,
-        message: Optional[str] = None,
-        modified_messages: Optional[List[Dict[str, Any]]] = None,
+        message: str | None = None,
+        modified_messages: list[dict[str, Any]] | None = None,
     ) -> Any:
         """
         Apply intervention to an LLM response.
@@ -254,17 +254,17 @@ class ResponseModificationStrategy:
         return response
 
     @staticmethod
-    def _get_response_content(response: Any) -> Optional[str]:
+    def _get_response_content(response: Any) -> str | None:
         """Extract text content from a response object."""
         if hasattr(response, "choices") and response.choices:
             choice = response.choices[0]
             if hasattr(choice, "message") and choice.message:
-                content: Optional[str] = getattr(choice.message, "content", None)
+                content: str | None = getattr(choice.message, "content", None)
                 return content
         if isinstance(response, dict):
             choices = response.get("choices", [])
             if choices:
-                result: Optional[str] = choices[0].get("message", {}).get("content")
+                result: str | None = choices[0].get("message", {}).get("content")
                 return result
         return None
 
@@ -299,6 +299,6 @@ class ResponseModificationStrategy:
 class WorkflowViolationError(Exception):
     """Exception raised when a workflow violation blocks a request."""
 
-    def __init__(self, message: str, context: Optional[Dict[str, Any]] = None):
+    def __init__(self, message: str, context: dict[str, Any] | None = None):
         super().__init__(message)
         self.context = context or {}

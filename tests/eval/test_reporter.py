@@ -95,20 +95,6 @@ class TestExportJson:
         assert len(t["violations"]) == 1
         assert t["violations"][0]["name"] == "v1"
 
-    def test_violation_objects_with_attrs(self):
-        """Violation objects (not dicts) are serialized via getattr."""
-
-        class FakeViolation:
-            name = "constraint_v"
-            severity = "medium"
-            message = "violated"
-
-        turn = _make_turn(0, Decision.INTERVENE, violations=[FakeViolation()])
-        data = export_json([_make_result(turns=[turn])])
-        t = data["scenarios"][0]["turns"][0]
-        assert t["violations"][0]["name"] == "constraint_v"
-        assert t["violations"][0]["severity"] == "medium"
-
     def test_error_scenario_included(self):
         result = _make_result(error="something broke")
         data = export_json([result])

@@ -8,7 +8,7 @@ drift detection, and soft constraint evaluation. Registered via
 
 import json
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Any
 
 from opensentinel.policy.registry import register_engine
 from opensentinel.policy.protocols import (
@@ -64,13 +64,13 @@ class LLMPolicyEngine(StatefulPolicyEngine):
     """
 
     def __init__(self):
-        self._workflow: Optional[WorkflowDefinition] = None
-        self._llm_client: Optional[LLMClient] = None
-        self._state_classifier: Optional[LLMStateClassifier] = None
-        self._drift_detector: Optional[DriftDetector] = None
-        self._constraint_evaluator: Optional[LLMConstraintEvaluator] = None
-        self._intervention_engine: Optional[InterventionHandler] = None
-        self._sessions: Dict[str, SessionContext] = {}
+        self._workflow: WorkflowDefinition | None = None
+        self._llm_client: LLMClient | None = None
+        self._state_classifier: LLMStateClassifier | None = None
+        self._drift_detector: DriftDetector | None = None
+        self._constraint_evaluator: LLMConstraintEvaluator | None = None
+        self._intervention_engine: InterventionHandler | None = None
+        self._sessions: dict[str, SessionContext] = {}
         self._initialized = False
 
     @property
@@ -85,7 +85,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         """Type identifier for this engine."""
         return "llm"
 
-    async def initialize(self, config: Dict[str, Any]) -> None:
+    async def initialize(self, config: dict[str, Any]) -> None:
         """Initialize the engine with configuration.
         
         Args:
@@ -164,8 +164,8 @@ class LLMPolicyEngine(StatefulPolicyEngine):
     async def evaluate_request(
         self,
         session_id: str,
-        request_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
     ) -> EngineResult:
         """Evaluate incoming request — pass-through, evaluation happens post-call."""
         return EngineResult(decision=Decision.ALLOW)
@@ -175,8 +175,8 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         self,
         session_id: str,
         response_data: Any,
-        request_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
     ) -> EngineResult:
         """Evaluate LLM response — classify, detect drift, check constraints."""
         session = self._get_or_create_session(session_id)
@@ -192,7 +192,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             "tool_calls": tool_calls,
         })
 
-        violations: List[Dict[str, Any]] = []
+        violations: list[dict[str, Any]] = []
 
         try:
             # 1. Classify state
@@ -278,7 +278,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
 
             # 6. Determine decision and message
             decision = Decision.ALLOW
-            result_message: Optional[str] = None
+            result_message: str | None = None
 
             if intervention_message:
                 from opensentinel.core.intervention.strategies import (
@@ -326,7 +326,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         self,
         session_id: str,
         response_data: Any,
-        current_state: Optional[str] = None,
+        current_state: str | None = None,
     ) -> StateClassificationResult:
         """Classify a response to a workflow state."""
         
@@ -361,14 +361,14 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                 return initial[0].name
         return "unknown"
 
-    async def get_state_history(self, session_id: str) -> List[str]:
+    async def get_state_history(self, session_id: str) -> list[str]:
         """Get state transition history."""
         session = self._sessions.get(session_id)
         if session:
             return session.get_state_sequence()
         return []
 
-    async def get_valid_next_states(self, session_id: str) -> List[str]:
+    async def get_valid_next_states(self, session_id: str) -> list[str]:
         """Get valid next states from current state."""
         current = await self.get_current_state(session_id)
         if self._workflow:
@@ -376,7 +376,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             return [t.to_state for t in transitions]
         return []
 
-    async def get_session_state(self, session_id: str) -> Optional[Dict[str, Any]]:
+    async def get_session_state(self, session_id: str) -> dict[str, Any] | None:
         """Get current session state for debugging/tracing."""
         session = self._sessions.get(session_id)
         if session:
@@ -413,7 +413,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         
         return self._sessions[session_id]
 
-    def _get_expected_tools(self, state_name: str) -> List[str]:
+    def _get_expected_tools(self, state_name: str) -> list[str]:
         """Get expected tool calls for a state."""
         if self._workflow:
             state = self._workflow.get_state(state_name)

@@ -91,10 +91,10 @@ class TestEvaluateRequest:
     """Tests for evaluate_request method."""
 
     @pytest.mark.asyncio
-    async def test_allow_when_uninitialized(self, engine):
-        """Uninitialized engine should allow requests."""
-        result = await engine.evaluate_request("session1", {"messages": []})
-        assert result.decision == Decision.ALLOW
+    async def test_raises_when_uninitialized(self, engine):
+        """Uninitialized engine should raise RuntimeError."""
+        with pytest.raises(RuntimeError, match="not initialized"):
+            await engine.evaluate_request("session1", {"messages": []})
 
     @pytest.mark.asyncio
     async def test_allow_when_initialized(self, engine, sample_workflow):
@@ -109,14 +109,14 @@ class TestEvaluateResponse:
     """Tests for evaluate_response method."""
 
     @pytest.mark.asyncio
-    async def test_allow_when_uninitialized(self, engine):
-        """Uninitialized engine should allow responses."""
-        result = await engine.evaluate_response(
-            "session1",
-            {"choices": [{"message": {"content": "Hello!"}}]},
-            {"messages": []},
-        )
-        assert result.decision == Decision.ALLOW
+    async def test_raises_when_uninitialized(self, engine):
+        """Uninitialized engine should raise RuntimeError."""
+        with pytest.raises(RuntimeError, match="not initialized"):
+            await engine.evaluate_response(
+                "session1",
+                {"choices": [{"message": {"content": "Hello!"}}]},
+                {"messages": []},
+            )
 
     @pytest.mark.asyncio
     async def test_classify_and_evaluate(self, engine, sample_workflow):

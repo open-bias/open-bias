@@ -13,7 +13,7 @@ NeMo Guardrails provides:
 Requires: pip install nemoguardrails
 """
 
-from typing import Optional, Dict, Any, List, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 import logging
 import sys
 
@@ -82,7 +82,7 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         self._initialized = False
         self._fail_closed = False
         self._enabled_rails = ["input", "output"]
-        self._session_contexts: Dict[str, Dict[str, Any]] = {}
+        self._session_contexts: dict[str, dict[str, Any]] = {}
 
     @property
     def name(self) -> str:
@@ -94,7 +94,7 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         """Type identifier for this engine."""
         return "nemo"
 
-    async def initialize(self, config: Dict[str, Any]) -> None:
+    async def initialize(self, config: dict[str, Any]) -> None:
         """
         Initialize with NeMo configuration.
 
@@ -172,7 +172,7 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             violation_name: str,
             severity: str = "error",
             message: str = "",
-        ) -> Dict[str, Any]:
+        ) -> dict[str, Any]:
             """
             Log a policy violation from NeMo context.
 
@@ -190,8 +190,8 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
 
         async def sentinel_request_intervention(
             intervention_name: str,
-            context: Optional[Dict[str, Any]] = None,
-        ) -> Dict[str, Any]:
+            context: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
             """
             Request a Open Sentinel intervention from NeMo context.
 
@@ -212,8 +212,8 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
     async def evaluate_request(
         self,
         session_id: str,
-        request_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
     ) -> EngineResult:
         """
         Evaluate request using NeMo input rails.
@@ -293,8 +293,8 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         self,
         session_id: str,
         response_data: Any,
-        request_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
     ) -> EngineResult:
         """
         Evaluate response using NeMo output rails.
@@ -375,8 +375,8 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
     def _check_for_modifications(
         self,
         result: Any,
-        original_messages: List[Dict[str, Any]],
-    ) -> Optional[List[Dict[str, Any]]]:
+        original_messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]] | None:
         """
         Check if NeMo modified the messages.
 
@@ -389,7 +389,7 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
 
         return None
 
-    async def get_session_state(self, session_id: str) -> Optional[Dict[str, Any]]:
+    async def get_session_state(self, session_id: str) -> dict[str, Any] | None:
         """Get current session state for debugging/tracing."""
         return self._session_contexts.get(session_id)
 
@@ -401,13 +401,13 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
 
     def get_compiler(
         self,
-        model: Optional[str] = None,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-    ) -> Optional["PolicyCompiler"]:
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> "PolicyCompiler | None":
         """Return a NemoCompiler instance."""
         from opensentinel.policy.engines.nemo.compiler import NemoCompiler
-        kwargs: Dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}
         if model:
             kwargs["model"] = model
         if api_key:

@@ -28,7 +28,7 @@ For the complete YAML schema reference, see:
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Literal, List, Dict, Any, Tuple, Type, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ConfigDict
 from pydantic_settings import (
@@ -61,8 +61,8 @@ class OTelConfig(BaseModel):
     insecure: bool = True  # Use insecure connection (no TLS) for local dev
 
     # Langfuse-specific settings (used when exporter_type="langfuse")
-    langfuse_public_key: Optional[str] = Field(None, validation_alias="LANGFUSE_PUBLIC_KEY")
-    langfuse_secret_key: Optional[str] = Field(None, validation_alias="LANGFUSE_SECRET_KEY")
+    langfuse_public_key: str | None = Field(None, validation_alias="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: str | None = Field(None, validation_alias="LANGFUSE_SECRET_KEY")
     langfuse_host: str = Field(
         "https://cloud.langfuse.com", validation_alias="LANGFUSE_HOST"
     )
@@ -75,10 +75,10 @@ class ProxyConfig(BaseModel):
     port: int = 4000
     workers: int = 1
     timeout: int = 600
-    master_key: Optional[str] = None
+    master_key: str | None = None
     # Model routing
-    default_model: Optional[str] = None
-    model_list: List[dict] = Field(default_factory=list)
+    default_model: str | None = None
+    model_list: list[dict] = Field(default_factory=list)
 
 
 class ClassifierConfig(BaseModel):
@@ -126,8 +126,8 @@ class PolicyEngineConfig(BaseModel):
     type: str = "judge"
     enabled: bool = True
     # Unified configuration path
-    config_path: Optional[str] = None
-    config: Dict[str, Any] = Field(default_factory=dict)
+    config_path: str | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
 
     def model_dump(self, **kwargs):
         """Custom dump to merge config_path into config dict for engines."""
@@ -203,14 +203,14 @@ class YamlConfigSource(PydanticBaseSettingsSource):
     """
 
     def __init__(
-        self, settings_cls: Type[BaseSettings], config_path: Optional[str] = None
+        self, settings_cls: type[BaseSettings], config_path: str | None = None
     ):
         super().__init__(settings_cls)
         self._config_path = config_path
-        self._yaml_data: Optional[Dict[str, Any]] = None
+        self._yaml_data: dict[str, Any] | None = None
         self._load()
 
-    def _discover_config_file(self) -> Optional[Path]:
+    def _discover_config_file(self) -> Path | None:
         """Find the config file to load."""
         if self._config_path:
             p = Path(self._config_path)
@@ -294,7 +294,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
     # Keys within llm: that need renaming for the engine config
     _LLM_KEY_RENAMES = {"model": "llm_model"}
 
-    def _map_to_settings(self) -> Dict[str, Any]:
+    def _map_to_settings(self) -> dict[str, Any]:
         """Map simplified YAML keys to nested SentinelSettings structure.
 
         See opensentinel/config/schema.yaml for the full reference of
@@ -304,7 +304,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             return {}
 
         data = self._yaml_data
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         # engine -> policy.engine.type
         if "engine" in data:
@@ -451,12 +451,12 @@ class YamlConfigSource(PydanticBaseSettingsSource):
 
         return result
 
-    def get_field_value(self, field: Any, field_name: str) -> Tuple[Any, str, bool]:
+    def get_field_value(self, field: Any, field_name: str) -> tuple[Any, str, bool]:
         mapped = self._map_to_settings()
         value = mapped.get(field_name)
         return value, field_name, value is not None
 
-    def __call__(self) -> Dict[str, Any]:
+    def __call__(self) -> dict[str, Any]:
         return self._map_to_settings()
 
 
@@ -481,7 +481,7 @@ class SentinelSettings(BaseSettings):
     )
 
     # Path to osentinel.yaml (set via _config_path kwarg, not a real setting field)
-    _config_path: Optional[str] = None
+    _config_path: str | None = None
 
     # General settings
     debug: bool = False
@@ -496,15 +496,15 @@ class SentinelSettings(BaseSettings):
 
     # API Keys (loaded from env vars or .env file)
     # We use validation_alias to map standard keys to these fields
-    openai_api_key: Optional[str] = Field(None, validation_alias="OPENAI_API_KEY")
-    anthropic_api_key: Optional[str] = Field(None, validation_alias="ANTHROPIC_API_KEY")
-    google_api_key: Optional[str] = Field(None, validation_alias="GOOGLE_API_KEY")
-    gemini_api_key: Optional[str] = Field(None, validation_alias="GEMINI_API_KEY")
-    groq_api_key: Optional[str] = Field(None, validation_alias="GROQ_API_KEY")
-    togetherai_api_key: Optional[str] = Field(None, validation_alias="TOGETHERAI_API_KEY")
-    openrouter_api_key: Optional[str] = Field(None, validation_alias="OPENROUTER_API_KEY")
+    openai_api_key: str | None = Field(None, validation_alias="OPENAI_API_KEY")
+    anthropic_api_key: str | None = Field(None, validation_alias="ANTHROPIC_API_KEY")
+    google_api_key: str | None = Field(None, validation_alias="GOOGLE_API_KEY")
+    gemini_api_key: str | None = Field(None, validation_alias="GEMINI_API_KEY")
+    groq_api_key: str | None = Field(None, validation_alias="GROQ_API_KEY")
+    togetherai_api_key: str | None = Field(None, validation_alias="TOGETHERAI_API_KEY")
+    openrouter_api_key: str | None = Field(None, validation_alias="OPENROUTER_API_KEY")
 
-    def __init__(self, _config_path: Optional[str] = None, **kwargs: Any):
+    def __init__(self, _config_path: str | None = None, **kwargs: Any):
         self.__class__._config_path = _config_path
         super().__init__(**kwargs)
         
@@ -522,7 +522,7 @@ class SentinelSettings(BaseSettings):
         if not self.proxy.default_model:
             self.proxy.default_model = self._auto_detect_model()
 
-    def _auto_detect_model(self) -> Optional[str]:
+    def _auto_detect_model(self) -> str | None:
         """Pick a default model based on which API key is available.
 
         Priority mirrors detect_available_model() in cli_init.py:
@@ -547,7 +547,7 @@ class SentinelSettings(BaseSettings):
             return "openrouter/auto"
         return None
 
-    def _sync_env_var(self, key: str, value: Optional[str]) -> None:
+    def _sync_env_var(self, key: str, value: str | None) -> None:
         """Set env var if present in settings but missing in os.environ."""
         if value and not os.getenv(key):
             os.environ[key] = value
@@ -555,12 +555,12 @@ class SentinelSettings(BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Insert YAML config source before env vars.
 
         Priority (highest first): init > yaml > env > dotenv > file_secret
@@ -574,7 +574,7 @@ class SentinelSettings(BaseSettings):
             file_secret_settings,
         )
 
-    def get_policy_config(self) -> Dict[str, Any]:
+    def get_policy_config(self) -> dict[str, Any]:
         """
         Get policy engine configuration.
 
@@ -596,7 +596,7 @@ class SentinelSettings(BaseSettings):
 
         return engine_config
 
-    def get_model_list(self) -> List[dict]:
+    def get_model_list(self) -> list[dict]:
         """Get model list for LiteLLM router using wildcard routing.
 
         Returns wildcard entries for providers whose API keys are present,
