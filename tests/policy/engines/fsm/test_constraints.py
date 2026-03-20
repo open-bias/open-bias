@@ -7,11 +7,9 @@ from opensentinel.policy.engines.fsm.workflow.constraints import (
     ConstraintEvaluator,
     ConstraintViolation,
     EvaluationResult,
-    get_decision,
 )
 from opensentinel.policy.engines.fsm.workflow.schema import Constraint, ConstraintType
 from opensentinel.policy.engines.fsm.workflow.state_machine import SessionState, StateHistoryEntry
-from opensentinel.policy.protocols import Decision
 
 
 def make_session(states: list[str]) -> SessionState:
@@ -279,26 +277,6 @@ class TestConstraintTypes:
         violations = evaluator.evaluate_all(session)
         assert len(violations) == 1
         assert "forbidden" in violations[0].message
-
-
-class TestModeAwareDecisions:
-    """Tests for get_decision() — mode × constraint_type → Decision."""
-
-    def test_guide_always_intervenes(self):
-        for ct in ConstraintType:
-            assert get_decision("guide", ct) == Decision.INTERVENE
-
-    def test_enforce_precedence_blocks(self):
-        assert get_decision("enforce", ConstraintType.PRECEDENCE) == Decision.BLOCK
-
-    def test_enforce_never_blocks(self):
-        assert get_decision("enforce", ConstraintType.NEVER) == Decision.BLOCK
-
-    def test_enforce_eventually_intervenes(self):
-        assert get_decision("enforce", ConstraintType.EVENTUALLY) == Decision.INTERVENE
-
-    def test_enforce_response_intervenes(self):
-        assert get_decision("enforce", ConstraintType.RESPONSE) == Decision.INTERVENE
 
 
 class TestSessionBoundaryEvaluation:

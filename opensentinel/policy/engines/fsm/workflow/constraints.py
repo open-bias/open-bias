@@ -6,20 +6,14 @@ Implements runtime verification for 4 constraint types:
 - NEVER: Target state must never occur
 - EVENTUALLY: Must eventually reach target state
 - RESPONSE: If trigger occurs, target must eventually follow
-
-Constraints are mode-aware:
-- guide: all violations → INTERVENE
-- enforce: PRECEDENCE/NEVER → BLOCK, EVENTUALLY/RESPONSE → INTERVENE
 """
 
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Literal
 
 from opensentinel.policy.engines.fsm.workflow.schema import Constraint, ConstraintType
 from opensentinel.policy.engines.fsm.workflow.state_machine import SessionState
-from opensentinel.policy.protocols import Decision
 
 logger = logging.getLogger(__name__)
 
@@ -40,23 +34,6 @@ class ConstraintViolation:
     constraint_type: ConstraintType
     message: str
     details: dict
-
-
-def get_decision(
-    mode: Literal["guide", "enforce"], constraint_type: ConstraintType
-) -> Decision:
-    """Map a violation to a Decision based on workflow mode and constraint type.
-
-    - guide: always INTERVENE
-    - enforce: PRECEDENCE/NEVER → BLOCK, EVENTUALLY/RESPONSE → INTERVENE
-    """
-    if mode == "guide":
-        return Decision.INTERVENE
-
-    if constraint_type in (ConstraintType.PRECEDENCE, ConstraintType.NEVER):
-        return Decision.BLOCK
-
-    return Decision.INTERVENE
 
 
 class ConstraintEvaluator:

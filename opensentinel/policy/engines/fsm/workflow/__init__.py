@@ -12,7 +12,6 @@ from opensentinel.policy.engines.fsm.workflow.constraints import (
     ConstraintEvaluator,
     ConstraintViolation,
     EvaluationResult,
-    get_decision,
 )
 from opensentinel.policy.engines.fsm.workflow.parser import (
     WorkflowParser,
@@ -55,5 +54,4 @@ __all__ = [
     "EvaluationResult",
     "ConstraintViolation",
     "ConstraintEvaluator",
-    "get_decision",
 ]
