@@ -222,7 +222,7 @@ class FSMPolicyEngine(StatefulPolicyEngine):
             message=message,
             metadata={
                 "previous_state": previous_state,
-                "current_state": classification.state_name,
+                "current_state": session.current_state,
                 "classification_confidence": classification.confidence,
                 "classification_method": classification.method,
                 "transition_result": transition_result.value,

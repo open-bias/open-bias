@@ -1,31 +1,27 @@
-import os
 import pytest
+
 from opensentinel.config.settings import SentinelSettings, YamlConfigSource
 
 
-def test_osntl_config_env_var_discovery():
+def test_osntl_config_env_var_discovery(monkeypatch):
     """Verify that OSNTL_CONFIG is still used to find the config file path."""
     # This is handled manually in YamlConfigSource, so it should still work
-    os.environ["OSNTL_CONFIG"] = "/tmp/nonexistent.yaml"
-    
+    monkeypatch.setenv("OSNTL_CONFIG", "/tmp/nonexistent.yaml")
+
     settings = SentinelSettings()
     # It won't fail to initialize, but YamlConfigSource will have attempted to load it
     # We can check its internal state or just ensure no other OSNTL_ vars are picked up
-    
-    os.environ["OSNTL_DEBUG"] = "true"
+
+    monkeypatch.setenv("OSNTL_DEBUG", "true")
     settings = SentinelSettings()
     assert settings.debug is True  # OSNTL_ prefix maps to settings fields
 
-    del os.environ["OSNTL_CONFIG"]
-    del os.environ["OSNTL_DEBUG"]
 
-
-def test_standard_api_keys_work():
+def test_standard_api_keys_work(monkeypatch):
     """Verify that standard API keys are still picked up without OSNTL_ prefix."""
-    os.environ["OPENAI_API_KEY"] = "sk-test-123"
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-123")
     settings = SentinelSettings()
     assert settings.openai_api_key == "sk-test-123"
-    del os.environ["OPENAI_API_KEY"]
 
 
 class TestInlinePolicyMapping:
