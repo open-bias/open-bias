@@ -78,12 +78,12 @@ class TestJudgeMapping:
         assert cfg["models"] == [{"name": "primary", "model": "gpt-4o-mini"}]
 
     def test_judge_passthrough_keys(self):
-        """Keys beyond model/mode should pass through directly."""
+        """Keys beyond model should pass through directly."""
         result = _build_source(
             {
                 "engine": "judge",
                 "judge": {
-                    "pass_threshold": 0.8,
+                    "fail_action": "intervene",
                     "pre_call_enabled": True,
                     "pre_call_rubric": "safety",
                     "default_rubric": "custom_rubric",
@@ -95,7 +95,7 @@ class TestJudgeMapping:
         )._map_to_settings()
         cfg = _get_engine_config(result)
 
-        assert cfg["pass_threshold"] == 0.8
+        assert cfg["fail_action"] == "intervene"
         assert cfg["pre_call_enabled"] is True
         assert cfg["pre_call_rubric"] == "safety"
         assert cfg["default_rubric"] == "custom_rubric"
@@ -373,7 +373,7 @@ class TestCombinedYAML:
                 "model": "gemini/gemini-2.5-flash",
                 "port": 4000,
                 "judge": {
-                    "pass_threshold": 0.7,
+                    "fail_action": "block",
                 },
                 "policy": ["No PII", "Be professional"],
                 "tracing": {"type": "none"},
@@ -385,7 +385,7 @@ class TestCombinedYAML:
         assert result["proxy"]["port"] == 4000
         cfg = _get_engine_config(result)
         assert cfg["inline_policy"] == ["No PII", "Be professional"]
-        assert cfg["pass_threshold"] == 0.7
+        assert cfg["fail_action"] == "block"
         assert result["otel"]["enabled"] is False
 
     def test_full_llm_config(self):
