@@ -6,7 +6,6 @@ Supports two config formats:
 Simple (human-authored):
 ```yaml
 name: customer-support
-mode: guide
 
 steps:
   - greet the customer
@@ -24,7 +23,6 @@ tools:
 Internal (compiler output):
 ```yaml
 name: customer-support
-mode: guide
 
 states:
   - name: greeting
@@ -45,7 +43,7 @@ constraints:
 ```
 """
 
-from typing import Any, Literal
+from typing import Any
 from pydantic import BaseModel, Field, field_validator, model_validator
 from enum import Enum
 
@@ -53,7 +51,6 @@ class SimpleWorkflowConfig(BaseModel):
     """Human-authored workflow config with plain English steps and rules."""
 
     name: str
-    mode: Literal["guide", "enforce"]
     steps: list[str]
     rules: list[str]
     tools: dict[str, list[str]] | None = None
@@ -200,7 +197,6 @@ class WorkflowDefinition(BaseModel):
     """
 
     name: str = Field(..., min_length=1, max_length=100)
-    mode: Literal["guide", "enforce"] = "guide"
     description: str | None = None
 
     # Workflow components

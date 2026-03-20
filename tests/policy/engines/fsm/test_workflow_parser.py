@@ -19,7 +19,6 @@ class TestWorkflowParser:
         workflow = WorkflowParser.parse_file(sample_workflow_path)
 
         assert workflow.name == "customer-support-agent"
-        assert workflow.mode == "guide"
         assert len(workflow.states) > 0
 
     def test_parse_string_yaml_internal_format(self):
@@ -51,7 +50,6 @@ rules:
         workflow = WorkflowParser.parse_string(yaml_content)
 
         assert workflow.name == "test-simple"
-        assert workflow.mode == "enforce"
         assert len(workflow.states) >= 2
         assert len(workflow.constraints) >= 1
 
@@ -67,7 +65,6 @@ rules:
         workflow = WorkflowParser.parse_dict(simple_config_dict)
 
         assert workflow.name == "test-simple"
-        assert workflow.mode == "guide"
         assert len(workflow.states) >= 3
         assert any(s.is_initial for s in workflow.states)
 
@@ -87,7 +84,6 @@ rules:
         """'steps' key routes through compiler."""
         data = {
             "name": "test",
-            "mode": "guide",
             "steps": ["greet", "resolve and close"],
             "rules": [],
         }
@@ -99,7 +95,6 @@ rules:
         """'states' key loads directly as internal format."""
         data = {
             "name": "test",
-            "mode": "guide",
             "states": [{"name": "start", "is_initial": True}],
         }
         workflow = WorkflowParser.parse_dict(data)
@@ -208,15 +203,10 @@ class TestWorkflowSchema:
         assert len(terminal) == 1
         assert terminal[0].name == "end"
 
-    def test_mode_field(self, simple_workflow):
-        """Test mode field on WorkflowDefinition."""
-        assert simple_workflow.mode in ("guide", "enforce")
-
     def test_simple_workflow_config_validation(self):
         """Test SimpleWorkflowConfig model."""
         config = SimpleWorkflowConfig(
             name="test",
-            mode="guide",
             steps=["step one", "step two"],
             rules=["never do bad things"],
         )
@@ -226,7 +216,6 @@ class TestWorkflowSchema:
     def test_simple_workflow_config_with_tools(self):
         config = SimpleWorkflowConfig(
             name="test",
-            mode="enforce",
             steps=["step one"],
             rules=[],
             tools={"step one": ["tool_a", "tool_b"]},

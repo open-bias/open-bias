@@ -53,7 +53,6 @@ class TestCompileWorkflow:
     def simple_config(self) -> SimpleWorkflowConfig:
         return SimpleWorkflowConfig(
             name="customer-support",
-            mode="guide",
             steps=[
                 "greet the customer",
                 "understand their issue",
@@ -72,7 +71,6 @@ class TestCompileWorkflow:
         result = compile_workflow(simple_config)
         assert isinstance(result, WorkflowDefinition)
         assert result.name == "customer-support"
-        assert result.mode == "guide"
 
     def test_step_count(self, simple_config: SimpleWorkflowConfig):
         result = compile_workflow(simple_config)
@@ -143,7 +141,6 @@ class TestToolMapping:
     def test_tools_mapped_to_states(self):
         config = SimpleWorkflowConfig(
             name="test",
-            mode="guide",
             steps=["verify identity", "process refund"],
             rules=[],
             tools={
@@ -163,7 +160,6 @@ class TestRuleParsing:
     def test_if_then_rule(self):
         config = SimpleWorkflowConfig(
             name="test",
-            mode="guide",
             steps=["ask question", "provide answer"],
             rules=["if ask question then provide answer"],
         )
@@ -174,7 +170,6 @@ class TestRuleParsing:
     def test_unrecognized_rule_skipped(self):
         config = SimpleWorkflowConfig(
             name="test",
-            mode="guide",
             steps=["step one", "step two"],
             rules=["this rule makes no sense at all"],
         )
@@ -192,7 +187,6 @@ class TestFSMCompilerInterface:
     async def test_compile_with_simple_config(self, compiler: FSMCompiler):
         config = SimpleWorkflowConfig(
             name="test",
-            mode="guide",
             steps=["greet", "resolve and close"],
             rules=["must eventually resolve the conversation"],
         )
@@ -206,7 +200,6 @@ class TestFSMCompilerInterface:
             context={
                 "simple_config": {
                     "name": "test",
-                    "mode": "guide",
                     "steps": ["greet", "resolve and close"],
                     "rules": [],
                 }

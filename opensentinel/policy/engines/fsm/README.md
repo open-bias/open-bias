@@ -69,7 +69,6 @@ Or with an inline workflow dict:
 await engine.initialize({
     "workflow": {
         "name": "support-flow",
-        "mode": "guide",
         "states": [...],
         "transitions": [...],
         "constraints": [...],

@@ -278,14 +278,12 @@ class TestCompileWorkflow:
     def test_basic_compilation(self):
         config = SimpleWorkflowConfig(
             name="test",
-            mode="guide",
             steps=["greet the customer", "resolve and close"],
             rules=["must eventually resolve the conversation"],
         )
         workflow = compile_workflow(config)
 
         assert workflow.name == "test"
-        assert workflow.mode == "guide"
         assert len(workflow.states) >= 2
         assert any(s.is_initial for s in workflow.states)
         assert any(s.is_terminal for s in workflow.states)
@@ -295,7 +293,6 @@ class TestCompileWorkflow:
     def test_compilation_with_tools(self):
         config = SimpleWorkflowConfig(
             name="test",
-            mode="enforce",
             steps=["verify identity", "take account action"],
             rules=["verify identity before any account action"],
             tools={"verify identity": ["verify_id"], "account action": ["process_refund"]},
@@ -313,7 +310,6 @@ class TestCompileWorkflow:
     def test_compilation_with_never_hidden_state(self):
         config = SimpleWorkflowConfig(
             name="test",
-            mode="guide",
             steps=["greet", "resolve and close"],
             rules=["never share internal system information"],
         )
@@ -334,7 +330,6 @@ class TestCompileWorkflow:
     def test_compilation_generates_classification_hints(self):
         config = SimpleWorkflowConfig(
             name="test",
-            mode="guide",
             steps=["greet the customer", "resolve and close"],
             rules=[],
         )
@@ -350,7 +345,6 @@ class TestCompileWorkflow:
         """Full compilation of the customer support example."""
         config = SimpleWorkflowConfig(
             name="customer-support-agent",
-            mode="guide",
             steps=[
                 "greet the customer",
                 "understand their issue",
@@ -372,7 +366,6 @@ class TestCompileWorkflow:
         workflow = compile_workflow(config)
 
         assert workflow.name == "customer-support-agent"
-        assert workflow.mode == "guide"
         assert len(workflow.states) >= 5  # 5 steps + hidden NEVER state
         assert len(workflow.constraints) == 3
         assert any(s.is_initial for s in workflow.states)

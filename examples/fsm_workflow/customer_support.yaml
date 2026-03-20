@@ -8,7 +8,6 @@
 #   cd examples/fsm_workflow && osentinel serve
 
 name: customer-support-agent
-mode: guide
 
 steps:
   - greet the customer

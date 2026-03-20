@@ -229,7 +229,6 @@ def _validate_workflow(config_path: Path) -> None:
             "\u2713 Valid Workflow",
             {
                 "Name": workflow.name,
-                "Mode": workflow.mode,
                 "States": str(len(workflow.states)),
                 "Transitions": str(len(workflow.transitions)),
                 "Constraints": str(len(workflow.constraints)),
@@ -342,7 +341,6 @@ def info(config_path: Path, verbose: bool) -> None:
         console.print(
             Text.assemble(
                 (workflow.name, "bold"),
-                (f"  [{workflow.mode}]", "dim"),
             )
         )
         if workflow.description:

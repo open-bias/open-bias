@@ -29,7 +29,6 @@ def simple_workflow_dict():
     """Minimal workflow definition as dict (internal format)."""
     return {
         "name": "test-workflow",
-        "mode": "guide",
         "states": [
             {
                 "name": "start",
@@ -74,7 +73,6 @@ def simple_config_dict():
     """Simple (human-authored) workflow config dict."""
     return {
         "name": "test-simple",
-        "mode": "guide",
         "steps": [
             "greet the customer",
             "understand their issue",

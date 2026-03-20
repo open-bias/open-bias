@@ -124,7 +124,6 @@ def compile_workflow(config: SimpleWorkflowConfig) -> WorkflowDefinition:
 
     return WorkflowDefinition(
         name=config.name,
-        mode=config.mode,
         description=f"Compiled from simple config: {config.name}",
         states=states,
         transitions=transitions,
@@ -509,7 +508,6 @@ class FSMCompiler(PolicyCompiler):
         workflow: WorkflowDefinition = result.config
         workflow_dict: dict[str, Any] = {
             "name": workflow.name,
-            "mode": workflow.mode,
         }
         if workflow.description:
             workflow_dict["description"] = workflow.description
