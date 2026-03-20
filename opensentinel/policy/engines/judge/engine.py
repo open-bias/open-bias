@@ -498,10 +498,11 @@ class JudgePolicyEngine(PolicyEngine):
         if not self._conversation_rubric:
             return False
 
-        # Run on interval
+        # Run on interval (check +1 because record_verdict hasn't incremented yet)
+        effective_turn = session.turn_count + 1
         if (
-            session.turn_count > 0
-            and session.turn_count % self._conversation_eval_interval == 0
+            effective_turn > 0
+            and effective_turn % self._conversation_eval_interval == 0
         ):
             return True
 
