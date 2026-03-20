@@ -9,17 +9,15 @@ constraint evaluation.
 import json
 import logging
 import re
-from typing import Optional, Dict, Any
+from typing import Any
 
 from opensentinel.core.utils import extract_response_content
 
 logger = logging.getLogger(__name__)
 
-
 class LLMClientError(Exception):
     """Error from LLM client operations."""
     pass
-
 
 class LLMClient:
     """Async LLM wrapper for JSON-structured responses.
@@ -39,7 +37,7 @@ class LLMClient:
 
     def __init__(
         self,
-        model: Optional[str] = None,
+        model: str | None = None,
         temperature: float = 0.0,
         max_tokens: int = 1024,
         timeout: float = 10.0,
@@ -62,9 +60,9 @@ class LLMClient:
         self,
         system_prompt: str,
         user_prompt: str,
-        additional_messages: Optional[list] = None,
-        session_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        additional_messages: list | None = None,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
         """Make an LLM call expecting a JSON response.
         
         Args:
@@ -143,7 +141,7 @@ class LLMClient:
             f"LLM call failed after {self.max_retries + 1} attempts: {last_error}"
         )
 
-    def _parse_json(self, content: str) -> Dict[str, Any]:
+    def _parse_json(self, content: str) -> dict[str, Any]:
         """Parse JSON from content, handling markdown fences.
         
         Handles common patterns:

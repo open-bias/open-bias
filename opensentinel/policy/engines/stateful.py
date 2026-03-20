@@ -5,12 +5,11 @@ Extends PolicyEngine with state classification capabilities for engines
 that track state across requests (FSM, LLM).
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, List
 from dataclasses import dataclass, field
 from abc import abstractmethod
 
 from opensentinel.policy.protocols import PolicyEngine
-
 
 @dataclass
 class StateClassificationResult:
@@ -19,8 +18,7 @@ class StateClassificationResult:
     state_name: str
     confidence: float
     method: str
-    details: Dict[str, Any] = field(default_factory=dict)
-
+    details: dict[str, Any] = field(default_factory=dict)
 
 class StatefulPolicyEngine(PolicyEngine):
     """
@@ -35,7 +33,7 @@ class StatefulPolicyEngine(PolicyEngine):
         self,
         session_id: str,
         response_data: Any,
-        current_state: Optional[str] = None,
+        current_state: str | None = None,
     ) -> StateClassificationResult:
         """
         Classify a response to a state.
@@ -64,7 +62,7 @@ class StatefulPolicyEngine(PolicyEngine):
         ...
 
     @abstractmethod
-    async def get_state_history(self, session_id: str) -> List[str]:
+    async def get_state_history(self, session_id: str) -> list[str]:
         """
         Get state transition history.
 
@@ -77,7 +75,7 @@ class StatefulPolicyEngine(PolicyEngine):
         ...
 
     @abstractmethod
-    async def get_valid_next_states(self, session_id: str) -> List[str]:
+    async def get_valid_next_states(self, session_id: str) -> list[str]:
         """
         Get valid next states from current state.
 

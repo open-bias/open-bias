@@ -9,7 +9,7 @@ Tracks agent progress through workflow states with:
 
 import asyncio
 import logging
-from typing import Optional, Dict, Any, Set, Tuple
+from typing import Any, Set, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -17,7 +17,6 @@ from enum import Enum
 from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition, State, Transition
 
 logger = logging.getLogger(__name__)
-
 
 class TransitionResult(Enum):
     """Result of a transition attempt."""
@@ -27,18 +26,16 @@ class TransitionResult(Enum):
     SAME_STATE = "same_state"
     CONSTRAINT_VIOLATED = "constraint_violated"
 
-
 @dataclass
 class StateHistoryEntry:
     """Record of a state in the history."""
 
     state_name: str
     entered_at: datetime
-    exited_at: Optional[datetime] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    exited_at: datetime | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     classification_confidence: float = 0.0
     classification_method: str = "unknown"
-
 
 @dataclass
 class SessionState:
@@ -70,7 +67,6 @@ class SessionState:
         current_entry = self.history[-1]
         return (datetime.now(timezone.utc) - current_entry.entered_at).total_seconds()
 
-
 class WorkflowStateMachine:
     """
     State machine managing workflow execution.
@@ -94,12 +90,12 @@ class WorkflowStateMachine:
 
     def __init__(self, workflow: WorkflowDefinition):
         self.workflow = workflow
-        self._sessions: Dict[str, SessionState] = {}
+        self._sessions: dict[str, SessionState] = {}
         self._lock = asyncio.Lock()
 
         # Build lookup tables for fast access
-        self._states: Dict[str, State] = {s.name: s for s in workflow.states}
-        self._transitions: Dict[str, list[Transition]] = self._build_transition_map()
+        self._states: dict[str, State] = {s.name: s for s in workflow.states}
+        self._transitions: dict[str, list[Transition]] = self._build_transition_map()
 
         # Find initial state
         initial_states = workflow.get_initial_states()
@@ -110,9 +106,9 @@ class WorkflowStateMachine:
             f"with {len(self._states)} states"
         )
 
-    def _build_transition_map(self) -> Dict[str, list[Transition]]:
+    def _build_transition_map(self) -> dict[str, list[Transition]]:
         """Build from_state -> [transitions] lookup."""
-        result: Dict[str, list[Transition]] = {}
+        result: dict[str, list[Transition]] = {}
         for t in self.workflow.transitions:
             if t.from_state not in result:
                 result[t.from_state] = []
@@ -157,7 +153,7 @@ class WorkflowStateMachine:
 
             return self._sessions[session_id]
 
-    async def get_session(self, session_id: str) -> Optional[SessionState]:
+    async def get_session(self, session_id: str) -> SessionState | None:
         """Get session if it exists."""
         return self._sessions.get(session_id)
 
@@ -167,7 +163,7 @@ class WorkflowStateMachine:
         target_state: str,
         confidence: float = 1.0,
         method: str = "explicit",
-    ) -> Tuple[TransitionResult, Optional[str]]:
+    ) -> tuple[TransitionResult, str | None]:
         """
         Attempt to transition to target state.
 
@@ -230,7 +226,7 @@ class WorkflowStateMachine:
 
         return (TransitionResult.SUCCESS, None)
 
-    async def get_valid_transitions(self, session_id: str) -> Set[str]:
+    async def get_valid_transitions(self, session_id: str) -> set[str]:
         """
         Get set of valid next states from current state.
 

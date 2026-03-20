@@ -8,23 +8,22 @@ detection.
 
 import logging
 from collections import deque
-from typing import Optional, List, Dict, Set
+from typing import Dict, List
 
+from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+from opensentinel.policy.engines.llm.llm_client import LLMClient, LLMClientError
 from opensentinel.policy.engines.llm.models import (
-    LLMStateCandidate,
-    LLMClassificationResult,
     ConfidenceTier,
+    LLMClassificationResult,
+    LLMStateCandidate,
     SessionContext,
 )
-from opensentinel.policy.engines.llm.llm_client import LLMClient, LLMClientError
 from opensentinel.policy.engines.llm.prompts import (
     STATE_CLASSIFICATION_SYSTEM,
     STATE_CLASSIFICATION_USER,
 )
-from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
 logger = logging.getLogger(__name__)
-
 
 class LLMStateClassifier:
     """LLM-based workflow state classifier.
@@ -61,7 +60,7 @@ class LLMStateClassifier:
         self.uncertain_threshold = uncertain_threshold
         
         # Build transition adjacency map
-        self._transition_map: Dict[str, Set[str]] = {}
+        self._transition_map: dict[str, set[str]] = {}
         for transition in workflow.transitions:
             if transition.from_state not in self._transition_map:
                 self._transition_map[transition.from_state] = set()
@@ -74,7 +73,7 @@ class LLMStateClassifier:
         self,
         session: SessionContext,
         assistant_message: str,
-        tool_calls: Optional[List[str]] = None,
+        tool_calls: list[str] | None = None,
     ) -> LLMClassificationResult:
         """Classify an assistant response to a workflow state.
         
@@ -169,13 +168,13 @@ class LLMStateClassifier:
             lines.append("")
         return "\n".join(lines)
 
-    def _format_tool_calls(self, tool_calls: List[str]) -> str:
+    def _format_tool_calls(self, tool_calls: list[str]) -> str:
         """Format tool calls for the prompt."""
         if not tool_calls:
             return "(none)"
         return ", ".join(tool_calls)
 
-    def _format_conversation(self, turn_window: List[Dict]) -> str:
+    def _format_conversation(self, turn_window: list[Dict]) -> str:
         """Format recent conversation for the prompt."""
         if not turn_window:
             return "(no previous turns)"
@@ -187,7 +186,7 @@ class LLMStateClassifier:
             lines.append(f"{role}: {message}")
         return "\n".join(lines)
 
-    def _parse_candidates(self, response: any) -> List[LLMStateCandidate]:
+    def _parse_candidates(self, response: any) -> list[LLMStateCandidate]:
         """Parse LLM response into state candidates."""
         candidates = []
         
@@ -250,7 +249,7 @@ class LLMStateClassifier:
         self,
         from_state: str,
         to_state: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Detect if intermediate states were skipped.
         
         Uses BFS to find if to_state is reachable from from_state
@@ -260,7 +259,7 @@ class LLMStateClassifier:
             return []
         
         # BFS to find path
-        visited: Set[str] = {from_state}
+        visited: set[str] = {from_state}
         queue: deque = deque([(from_state, [])])  # (state, path)
         
         while queue:

@@ -15,7 +15,7 @@ Session extraction is designed to work with:
 
 import logging
 import uuid
-from typing import Optional, Dict, Any, List
+from typing import Optional, Any
 
 logger = logging.getLogger(__name__)
 
@@ -23,16 +23,15 @@ logger = logging.getLogger(__name__)
 # Header names checked for session identity, in priority order.
 # Case-insensitive lookup is performed by _get_header().
 # ---------------------------------------------------------------------------
-_SESSION_HEADER_NAMES: List[str] = [
+_SESSION_HEADER_NAMES: list[str] = [
     "x-sentinel-session-id",
     "x-session-id",
 ]
 
-
 def _get_header(
-    headers: Dict[str, str],
+    headers: dict[str, str],
     name: str,
-) -> Optional[str]:
+) -> str | None:
     """Case-insensitive header lookup.
 
     HTTP headers are case-insensitive per RFC 7230.  LiteLLM sometimes
@@ -48,7 +47,6 @@ def _get_header(
         if k.lower() == name_lower and v:
             return v
     return None
-
 
 class SessionExtractor:
     """
@@ -73,9 +71,9 @@ class SessionExtractor:
 
     @staticmethod
     def _resolve_headers(
-        data: Dict[str, Any],
-        headers: Optional[Dict[str, str]] = None,
-    ) -> Optional[Dict[str, str]]:
+        data: dict[str, Any],
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, str] | None:
         """Resolve the best available HTTP headers dict.
 
         Priority:
@@ -117,8 +115,8 @@ class SessionExtractor:
 
     @staticmethod
     def extract_session_id(
-        data: Dict[str, Any],
-        headers: Optional[Dict[str, str]] = None,
+        data: dict[str, Any],
+        headers: dict[str, str] | None = None,
     ) -> str:
         """
         Extract session ID from request data and/or headers.
@@ -157,7 +155,6 @@ class SessionExtractor:
             if isinstance(lp_meta, dict):
                 if session_id := lp_meta.get("session_id"):
                     return str(session_id)
-
 
         # 2. Check metadata fields
         metadata = data.get("metadata", {})

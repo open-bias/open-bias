@@ -11,8 +11,7 @@ for different policy engines.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
+from typing import Any, List, Optional
 
 @dataclass
 class CompilationResult:
@@ -29,12 +28,12 @@ class CompilationResult:
 
     success: bool
     config: Any
-    warnings: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def failure(cls, errors: List[str], warnings: Optional[List[str]] = None) -> "CompilationResult":
+    def failure(cls, errors: list[str], warnings: list[str] | None = None) -> "CompilationResult":
         """Create a failed compilation result."""
         return cls(
             success=False,
@@ -42,7 +41,6 @@ class CompilationResult:
             errors=errors,
             warnings=warnings or [],
         )
-
 
 class PolicyCompiler(ABC):
     """
@@ -64,7 +62,7 @@ class PolicyCompiler(ABC):
             async def compile(
                 self,
                 natural_language: str,
-                context: Optional[Dict[str, Any]] = None,
+                context: dict[str, Any] | None = None,
             ) -> CompilationResult:
                 # Use LLM to parse NL -> WorkflowDefinition
                 ...
@@ -90,7 +88,7 @@ class PolicyCompiler(ABC):
     async def compile(
         self,
         natural_language: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> CompilationResult:
         """
         Compile natural language policy to engine-specific config.
@@ -122,7 +120,7 @@ class PolicyCompiler(ABC):
         """
         ...
 
-    def validate_result(self, result: CompilationResult) -> List[str]:
+    def validate_result(self, result: CompilationResult) -> list[str]:
         """
         Validate a compilation result.
 

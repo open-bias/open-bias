@@ -45,20 +45,18 @@ constraints:
 ```
 """
 
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 from enum import Enum
-
 
 class SimpleWorkflowConfig(BaseModel):
     """Human-authored workflow config with plain English steps and rules."""
 
     name: str
     mode: Literal["guide", "enforce"]
-    steps: List[str]
-    rules: List[str]
-    tools: Optional[Dict[str, List[str]]] = None
-
+    steps: list[str]
+    rules: list[str]
+    tools: dict[str, list[str]] | None = None
 
 class ClassificationHint(BaseModel):
     """
@@ -73,17 +71,16 @@ class ClassificationHint(BaseModel):
     """
 
     # Tool-based classification (highest priority, exact match)
-    tool_calls: Optional[List[str]] = None
+    tool_calls: list[str] | None = None
 
     # Pattern-based classification (regex patterns)
-    patterns: Optional[List[str]] = None
+    patterns: list[str] | None = None
 
     # Semantic similarity classification (embedding-based)
-    exemplars: Optional[List[str]] = None
+    exemplars: list[str] | None = None
 
     # Minimum confidence for semantic match (0.0 to 1.0)
     min_similarity: float = Field(default=0.7, ge=0.0, le=1.0)
-
 
 class State(BaseModel):
     """
@@ -95,7 +92,7 @@ class State(BaseModel):
     """
 
     name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
+    description: str | None = None
 
     # Classification configuration
     classification: ClassificationHint = Field(default_factory=ClassificationHint)
@@ -106,7 +103,7 @@ class State(BaseModel):
     is_error: bool = Field(default=False)
 
     # Allowed dwell time (for temporal constraints)
-    max_duration_seconds: Optional[float] = Field(default=None, ge=0)
+    max_duration_seconds: float | None = Field(default=None, ge=0)
 
     @field_validator("name")
     @classmethod
@@ -115,7 +112,6 @@ class State(BaseModel):
         if not v.replace("_", "").replace("-", "").isalnum():
             raise ValueError(f"State name must be alphanumeric (with _ or -): {v}")
         return v
-
 
 class Transition(BaseModel):
     """
@@ -132,8 +128,7 @@ class Transition(BaseModel):
     priority: int = Field(default=0, ge=0)
 
     # Optional description
-    description: Optional[str] = None
-
+    description: str | None = None
 
 class ConstraintType(str, Enum):
     """
@@ -150,7 +145,6 @@ class ConstraintType(str, Enum):
     EVENTUALLY = "eventually"
     RESPONSE = "response"
 
-
 class Constraint(BaseModel):
     """
     Temporal constraint on workflow execution.
@@ -166,12 +160,12 @@ class Constraint(BaseModel):
     """
 
     name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
+    description: str | None = None
     type: ConstraintType
 
     # Constraint parameters (interpretation depends on type)
-    trigger: Optional[str] = None  # For response/precedence
-    target: Optional[str] = None  # Target state
+    trigger: str | None = None  # For response/precedence
+    target: str | None = None  # Target state
 
     # Intervention message when violated
     message: str = ""
@@ -195,7 +189,6 @@ class Constraint(BaseModel):
 
         return self
 
-
 class WorkflowDefinition(BaseModel):
     """
     Complete workflow definition (internal compiler output format).
@@ -208,19 +201,19 @@ class WorkflowDefinition(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=100)
     mode: Literal["guide", "enforce"] = "guide"
-    description: Optional[str] = None
+    description: str | None = None
 
     # Workflow components
-    states: List[State]
-    transitions: List[Transition] = Field(default_factory=list)
-    constraints: List[Constraint] = Field(default_factory=list)
+    states: list[State]
+    transitions: list[Transition] = Field(default_factory=list)
+    constraints: list[Constraint] = Field(default_factory=list)
 
     # Metadata
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("states")
     @classmethod
-    def validate_has_initial_state(cls, v: List[State]) -> List[State]:
+    def validate_has_initial_state(cls, v: list[State]) -> list[State]:
         """Validate that at least one initial state exists."""
         if not any(s.is_initial for s in v):
             raise ValueError("Workflow must have at least one initial state")
@@ -257,21 +250,21 @@ class WorkflowDefinition(BaseModel):
 
         return self
 
-    def get_state(self, name: str) -> Optional[State]:
+    def get_state(self, name: str) -> State | None:
         """Get state by name."""
         for state in self.states:
             if state.name == name:
                 return state
         return None
 
-    def get_initial_states(self) -> List[State]:
+    def get_initial_states(self) -> list[State]:
         """Get all initial states."""
         return [s for s in self.states if s.is_initial]
 
-    def get_terminal_states(self) -> List[State]:
+    def get_terminal_states(self) -> list[State]:
         """Get all terminal states."""
         return [s for s in self.states if s.is_terminal]
 
-    def get_transitions_from(self, state_name: str) -> List[Transition]:
+    def get_transitions_from(self, state_name: str) -> list[Transition]:
         """Get all transitions from a state."""
         return [t for t in self.transitions if t.from_state == state_name]

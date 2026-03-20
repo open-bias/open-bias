@@ -5,8 +5,10 @@ Wraps the existing workflow/state machine implementation as a PolicyEngine,
 enabling it to be used alongside other policy mechanisms.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from opensentinel.policy.compiler.protocol import PolicyCompiler
@@ -29,7 +31,6 @@ from opensentinel.policy.protocols import (
 from opensentinel.policy.registry import register_engine
 
 logger = logging.getLogger(__name__)
-
 
 @register_engine("fsm")
 class FSMPolicyEngine(StatefulPolicyEngine):
@@ -328,7 +329,7 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
-    ) -> Optional["PolicyCompiler"]:
+    ) -> "PolicyCompiler" | None:
         """Return an FSMCompiler instance."""
         from opensentinel.policy.engines.fsm.compiler import FSMCompiler
         kwargs: dict[str, Any] = {}

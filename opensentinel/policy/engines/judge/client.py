@@ -7,12 +7,11 @@ Supports single-model and parallel multi-model calls.
 
 import asyncio
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List
 
 from opensentinel.policy.engines.llm.llm_client import LLMClient, LLMClientError
 
 logger = logging.getLogger(__name__)
-
 
 class JudgeClient:
     """Manages LLMClient instances for judge model calls.
@@ -22,12 +21,12 @@ class JudgeClient:
     """
 
     def __init__(self) -> None:
-        self._clients: Dict[str, LLMClient] = {}
+        self._clients: dict[str, LLMClient] = {}
 
     def add_model(
         self,
         name: str,
-        model: Optional[str] = None,
+        model: str | None = None,
         temperature: float = 0.0,
         max_tokens: int = 2048,
         timeout: float = 15.0,
@@ -53,12 +52,12 @@ class JudgeClient:
         logger.debug(f"Judge model registered: {name} ({model})")
 
     @property
-    def model_names(self) -> List[str]:
+    def model_names(self) -> list[str]:
         """List of registered model names."""
         return list(self._clients.keys())
 
     @property
-    def primary_model(self) -> Optional[str]:
+    def primary_model(self) -> str | None:
         """First registered model name, or None."""
         return self.model_names[0] if self._clients else None
 
@@ -73,8 +72,8 @@ class JudgeClient:
         model_name: str,
         system_prompt: str,
         user_prompt: str,
-        session_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
         """Call a single judge model.
 
         Args:
@@ -102,8 +101,8 @@ class JudgeClient:
         self,
         system_prompt: str,
         user_prompt: str,
-        session_id: Optional[str] = None,
-    ) -> Dict[str, Dict[str, Any]]:
+        session_id: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
         """Call all registered judge models in parallel.
 
         Failed models are logged and excluded from results (fail-open).
@@ -131,7 +130,7 @@ class JudgeClient:
             *tasks.values(), return_exceptions=True
         )
 
-        responses: Dict[str, Dict[str, Any]] = {}
+        responses: dict[str, dict[str, Any]] = {}
         for name, result in zip(tasks.keys(), results):
             if isinstance(result, Exception):
                 logger.error(f"Judge model '{name}' failed: {result}")

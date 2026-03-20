@@ -8,17 +8,15 @@ Detects behavioral drift by computing:
 """
 
 import logging
-from typing import List, Optional, Set
 
+from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
 from opensentinel.policy.engines.llm.models import (
-    DriftScores,
     DriftLevel,
+    DriftScores,
     SessionContext,
 )
-from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
 logger = logging.getLogger(__name__)
-
 
 class DriftDetector:
     """Detects behavioral drift in agent conversations.
@@ -51,14 +49,14 @@ class DriftDetector:
         self.decay_alpha = decay_alpha
         
         # Expected state sequence (computed from workflow)
-        self._expected_sequence: Optional[List[str]] = None
+        self._expected_sequence: list[str] | None = None
         
         # On-policy centroid embedding (lazy loaded)
         self._centroid = None
         self._model = None
 
     @property
-    def expected_sequence(self) -> List[str]:
+    def expected_sequence(self) -> list[str]:
         """Compute expected state sequence from workflow transitions.
         
         Uses greedy traversal from initial state following highest-priority
@@ -74,7 +72,7 @@ class DriftDetector:
             return self._expected_sequence
         
         sequence = [initial_states[0].name]
-        visited: Set[str] = {initial_states[0].name}
+        visited: set[str] = {initial_states[0].name}
         current = initial_states[0].name
         
         # Greedy traversal by priority
@@ -113,8 +111,8 @@ class DriftDetector:
             return self._centroid
         
         try:
-            from sentence_transformers import SentenceTransformer
             import numpy as np
+            from sentence_transformers import SentenceTransformer
             
             if self._model is None:
                 self._model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -149,8 +147,8 @@ class DriftDetector:
 
     def compute_temporal_drift(
         self,
-        expected: List[str],
-        actual: List[str],
+        expected: list[str],
+        actual: list[str],
     ) -> float:
         """Compute temporal drift using weighted Levenshtein distance.
         
@@ -191,7 +189,7 @@ class DriftDetector:
 
     def compute_semantic_drift(
         self,
-        recent_messages: List[str],
+        recent_messages: list[str],
     ) -> float:
         """Compute semantic drift from on-policy centroid.
         
@@ -236,8 +234,8 @@ class DriftDetector:
         self,
         session: SessionContext,
         latest_message: str,
-        tool_calls: Optional[List[str]] = None,
-        expected_tool_calls: Optional[List[str]] = None,
+        tool_calls: list[str] | None = None,
+        expected_tool_calls: list[str] | None = None,
     ) -> DriftScores:
         """Compute composite drift scores.
         

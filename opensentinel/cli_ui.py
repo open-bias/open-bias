@@ -7,7 +7,7 @@ All CLI files should import from here, never from rich/questionary directly.
 from __future__ import annotations
 
 import sys
-from typing import Any, Optional, Sequence
+from typing import Any, Sequence
 
 from rich.console import Console
 from rich.panel import Panel
@@ -57,10 +57,8 @@ Q_STYLE = QStyle(
 
 _MAX_WIDTH = 80
 
-
 def _panel_width() -> int:
     return min(console.width, _MAX_WIDTH)
-
 
 def banner(version: str) -> None:
     """Print the welcome banner — styled name + version, one-line description."""
@@ -74,8 +72,7 @@ def banner(version: str) -> None:
     console.print("[dim]Reliability layer for AI agents[/]")
     console.print()
 
-
-def heading(text: str, step: Optional[int] = None, total: int = 5) -> None:
+def heading(text: str, step: int | None = None, total: int = 5) -> None:
     """Print a section heading, optionally prefixed with step number."""
     console.print()
     if step is not None:
@@ -88,34 +85,28 @@ def heading(text: str, step: Optional[int] = None, total: int = 5) -> None:
     else:
         console.print(f"[bold]{text}[/]")
 
-
 def success(msg: str) -> None:
     """Green checkmark + message."""
     console.print(f"  [green]\u2713[/] {msg}")
 
-
-def error(msg: str, hint: Optional[str] = None) -> None:
+def error(msg: str, hint: str | None = None) -> None:
     """Red X + message, optional dim hint."""
     console.print(f"  [red]\u2717[/] {msg}", style="bold red")
     if hint:
         console.print(f"    [dim]{hint}[/]")
 
-
 def warning(msg: str) -> None:
     """Yellow warning prefix + message."""
     console.print(f"  [yellow]![/] {msg}")
-
 
 def dim(msg: str) -> None:
     """Print dim secondary text."""
     console.print(f"  [dim]{msg}[/]")
 
-
 def key_value(key: str, value: str, indent: int = 2) -> None:
     """Print 'key: value' with bold key."""
     pad = " " * indent
     console.print(f"{pad}[bold]{key}:[/] {value}")
-
 
 def next_steps(steps: list[str]) -> None:
     """Print a numbered 'Next steps' list."""
@@ -124,7 +115,6 @@ def next_steps(steps: list[str]) -> None:
     for i, step in enumerate(steps, 1):
         console.print(f"  {i}. {step}")
     console.print()
-
 
 def yaml_preview(content: str, title: str = "") -> None:
     """Panel with syntax-highlighted YAML."""
@@ -148,7 +138,6 @@ def yaml_preview(content: str, title: str = "") -> None:
         )
     )
 
-
 def config_panel(title: str, items: dict[str, str]) -> None:
     """Panel showing key-value config summary."""
     text_parts: list[str] = []
@@ -168,11 +157,9 @@ def config_panel(title: str, items: dict[str, str]) -> None:
         )
     )
 
-
 def spinner(message: str) -> Any:
     """Context manager for a loading spinner. Use only during I/O."""
     return console.status(f"  {message}", spinner="dots")
-
 
 def make_table(title: str, columns: list[str], rows: list[list[str]]) -> None:
     """Build and print a Rich table."""
@@ -193,16 +180,14 @@ def make_table(title: str, columns: list[str], rows: list[list[str]]) -> None:
     console.print()
     console.print(table)
 
-
 # ---------------------------------------------------------------------------
 # Input helpers (questionary wrappers)
 # ---------------------------------------------------------------------------
 
-
 def select(message: str, choices: list[dict[str, str]]) -> str:
     """Arrow-key select prompt. choices: [{"name": "display", "value": "val"}, ...]"""
     q_choices = [Choice(title=c["name"], value=c["value"]) for c in choices]
-    result: Optional[str] = questionary.select(
+    result: str | None = questionary.select(
         message,
         choices=q_choices,
         style=Q_STYLE,
@@ -212,10 +197,9 @@ def select(message: str, choices: list[dict[str, str]]) -> str:
         raise SystemExit(0)
     return result
 
-
 def confirm(message: str, default: bool = True) -> bool:
     """Yes/no confirmation prompt."""
-    result: Optional[bool] = questionary.confirm(
+    result: bool | None = questionary.confirm(
         message,
         default=default,
         style=Q_STYLE,
@@ -223,11 +207,10 @@ def confirm(message: str, default: bool = True) -> bool:
     if result is None:
         raise SystemExit(0)
     return result
-
 
 def text(message: str, default: str = "") -> str:
     """Text input prompt."""
-    result: Optional[str] = questionary.text(
+    result: str | None = questionary.text(
         message,
         default=default,
         style=Q_STYLE,
@@ -236,17 +219,15 @@ def text(message: str, default: str = "") -> str:
         raise SystemExit(0)
     return result
 
-
 def password(message: str) -> str:
     """Hidden text input prompt."""
-    result: Optional[str] = questionary.password(
+    result: str | None = questionary.password(
         message,
         style=Q_STYLE,
     ).ask()
     if result is None:
         raise SystemExit(0)
     return result
-
 
 def is_interactive() -> bool:
     """Check if stdin is a TTY (supports interactive prompts)."""

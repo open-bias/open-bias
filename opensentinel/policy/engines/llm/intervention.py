@@ -7,19 +7,18 @@ template string; strategy selection is handled by the interceptor layer.
 """
 
 import logging
-from typing import Optional, Dict, List
+from typing import List
 
+from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
 from opensentinel.policy.engines.llm.models import (
     ConstraintEvaluation,
-    DriftScores,
     DriftLevel,
+    DriftScores,
     SessionContext,
 )
 from opensentinel.policy.engines.llm.templates import DEFAULT_TEMPLATES
-from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
 logger = logging.getLogger(__name__)
-
 
 class InterventionHandler:
     """Decides whether to intervene based on violations and drift.
@@ -45,14 +44,14 @@ class InterventionHandler:
         self.cooldown_turns = cooldown_turns
         self.self_correction_margin = self_correction_margin
         self.max_intervention_attempts = max_intervention_attempts
-        self._intervention_counts: Dict[str, int] = {}
+        self._intervention_counts: dict[str, int] = {}
 
     def decide(
         self,
         session: SessionContext,
-        violations: List[ConstraintEvaluation],
+        violations: list[ConstraintEvaluation],
         drift: DriftScores,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Decide if intervention is needed and select a message template.
 
         Args:
@@ -109,14 +108,14 @@ class InterventionHandler:
 
         return self._select_template(first_violation, drift, session)
 
-    def get_template(self, constraint_name: str) -> Optional[str]:
+    def get_template(self, constraint_name: str) -> str | None:
         """Get intervention message by constraint name from workflow constraints."""
         for c in self.workflow.constraints:
             if c.name == constraint_name:
                 return c.message if c.message else None
         return None
 
-    def list_interventions(self) -> List[str]:
+    def list_interventions(self) -> list[str]:
         """List all constraint names from workflow."""
         return [c.name for c in self.workflow.constraints]
 
@@ -133,7 +132,7 @@ class InterventionHandler:
 
     def _select_template(
         self,
-        violation: Optional[ConstraintEvaluation],
+        violation: ConstraintEvaluation | None,
         drift: DriftScores,
         session: SessionContext,
     ) -> str:

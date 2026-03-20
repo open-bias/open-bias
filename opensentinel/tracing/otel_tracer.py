@@ -10,7 +10,7 @@ Traces can be exported to any OTLP-compatible backend including:
 import base64
 import json
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Any, List
 from contextlib import contextmanager
 
 from opensentinel import __version__
@@ -26,7 +26,6 @@ from opentelemetry.trace import Status, StatusCode
 from opensentinel.config.settings import OTelConfig
 
 logger = logging.getLogger(__name__)
-
 
 class SpanEventManager(logging.Handler):
     """
@@ -49,7 +48,6 @@ class SpanEventManager(logging.Handler):
         except Exception:
             self.handleError(record)
 
-
 class SentinelTracer:
     """
     OpenTelemetry-based tracer for Open Sentinel workflow events.
@@ -66,8 +64,8 @@ class SentinelTracer:
     def __init__(
         self,
         config: OTelConfig,
-        session_ttl_seconds: Optional[int] = None,
-        max_sessions: Optional[int] = None,
+        session_ttl_seconds: int | None = None,
+        max_sessions: int | None = None,
     ):
         self.config = config
         # Session memory management
@@ -190,7 +188,7 @@ class SentinelTracer:
         except Exception:
             return str(obj)
 
-    def _to_timestamp_ns(self, t: Any) -> Optional[int]:
+    def _to_timestamp_ns(self, t: Any) -> int | None:
         """Convert various time formats to nanoseconds for OTEL."""
         if t is None:
             return None
@@ -208,10 +206,10 @@ class SentinelTracer:
         self,
         name: str,
         session_id: str,
-        attributes: Optional[Dict[str, Any]] = None,
-        input_data: Optional[Any] = None,
-        output_data: Optional[Any] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        attributes: dict[str, Any] | None = None,
+        input_data: Any | None = None,
+        output_data: Any | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         """
         Context manager to trace a block of code.
@@ -266,9 +264,9 @@ class SentinelTracer:
         self,
         session_id: str,
         name: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        input_data: Optional[Dict[str, Any]] = None,
-        output_data: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
+        input_data: dict[str, Any] | None = None,
+        output_data: dict[str, Any] | None = None,
     ) -> None:
         """
         Log an Open Sentinel event as an OTEL span.
@@ -312,7 +310,7 @@ class SentinelTracer:
         previous_state: str,
         new_state: str,
         confidence: float,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Log a workflow state transition."""
         self.log_event(
@@ -335,7 +333,7 @@ class SentinelTracer:
         self,
         session_id: str,
         intervention_name: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> None:
         """Log an intervention being applied."""
         self.log_event(
@@ -353,7 +351,7 @@ class SentinelTracer:
         session_id: str,
         constraint_name: str,
         severity: str,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """Log a workflow deviation/constraint violation."""
         self.log_event(
@@ -376,10 +374,10 @@ class SentinelTracer:
         engine_name: str,
         decision: str,
         hook_type: str,
-        input_data: Optional[Any] = None,
-        output_data: Optional[Any] = None,
-        violations: Optional[List[Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        input_data: Any | None = None,
+        output_data: Any | None = None,
+        violations: list[Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Log a policy evaluation as an OTEL span with rich attributes.
@@ -455,14 +453,14 @@ class SentinelTracer:
         session_id: str,
         model: str,
         messages: list,
-        response_content: Optional[str] = None,
-        response_model: Optional[str] = None,
-        usage: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        latency_ms: Optional[float] = None,
-        parent_span: Optional[Any] = None,
-        start_time: Optional[Any] = None,
-        end_time: Optional[Any] = None,
+        response_content: str | None = None,
+        response_model: str | None = None,
+        usage: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        latency_ms: float | None = None,
+        parent_span: Any | None = None,
+        start_time: Any | None = None,
+        end_time: Any | None = None,
     ) -> None:
         """
         Log an LLM call as an OTEL span with GenAI semantic conventions.
@@ -536,10 +534,10 @@ class SentinelTracer:
         composite_score: float,
         action: str,
         judge_model: str,
-        scores: Optional[List[Dict[str, Any]]] = None,
-        latency_ms: Optional[float] = None,
-        token_usage: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        scores: list[dict[str, Any]] | None = None,
+        latency_ms: float | None = None,
+        token_usage: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Log a judge evaluation as an OTEL span with judge-specific attributes.

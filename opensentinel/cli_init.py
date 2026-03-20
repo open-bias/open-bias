@@ -24,10 +24,8 @@ from opensentinel.cli_ui import (
     yaml_preview,
 )
 import os
-from typing import Optional, Tuple
 
-
-def detect_available_model() -> Tuple[Optional[str], Optional[str], Optional[str]]:
+def detect_available_model() -> tuple[str | None, str | None, str | None]:
     """Check env vars and return the best available model for interactive setup.
 
     Returns:
@@ -45,13 +43,11 @@ def detect_available_model() -> Tuple[Optional[str], Optional[str], Optional[str
 
     return (None, None, None)
 
-
 def get_yaml_dumper():  # type: ignore[no-untyped-def]
     """Get a safe YAML dumper that handles Path objects if needed."""
     import yaml
 
     return yaml.SafeDumper
-
 
 def _resolve_api_key_for_model(model: str) -> "tuple[str | None, str | None]":
     """Check which API key env var is needed for a model.
@@ -89,7 +85,6 @@ def _resolve_api_key_for_model(model: str) -> "tuple[str | None, str | None]":
             return "OPENROUTER_API_KEY", None
         return None, None
     return None, None  # unknown provider — pass through
-
 
 def ensure_model_and_key(
     auto_confirm: bool = False,
@@ -373,7 +368,6 @@ def run_interactive_init() -> None:
         "osentinel compile \"your policy\" --engine " + engine_type + "  # optional: generate complex rules",
     ])
 
-
 def run_quick_init() -> None:
     """Run non-interactive quick setup with sensible defaults."""
     import os
@@ -415,7 +409,6 @@ def run_quick_init() -> None:
         steps.append(f"Export your API key: export {final_env}=<your-key>")
     steps.append("osentinel serve")
     next_steps(steps)
-
 
 def run_init(
     quick: bool = False,

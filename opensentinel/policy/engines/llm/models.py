@@ -8,8 +8,7 @@ for state classification, drift detection, constraint evaluation, and interventi
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, List, Dict, Any
-
+from typing import Any
 
 class ConfidenceTier(Enum):
     """Classification confidence tiers.
@@ -21,7 +20,6 @@ class ConfidenceTier(Enum):
     CONFIDENT = "confident"
     UNCERTAIN = "uncertain"
     LOST = "lost"
-
 
 class DriftLevel(Enum):
     """Drift severity levels.
@@ -36,7 +34,6 @@ class DriftLevel(Enum):
     INTERVENTION = "intervention"
     CRITICAL = "critical"
 
-
 @dataclass
 class LLMStateCandidate:
     """A candidate state from LLM classification."""
@@ -44,17 +41,16 @@ class LLMStateCandidate:
     confidence: float
     reasoning: str
 
-
 @dataclass
 class LLMClassificationResult:
     """Result of LLM-based state classification."""
-    candidates: List[LLMStateCandidate]
+    candidates: list[LLMStateCandidate]
     best_state: str
     best_confidence: float
     tier: ConfidenceTier
     transition_legal: bool
-    skip_violations: List[str] = field(default_factory=list)
-    raw_llm_response: Optional[str] = None
+    skip_violations: list[str] = field(default_factory=list)
+    raw_llm_response: str | None = None
 
     @property
     def is_confident(self) -> bool:
@@ -66,7 +62,6 @@ class LLMClassificationResult:
         """Check if agent appears lost."""
         return self.tier == ConfidenceTier.LOST
 
-
 @dataclass
 class StateTransition:
     """Record of a state transition."""
@@ -76,8 +71,7 @@ class StateTransition:
     tier: ConfidenceTier
     drift_score: float
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class DriftScores:
@@ -86,7 +80,7 @@ class DriftScores:
     semantic: float  # 0.0-1.0, based on message content drift
     composite: float  # Weighted combination
     level: DriftLevel
-    anomaly_flags: Dict[str, bool] = field(default_factory=dict)
+    anomaly_flags: dict[str, bool] = field(default_factory=dict)
 
     @classmethod
     def from_scores(
@@ -116,7 +110,6 @@ class DriftScores:
             level=level,
         )
 
-
 @dataclass
 class ConstraintEvaluation:
     """Result of evaluating a single constraint."""
@@ -125,7 +118,6 @@ class ConstraintEvaluation:
     confidence: float
     evidence: str
     severity: str  # "warning", "error", "critical"
-
 
 @dataclass
 class SessionContext:
@@ -137,19 +129,19 @@ class SessionContext:
     session_id: str
     workflow_name: str
     current_state: str
-    state_history: List[StateTransition] = field(default_factory=list)
+    state_history: list[StateTransition] = field(default_factory=list)
     drift_score: float = 0.0
-    violation_buffer: List[ConstraintEvaluation] = field(default_factory=list)
+    violation_buffer: list[ConstraintEvaluation] = field(default_factory=list)
     turn_count: int = 0
     
     # Ring buffer for recent confidences (max 3)
-    recent_confidences: List[float] = field(default_factory=list)
+    recent_confidences: list[float] = field(default_factory=list)
     
     # Sliding window of recent turns (max default 10)
-    turn_window: List[Dict[str, Any]] = field(default_factory=list)
+    turn_window: list[dict[str, Any]] = field(default_factory=list)
     
     # Evidence memory for constraints
-    constraint_memory: Dict[str, List[str]] = field(default_factory=dict)
+    constraint_memory: dict[str, list[str]] = field(default_factory=dict)
     
     # Turn of last intervention (for cooldown)
     last_intervention_turn: int = -1
@@ -158,7 +150,7 @@ class SessionContext:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
-    def get_state_sequence(self) -> List[str]:
+    def get_state_sequence(self) -> list[str]:
         """Get chronological list of states visited."""
         states = [t.to_state for t in self.state_history]
         if not states and self.current_state:
@@ -181,7 +173,7 @@ class SessionContext:
             return False
         return all(c < 0.8 for c in self.recent_confidences)
 
-    def add_turn(self, data: Dict[str, Any], max_window: int = 10) -> None:
+    def add_turn(self, data: dict[str, Any], max_window: int = 10) -> None:
         """Add turn data to sliding window."""
         self.turn_window.append(data)
         if len(self.turn_window) > max_window:
@@ -196,7 +188,7 @@ class SessionContext:
         confidence: float,
         tier: ConfidenceTier,
         drift_score: float,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Record a state transition."""
         transition = StateTransition(
@@ -216,7 +208,7 @@ class SessionContext:
         """Clear the violation buffer after interventions."""
         self.violation_buffer.clear()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert session to dictionary for serialization."""
         return {
             "session_id": self.session_id,

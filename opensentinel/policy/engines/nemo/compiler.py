@@ -19,7 +19,7 @@ Example:
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -105,7 +105,6 @@ Output:
 }
 """
 
-
 @register_compiler("nemo")
 class NemoCompiler(LLMPolicyCompiler):
     """Compiler that converts natural language to NeMo Guardrails config.
@@ -137,7 +136,7 @@ class NemoCompiler(LLMPolicyCompiler):
     def _build_compilation_prompt(
         self,
         natural_language: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> str:
         prompt_parts = [
             "Convert the following natural language policy into NeMo Guardrails configuration.",
@@ -167,11 +166,11 @@ class NemoCompiler(LLMPolicyCompiler):
 
     def _parse_compilation_response(
         self,
-        response: Dict[str, Any],
+        response: dict[str, Any],
         natural_language: str,
     ) -> CompilationResult:
-        warnings: List[str] = []
-        errors: List[str] = []
+        warnings: list[str] = []
+        errors: list[str] = []
 
         config_yml = response.get("config_yml")
         colang_files = response.get("colang_files")
@@ -195,7 +194,7 @@ class NemoCompiler(LLMPolicyCompiler):
             return CompilationResult.failure(errors, warnings)
 
         # Filter out empty colang files (e.g. output_rails.co when policy is input-only)
-        non_empty_colang: Dict[str, str] = {}
+        non_empty_colang: dict[str, str] = {}
         for filename, content in colang_files.items():
             if not content or not content.strip():
                 warnings.append(f"Colang file '{filename}' is empty")
@@ -217,7 +216,7 @@ class NemoCompiler(LLMPolicyCompiler):
             },
         )
 
-    def validate_result(self, result: CompilationResult) -> List[str]:
+    def validate_result(self, result: CompilationResult) -> list[str]:
         errors = super().validate_result(result)
         if errors:
             return errors

@@ -5,7 +5,7 @@ Provides a generic registry base class and a specialized registry
 for policy engine implementations.
 """
 
-from typing import Dict, Type, Optional, Any, List, Callable, TypeVar, Generic
+from typing import Type, Any, Callable, TypeVar, Generic
 import logging
 
 from opensentinel.policy.protocols import PolicyEngine
@@ -13,7 +13,6 @@ from opensentinel.policy.protocols import PolicyEngine
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
-
 
 class GenericRegistry(Generic[T]):
     """
@@ -24,7 +23,7 @@ class GenericRegistry(Generic[T]):
     different registry types.
     """
 
-    _registry: Dict[str, Type[T]]
+    _registry: dict[str, Type[T]]
     _label: str = "item"
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -39,11 +38,11 @@ class GenericRegistry(Generic[T]):
         logger.debug(f"Registered {cls._label}: {key}")
 
     @classmethod
-    def get(cls, key: str) -> Optional[Type[T]]:
+    def get(cls, key: str) -> Type[T] | None:
         return cls._registry.get(key)
 
     @classmethod
-    def list_registered(cls) -> List[str]:
+    def list_registered(cls) -> list[str]:
         return list(cls._registry.keys())
 
     @classmethod
@@ -53,7 +52,6 @@ class GenericRegistry(Generic[T]):
     @classmethod
     def clear(cls) -> None:
         cls._registry.clear()
-
 
 class PolicyEngineRegistry(GenericRegistry[PolicyEngine]):
     """Registry for policy engine implementations."""
@@ -75,16 +73,15 @@ class PolicyEngineRegistry(GenericRegistry[PolicyEngine]):
     async def create_and_initialize(
         cls,
         engine_type: str,
-        config: Dict[str, Any],
+        config: dict[str, Any],
     ) -> PolicyEngine:
         engine = cls.create(engine_type)
         await engine.initialize(config)
         return engine
 
     @classmethod
-    def list_engines(cls) -> List[str]:
+    def list_engines(cls) -> list[str]:
         return cls.list_registered()
-
 
 def register_engine(engine_type: str) -> Callable[[Type[PolicyEngine]], Type[PolicyEngine]]:
     """Decorator to auto-register a policy engine class."""

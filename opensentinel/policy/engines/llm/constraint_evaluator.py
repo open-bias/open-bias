@@ -6,25 +6,24 @@ deterministically, with evidence memory for context accumulation.
 """
 
 import logging
-from typing import Any, List, Dict, Optional
+from typing import Any, Dict, List
 
+from opensentinel.policy.engines.fsm.workflow.schema import (
+    Constraint,
+    ConstraintType,
+    WorkflowDefinition,
+)
+from opensentinel.policy.engines.llm.llm_client import LLMClient, LLMClientError
 from opensentinel.policy.engines.llm.models import (
     ConstraintEvaluation,
     SessionContext,
 )
-from opensentinel.policy.engines.llm.llm_client import LLMClient, LLMClientError
 from opensentinel.policy.engines.llm.prompts import (
     CONSTRAINT_EVALUATION_SYSTEM,
     CONSTRAINT_EVALUATION_USER,
 )
-from opensentinel.policy.engines.fsm.workflow.schema import (
-    WorkflowDefinition,
-    Constraint,
-    ConstraintType,
-)
 
 logger = logging.getLogger(__name__)
-
 
 class LLMConstraintEvaluator:
     """LLM-based constraint evaluator.
@@ -63,8 +62,8 @@ class LLMConstraintEvaluator:
         self,
         session: SessionContext,
         assistant_message: str,
-        tool_calls: Optional[List[str]] = None,
-    ) -> List[ConstraintEvaluation]:
+        tool_calls: list[str] | None = None,
+    ) -> list[ConstraintEvaluation]:
         """Evaluate constraints for current turn.
         
         Args:
@@ -109,7 +108,7 @@ class LLMConstraintEvaluator:
     def _select_active_constraints(
         self,
         session: SessionContext,
-    ) -> List[Constraint]:
+    ) -> list[Constraint]:
         """Select constraints that are active for evaluation.
 
         Constraint selection rules:
@@ -161,10 +160,10 @@ class LLMConstraintEvaluator:
     async def _evaluate_batch(
         self,
         session: SessionContext,
-        constraints: List[Constraint],
+        constraints: list[Constraint],
         assistant_message: str,
-        tool_calls: List[str],
-    ) -> List[ConstraintEvaluation]:
+        tool_calls: list[str],
+    ) -> list[ConstraintEvaluation]:
         """Evaluate a batch of constraints via LLM."""
         # Build prompts
         system_prompt = CONSTRAINT_EVALUATION_SYSTEM.format(
@@ -193,7 +192,7 @@ class LLMConstraintEvaluator:
 
     def _build_constraints_block(
         self,
-        constraints: List[Constraint],
+        constraints: list[Constraint],
         session: SessionContext,
     ) -> str:
         """Format constraints for the prompt."""
@@ -212,7 +211,7 @@ class LLMConstraintEvaluator:
             lines.append("")
         return "\n".join(lines)
 
-    def _format_conversation(self, turn_window: List[Dict]) -> str:
+    def _format_conversation(self, turn_window: list[Dict]) -> str:
         """Format recent conversation for the prompt."""
         if not turn_window:
             return "(no previous turns)"
@@ -226,7 +225,7 @@ class LLMConstraintEvaluator:
 
     def _format_evidence(
         self,
-        constraints: List[Constraint],
+        constraints: list[Constraint],
         session: SessionContext,
     ) -> str:
         """Format previous evidence for constraints."""
@@ -242,8 +241,8 @@ class LLMConstraintEvaluator:
     def _parse_evaluations(
         self,
         response: Any,
-        constraints: List[Constraint],
-    ) -> List[ConstraintEvaluation]:
+        constraints: list[Constraint],
+    ) -> list[ConstraintEvaluation]:
         """Parse LLM response into constraint evaluations."""
         evaluations = []
         
@@ -275,7 +274,7 @@ class LLMConstraintEvaluator:
     def _update_memory(
         self,
         session: SessionContext,
-        evaluations: List[ConstraintEvaluation],
+        evaluations: list[ConstraintEvaluation],
     ) -> None:
         """Update evidence memory for high-confidence evaluations."""
         for ev in evaluations:

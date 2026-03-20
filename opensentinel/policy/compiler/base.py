@@ -10,12 +10,11 @@ Provides common functionality for policy compilers:
 import json
 import logging
 from abc import abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from opensentinel.policy.compiler.protocol import PolicyCompiler, CompilationResult
 
 logger = logging.getLogger(__name__)
-
 
 # Default system prompt for policy compilation
 DEFAULT_COMPILER_SYSTEM_PROMPT = """You are a policy compiler that converts natural language policy descriptions into structured configuration.
@@ -27,7 +26,6 @@ Your task is to:
 4. Generate intervention messages for violations
 
 Respond ONLY with valid JSON matching the requested schema. Do not include explanations or markdown formatting."""
-
 
 class LLMPolicyCompiler(PolicyCompiler):
     """
@@ -46,9 +44,9 @@ class LLMPolicyCompiler(PolicyCompiler):
         self,
         model: str = "gpt-4o-mini",
         temperature: float = 0.2,
-        system_prompt: Optional[str] = None,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        system_prompt: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
     ):
         """
         Initialize the LLM compiler.
@@ -68,8 +66,8 @@ class LLMPolicyCompiler(PolicyCompiler):
     async def _call_llm(
         self,
         user_prompt: str,
-        system_prompt: Optional[str] = None,
-        response_format: Optional[Dict[str, Any]] = None,
+        system_prompt: str | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> str:
         """
         Call the LLM with a prompt using litellm.
@@ -92,7 +90,7 @@ class LLMPolicyCompiler(PolicyCompiler):
             {"role": "user", "content": user_prompt},
         ]
 
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": self.temperature,
@@ -114,7 +112,7 @@ class LLMPolicyCompiler(PolicyCompiler):
 
         return content
 
-    def _parse_json_response(self, response: str) -> Dict[str, Any]:
+    def _parse_json_response(self, response: str) -> dict[str, Any]:
         """
         Parse JSON from LLM response.
 
@@ -144,7 +142,7 @@ class LLMPolicyCompiler(PolicyCompiler):
     def _build_compilation_prompt(
         self,
         natural_language: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> str:
         """
         Build the prompt for policy compilation.
@@ -164,7 +162,7 @@ class LLMPolicyCompiler(PolicyCompiler):
     @abstractmethod
     def _parse_compilation_response(
         self,
-        response: Dict[str, Any],
+        response: dict[str, Any],
         natural_language: str,
     ) -> CompilationResult:
         """
@@ -185,7 +183,7 @@ class LLMPolicyCompiler(PolicyCompiler):
     async def compile(
         self,
         natural_language: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> CompilationResult:
         """
         Compile natural language policy to engine config.

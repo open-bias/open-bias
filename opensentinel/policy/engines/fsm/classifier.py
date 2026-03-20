@@ -12,7 +12,7 @@ Model: all-MiniLM-L6-v2 (22MB, ~14k sentences/sec on CPU)
 
 import logging
 import re
-from typing import Optional, List, Dict, Any
+from typing import Any
 from dataclasses import dataclass
 
 from opensentinel.policy.engines.stateful import StateClassificationResult
@@ -21,10 +21,6 @@ from opensentinel.config.settings import ClassifierConfig
 from opensentinel.core.utils import extract_response_content, extract_tool_call_names
 
 logger = logging.getLogger(__name__)
-
-
-
-
 
 class StateClassifier:
     """
@@ -48,18 +44,18 @@ class StateClassifier:
 
     def __init__(
         self,
-        states: List[State],
-        config: Optional[ClassifierConfig] = None,
+        states: list[State],
+        config: ClassifierConfig | None = None,
     ):
         self.states = {s.name: s for s in states}
         self.config = config or ClassifierConfig()
 
         # Lazy-load embedding model
         self._model = None
-        self._state_embeddings: Optional[Dict[str, Any]] = None
+        self._state_embeddings: dict[str, Any] | None = None
 
         # Pre-compile regex patterns for performance
-        self._compiled_patterns: Dict[str, List[re.Pattern]] = {}
+        self._compiled_patterns: dict[str, list[re.Pattern]] = {}
         for state in states:
             if state.classification.patterns:
                 self._compiled_patterns[state.name] = [
@@ -92,7 +88,7 @@ class StateClassifier:
 
         return self._model
 
-    def _get_state_embeddings(self) -> Dict[str, Any]:
+    def _get_state_embeddings(self) -> dict[str, Any]:
         """Compute and cache state exemplar embeddings."""
         if self._state_embeddings is not None:
             return self._state_embeddings
@@ -125,7 +121,7 @@ class StateClassifier:
     def classify(
         self,
         response: Any,
-        current_state: Optional[str] = None,
+        current_state: str | None = None,
     ) -> StateClassificationResult:
         """
         Classify an LLM response to a workflow state.
@@ -183,8 +179,8 @@ class StateClassifier:
 
     def _classify_by_tools(
         self,
-        tool_calls: List[str],
-    ) -> Optional[StateClassificationResult]:
+        tool_calls: list[str],
+    ) -> StateClassificationResult | None:
         """Classify by matching tool call names."""
         for state_name, state in self.states.items():
             hint = state.classification
@@ -202,7 +198,7 @@ class StateClassifier:
     def _classify_by_patterns(
         self,
         content: str,
-    ) -> Optional[StateClassificationResult]:
+    ) -> StateClassificationResult | None:
         """Classify by regex pattern matching."""
         for state_name, patterns in self._compiled_patterns.items():
             for pattern in patterns:
@@ -222,7 +218,7 @@ class StateClassifier:
     def _classify_by_embeddings(
         self,
         content: str,
-    ) -> Optional[StateClassificationResult]:
+    ) -> StateClassificationResult | None:
         """Classify by semantic similarity to state exemplars."""
         state_embeddings = self._get_state_embeddings()
         if not state_embeddings:
@@ -267,8 +263,8 @@ class StateClassifier:
     def classify_from_tool_call(
         self,
         tool_name: str,
-        tool_args: Optional[Dict[str, Any]] = None,
-    ) -> Optional[StateClassificationResult]:
+        tool_args: dict[str, Any] | None = None,
+    ) -> StateClassificationResult | None:
         """
         Quick classification based on tool usage.
 

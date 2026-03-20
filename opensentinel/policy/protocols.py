@@ -5,7 +5,9 @@ These protocols define the contract that all policy engines must implement,
 enabling pluggable policy evaluation while maintaining a consistent API.
 """
 
-from typing import Optional, Dict, Any, List, TYPE_CHECKING
+from __future__ import annotations
+
+from typing import Any, TYPE_CHECKING
 from dataclasses import dataclass, field
 from enum import Enum
 from abc import ABC, abstractmethod
@@ -15,7 +17,6 @@ import inspect
 if TYPE_CHECKING:
     from opensentinel.policy.compiler.protocol import PolicyCompiler
 
-
 class Decision(Enum):
     """Result of policy evaluation."""
 
@@ -23,16 +24,14 @@ class Decision(Enum):
     BLOCK = "block"
     INTERVENE = "intervene"
 
-
 @dataclass
 class EngineResult:
     """Result returned by a policy engine evaluation."""
 
     decision: Decision
-    message: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    modified_messages: Optional[List[Dict[str, Any]]] = None
-
+    message: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    modified_messages: list[dict[str, Any]] | None = None
 
 class PolicyEngine(ABC):
     """
@@ -57,7 +56,7 @@ class PolicyEngine(ABC):
         ...
 
     @abstractmethod
-    async def initialize(self, config: Dict[str, Any]) -> None:
+    async def initialize(self, config: dict[str, Any]) -> None:
         """
         Initialize the engine with configuration.
 
@@ -70,8 +69,8 @@ class PolicyEngine(ABC):
     async def evaluate_request(
         self,
         session_id: str,
-        request_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
     ) -> EngineResult:
         """
         Evaluate an incoming request against policies.
@@ -93,8 +92,8 @@ class PolicyEngine(ABC):
         self,
         session_id: str,
         response_data: Any,
-        request_data: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
     ) -> EngineResult:
         """
         Evaluate an LLM response against policies.
@@ -117,7 +116,7 @@ class PolicyEngine(ABC):
     async def get_session_state(
         self,
         session_id: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Get current session state for debugging/tracing.
 
@@ -147,14 +146,13 @@ class PolicyEngine(ABC):
         """
         pass
 
-    def get_compiler(self, **kwargs: Any) -> Optional["PolicyCompiler"]:
+    def get_compiler(self, **kwargs: Any) -> "PolicyCompiler" | None:
         """Get the compiler for this engine type.
 
         Override in subclasses that have a dedicated compiler.
         Returns None by default (engine has no compiler).
         """
         return None
-
 
 def require_initialized(method):
     """
