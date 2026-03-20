@@ -8,7 +8,7 @@ enabling it to be used alongside other policy mechanisms.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from opensentinel.policy.compiler.protocol import PolicyCompiler
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 from opensentinel.policy.engines.fsm.classifier import StateClassifier
 from opensentinel.policy.engines.fsm.workflow.constraints import ConstraintEvaluator
 from opensentinel.policy.engines.fsm.workflow.parser import WorkflowParser
-from opensentinel.policy.engines.fsm.workflow.schema import ConstraintType, WorkflowDefinition
+from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
 from opensentinel.policy.engines.fsm.workflow.state_machine import WorkflowStateMachine
 from opensentinel.policy.engines.stateful import (
     StateClassificationResult,
@@ -62,7 +62,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
 
     def __init__(self) -> None:
         self._workflow: WorkflowDefinition | None = None
-        self._mode: Literal["guide", "enforce"] = "guide"
         self._state_machine: WorkflowStateMachine | None = None
         self._classifier: StateClassifier | None = None
         self._constraint_evaluator: ConstraintEvaluator | None = None
@@ -110,7 +109,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
                 "FSM engine requires 'config_path' or 'workflow' in config"
             )
 
-        self._mode = self._workflow.mode
         self._state_machine = WorkflowStateMachine(self._workflow)
 
         # Wire classifier config from engine config
@@ -188,20 +186,11 @@ class FSMPolicyEngine(StatefulPolicyEngine):
             )
             constraint_violations.extend(boundary_violations)
 
-        # Mode-aware decision logic
         decision = Decision.ALLOW
         message: str | None = None
 
         if constraint_violations:
-            if self._mode == "guide":
-                decision = Decision.INTERVENE
-            else:
-                has_immediate = any(
-                    v.constraint_type in (ConstraintType.PRECEDENCE, ConstraintType.NEVER)
-                    for v in constraint_violations
-                )
-                decision = Decision.BLOCK if has_immediate else Decision.INTERVENE
-
+            decision = Decision.INTERVENE
             message = constraint_violations[0].message
 
         return EngineResult(
@@ -215,7 +204,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
                 "transition_result": transition_result.value,
                 "transition_error": error,
                 "workflow": self._workflow.name,
-                "mode": self._mode,
                 "violations": [
                     {
                         "name": cv.constraint_name,

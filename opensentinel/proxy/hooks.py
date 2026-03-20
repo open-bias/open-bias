@@ -220,6 +220,7 @@ class SentinelCallback(CustomLogger):
             self._interceptor = Interceptor(
                 checkers,
                 default_strategy=self.settings.policy.default_strategy,
+                fail_action=self.settings.policy.fail_action,
             )
             self._interceptor_initialized = True
             logger.info(f"Interceptor initialized with {len(checkers)} checkers")
