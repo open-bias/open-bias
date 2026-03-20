@@ -447,6 +447,9 @@ class FSMCompiler(PolicyCompiler):
     can use the standard PolicyCompiler interface.  No LLM calls are made.
     """
 
+    def __init__(self, **kwargs: Any) -> None:  # noqa: ARG002
+        """Accept and ignore kwargs (model, api_key, base_url) for interface compat."""
+
     @property
     def engine_type(self) -> str:
         return "fsm"
