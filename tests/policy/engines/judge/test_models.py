@@ -84,7 +84,6 @@ class TestRubric:
         assert rubric.evaluation_type == EvaluationType.POINTWISE
         assert rubric.scope == EvaluationScope.TURN
         assert rubric.pass_threshold == 0.6
-        assert rubric.fail_action == VerdictAction.INTERVENE
         assert rubric.prompt_overrides == {}
 
 

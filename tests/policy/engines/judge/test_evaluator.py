@@ -53,7 +53,6 @@ def simple_rubric():
             ),
         ],
         pass_threshold=0.6,
-        fail_action=VerdictAction.INTERVENE,
     )
 
 
@@ -305,7 +304,6 @@ class TestBinarySafetyCriteria:
                 ),
             ],
             pass_threshold=0.6,
-            fail_action=VerdictAction.INTERVENE,
         )
 
     @pytest.mark.asyncio

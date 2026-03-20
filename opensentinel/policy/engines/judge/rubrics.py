@@ -15,7 +15,6 @@ from opensentinel.policy.engines.judge.models import (
     EvaluationType,
     EvaluationScope,
     ScoreScale,
-    VerdictAction,
 )
 
 logger = logging.getLogger(__name__)
@@ -196,7 +195,6 @@ def _register_builtins() -> None:
         evaluation_type=EvaluationType.POINTWISE,
         scope=EvaluationScope.TURN,
         pass_threshold=0.8,
-        fail_action=VerdictAction.BLOCK,
     ))
 
     # --- agent_behavior ---
@@ -238,7 +236,6 @@ def _register_builtins() -> None:
         evaluation_type=EvaluationType.POINTWISE,
         scope=EvaluationScope.TURN,
         pass_threshold=0.6,
-        fail_action=VerdictAction.INTERVENE,
     ))
 
     # --- conversation_policy ---
@@ -278,7 +275,6 @@ def _register_builtins() -> None:
         evaluation_type=EvaluationType.POINTWISE,
         scope=EvaluationScope.CONVERSATION,
         pass_threshold=0.6,
-        fail_action=VerdictAction.INTERVENE,
     ))
 
 

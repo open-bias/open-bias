@@ -70,7 +70,6 @@ class Rubric:
     evaluation_type: EvaluationType = EvaluationType.POINTWISE
     scope: EvaluationScope = EvaluationScope.TURN
     pass_threshold: float = 0.6
-    fail_action: VerdictAction = VerdictAction.INTERVENE
     prompt_overrides: Dict[str, str] = field(default_factory=dict)
 
 

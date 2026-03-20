@@ -7,7 +7,6 @@ from opensentinel.policy.engines.judge.models import (
     EvaluationType,
     EvaluationScope,
     ScoreScale,
-    VerdictAction,
 )
 from opensentinel.policy.engines.judge.rubrics import RubricRegistry
 
@@ -37,7 +36,6 @@ class TestRubricRegistry:
         rubric = registry.get("agent_behavior")
         assert rubric.evaluation_type == EvaluationType.POINTWISE
         assert rubric.scope == EvaluationScope.TURN
-        assert rubric.fail_action == VerdictAction.INTERVENE
         criteria_names = [c.name for c in rubric.criteria]
         assert "instruction_following" in criteria_names
         assert "tool_use_safety" in criteria_names
@@ -61,7 +59,6 @@ class TestRubricRegistry:
     def test_safety_rubric(self):
         registry = RubricRegistry()
         rubric = registry.get("safety")
-        assert rubric.fail_action == VerdictAction.BLOCK
         assert rubric.pass_threshold == 0.8
         for criterion in rubric.criteria:
             assert criterion.scale == ScoreScale.BINARY
@@ -70,7 +67,6 @@ class TestRubricRegistry:
         registry = RubricRegistry()
         rubric = registry.get("conversation_policy")
         assert rubric.scope == EvaluationScope.CONVERSATION
-        assert rubric.fail_action == VerdictAction.INTERVENE
 
 class TestCreateRulesRubric:
     def test_creates_one_criterion_per_rule(self):
@@ -82,8 +78,6 @@ class TestCreateRulesRubric:
         assert len(rubric.criteria) == 2
         assert rubric.criteria[0].scale == ScoreScale.BINARY
         assert rubric.criteria[1].scale == ScoreScale.BINARY
-        # fail_action is now engine-level, rubric uses dataclass default
-        assert rubric.fail_action == VerdictAction.INTERVENE
         # Each criterion has a descriptive name derived from the rule
         assert "rule_1" in rubric.criteria[0].name
         assert "rule_2" in rubric.criteria[1].name
