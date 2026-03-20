@@ -198,20 +198,21 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         message = extract_response_content(response_data)
         tool_calls = extract_tool_call_names(response_data)
 
-        # Add turn to session
-        session.add_turn({
-            "role": "assistant",
-            "message": message,
-            "tool_calls": tool_calls,
-        })
-
         violations: list[dict[str, Any]] = []
 
         try:
-            # 1. Classify state
+            # 1. Classify state (before add_turn so the current message
+            #    isn't duplicated in the classifier's context window)
             classification = await self._state_classifier.classify(
                 session, message, tool_calls
             )
+
+            # Record turn after classification
+            session.add_turn({
+                "role": "assistant",
+                "message": message,
+                "tool_calls": tool_calls,
+            })
 
             # Update confidence buffer
             session.add_confidence(classification.best_confidence)
@@ -361,6 +362,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             },
         )
 
+    @require_initialized
     async def get_current_state(self, session_id: str) -> str:
         """Get current state name for session."""
         session = self._sessions.get(session_id)
@@ -374,6 +376,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                 return initial[0].name
         return "unknown"
 
+    @require_initialized
     async def get_state_history(self, session_id: str) -> list[str]:
         """Get state transition history."""
         session = self._sessions.get(session_id)
@@ -381,6 +384,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             return session.get_state_sequence()
         return []
 
+    @require_initialized
     async def get_valid_next_states(self, session_id: str) -> list[str]:
         """Get valid next states from current state."""
         current = await self.get_current_state(session_id)

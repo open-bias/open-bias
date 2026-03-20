@@ -86,13 +86,13 @@ class InterventionHandler:
                 )
                 return None
 
-        # Self-correction check: if drift is decreasing, skip intervention
+        # Self-correction check: if drift is decreasing from last intervention, skip
         if (
             session.last_intervention_turn >= 0
-            and drift.composite < session.drift_score - self.self_correction_margin
+            and drift.composite < session.drift_at_last_intervention - self.self_correction_margin
         ):
             logger.info(
-                f"Self-correction detected: drift {session.drift_score:.3f} → "
+                f"Self-correction detected: drift {session.drift_at_last_intervention:.3f} → "
                 f"{drift.composite:.3f}"
             )
             return None
@@ -106,7 +106,14 @@ class InterventionHandler:
 
         first_violation = next((v for v in violations if v.violated), None)
 
-        return self._select_template(first_violation, drift, session)
+        message = self._select_template(first_violation, drift, session)
+
+        # Track intervention count and update session
+        self._intervention_counts[session.session_id] = session_count + 1
+        session.last_intervention_turn = session.turn_count
+        session.drift_at_last_intervention = drift.composite
+
+        return message
 
     def get_template(self, constraint_name: str) -> str | None:
         """Get intervention message by constraint name from workflow constraints."""
