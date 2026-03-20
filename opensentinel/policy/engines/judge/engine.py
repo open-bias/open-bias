@@ -328,11 +328,12 @@ class JudgePolicyEngine(PolicyEngine):
                     errors.append(f"models[{i}]: missing 'model' field.")
 
         # Check fail_action
+        from opensentinel.policy.engines.judge.compiler import VALID_ACTIONS
+
         fail_action = config.get("fail_action", "block")
-        valid_actions = {"block", "intervene", "pass"}
-        if fail_action not in valid_actions:
+        if fail_action not in VALID_ACTIONS:
             errors.append(
-                f"Invalid fail_action '{fail_action}'. Must be one of: {', '.join(sorted(valid_actions))}"
+                f"Invalid fail_action '{fail_action}'. Must be one of: {', '.join(sorted(VALID_ACTIONS))}"
             )
 
         # Build a temporary registry and load inline policy to check rubrics

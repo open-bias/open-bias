@@ -107,12 +107,12 @@ class SentinelProxy:
             return
 
         # Register shutdown handler
-        atexit.register(self._shutdown_tracer)
+        atexit.register(self._shutdown)
 
         self._hooks_registered = True
         logger.info("Open Sentinel hooks registered")
 
-    def _shutdown_tracer(self) -> None:
+    def _shutdown(self) -> None:
         """Shutdown callback, interceptor, and flush any pending data."""
         logger.info("Open Sentinel proxy shutting down...")
 

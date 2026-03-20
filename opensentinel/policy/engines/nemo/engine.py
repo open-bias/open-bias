@@ -382,8 +382,8 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
 
         Returns modified messages if changes detected, None otherwise.
         """
+        # TODO: implement proper message-diff detection per NeMo Guardrails version
         # NeMo may return modified messages in the result
-        # This is a simplified check - actual implementation depends on NeMo version
         if hasattr(result, "messages") and result.messages != original_messages:
             return result.messages
 
