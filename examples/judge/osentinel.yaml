@@ -3,12 +3,9 @@
 # Under the hood:
 #   - The judge LLM (separate from your agent's LLM) receives the conversation
 #     history + the latest response, then scores it on built-in rubrics
-#     (safety, tone, instruction_following).
-#   - Scores are normalized to [0, 1] and aggregated into a weighted average.
-#   - The aggregate maps to an action based on mode thresholds:
-#       safe:       pass > 0.7,  warn > 0.5,  block < 0.3
-#       balanced:   pass > 0.6,  warn > 0.4,  block < 0.2
-#       aggressive: pass > 0.5,  warn > 0.3,  block < 0.1
+#     (safety, agent_behavior).
+#   - Binary rubrics: any criterion failure triggers the configured fail_action.
+#   - Likert rubrics: scores are normalized and aggregated into a weighted average.
 #
 # The judge runs async by default — zero latency on the critical path.
 # Set judge.sync: true to block until evaluation completes.
@@ -17,7 +14,7 @@ engine: judge
 port: 4000
 
 judge:
-  mode: balanced        # threshold profile (see above)
+  fail_action: block    # block or intervene on violation
   verbose: true         # logs raw judge prompt + response — useful for debugging
   # model: ...   # override judge LLM (auto-detected from API keys if omitted)
 

@@ -4,7 +4,6 @@
 #   - Engine: judge (default)
 #   - Model: first available from OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY
 #   - Port: 4000
-#   - Mode: balanced (pass > 0.6, warn > 0.4, block < 0.2)
 
 policy:
   - "Responses must be helpful and accurate"
