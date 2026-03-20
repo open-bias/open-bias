@@ -46,6 +46,7 @@ from opensentinel.core.interceptor import (
 )
 from opensentinel.core.intervention.strategies import WorkflowViolationError
 from opensentinel.policy.protocols import PolicyEngine
+from opensentinel.proxy.middleware import SessionExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -314,33 +315,11 @@ class SentinelCallback(CustomLogger):
                 logger.info(f"SentinelTracer initialized: {self._tracer}")
         return self._tracer
 
-    def _extract_session_id(self, data: dict) -> str:
-        """
-        Extract session ID from request data.
-
-        HTTP headers are automatically resolved from the LiteLLM data dict
-        (``data["proxy_server_request"]["headers"]`` or
-        ``data["metadata"]["headers"]``), so callers like OpenClaw that
-        send ``x-sentinel-session-id`` as an HTTP header are supported
-        without extra wiring.
-
-        Priority:
-        1. HTTP header: x-sentinel-session-id / x-session-id
-        2. metadata.session_id / metadata.sentinel_session_id
-        3. metadata.run_id (LangChain)
-        4. user field (OpenAI pattern)
-        5. thread_id (OpenAI Assistants)
-        6. Random UUID (last resort, logged as warning)
-        """
-        from opensentinel.proxy.middleware import SessionExtractor
-
-        return SessionExtractor.extract_session_id(data)
-
     async def async_pre_call_hook(
         self,
         user_api_key_dict: UserAPIKeyAuth,
         cache: DualCache,
-        data: dict,
+        data: dict[str, Any],
         call_type: CallType,
     ) -> Exception | str | dict | None:
         """
@@ -361,11 +340,11 @@ class SentinelCallback(CustomLogger):
         self,
         user_api_key_dict: UserAPIKeyAuth,
         cache: DualCache,
-        data: dict,
+        data: dict[str, Any],
         call_type: CallType,
     ) -> Exception | str | dict | None:
         """Inner implementation for async_pre_call_hook."""
-        session_id = self._extract_session_id(data)
+        session_id = SessionExtractor.extract_session_id(data)
 
         # Persist session ID in metadata to ensure consistency across hooks
         # This prevents generating a new random UUID in post_call/failure hooks
@@ -440,7 +419,7 @@ class SentinelCallback(CustomLogger):
 
     async def async_post_call_success_hook(
         self,
-        data: dict,
+        data: dict[str, Any],
         user_api_key_dict: UserAPIKeyAuth,
         response: Any,
     ) -> Any:
@@ -460,12 +439,12 @@ class SentinelCallback(CustomLogger):
 
     async def _post_call_success_impl(
         self,
-        data: dict,
+        data: dict[str, Any],
         user_api_key_dict: UserAPIKeyAuth,
         response: Any,
     ) -> Any:
         """Inner implementation for async_post_call_success_hook."""
-        session_id = self._extract_session_id(data)
+        session_id = SessionExtractor.extract_session_id(data)
         llm_end_time = time.time()
         llm_start_time = data.get("metadata", {}).get("_opensentinel_llm_start_time")
 
@@ -568,7 +547,7 @@ class SentinelCallback(CustomLogger):
 
     async def async_post_call_failure_hook(
         self,
-        request_data: dict,
+        request_data: dict[str, Any],
         user_api_key_dict: UserAPIKeyAuth,
         original_exception: Exception,
         **kwargs: Any,
@@ -585,25 +564,25 @@ class SentinelCallback(CustomLogger):
 
     async def _post_call_failure_impl(
         self,
-        request_data: dict,
+        request_data: dict[str, Any],
         user_api_key_dict: UserAPIKeyAuth,
         original_exception: Exception,
         **kwargs: Any,
     ) -> None:
         """Inner implementation for async_post_call_failure_hook."""
-        session_id = self._extract_session_id(request_data)
+        session_id = SessionExtractor.extract_session_id(request_data)
 
         logger.warning(f"LLM call failed for session {session_id}: {original_exception}")
 
     # Synchronous hooks (for logging/metrics)
 
-    def log_pre_api_call(self, model: str, messages: list, kwargs: dict) -> None:
+    def log_pre_api_call(self, model: str, messages: list[Any], kwargs: dict[str, Any]) -> None:
         """Log before API call (sync)."""
         logger.debug(f"API call starting: model={model}")
 
     def log_post_api_call(
         self,
-        kwargs: dict,
+        kwargs: dict[str, Any],
         response_obj: Any,
         start_time: datetime,
         end_time: datetime,
@@ -617,7 +596,7 @@ class SentinelCallback(CustomLogger):
 
     def log_success_event(
         self,
-        kwargs: dict,
+        kwargs: dict[str, Any],
         response_obj: Any,
         start_time: datetime,
         end_time: datetime,
@@ -627,7 +606,7 @@ class SentinelCallback(CustomLogger):
 
     def log_failure_event(
         self,
-        kwargs: dict,
+        kwargs: dict[str, Any],
         response_obj: Any,
         start_time: datetime,
         end_time: datetime,
@@ -639,7 +618,7 @@ class SentinelCallback(CustomLogger):
 
     async def async_log_success_event(
         self,
-        kwargs: dict,
+        kwargs: dict[str, Any],
         response_obj: Any,
         start_time: datetime,
         end_time: datetime,
@@ -655,13 +634,13 @@ class SentinelCallback(CustomLogger):
 
     async def _log_success_impl(
         self,
-        kwargs: dict,
+        kwargs: dict[str, Any],
         response_obj: Any,
         start_time: datetime,
         end_time: datetime,
     ) -> None:
         """Inner implementation for async_log_success_event."""
-        session_id = self._extract_session_id(kwargs)
+        session_id = SessionExtractor.extract_session_id(kwargs)
 
         interceptor = await self._get_interceptor()
         logger.info(
@@ -697,7 +676,7 @@ class SentinelCallback(CustomLogger):
 
     async def async_log_failure_event(
         self,
-        kwargs: dict,
+        kwargs: dict[str, Any],
         response_obj: Any,
         start_time: datetime,
         end_time: datetime,
@@ -713,12 +692,12 @@ class SentinelCallback(CustomLogger):
 
     async def _log_failure_impl(
         self,
-        kwargs: dict,
+        kwargs: dict[str, Any],
         response_obj: Any,
         start_time: datetime,
         end_time: datetime,
     ) -> None:
         """Inner implementation for async_log_failure_event."""
-        session_id = self._extract_session_id(kwargs)
+        session_id = SessionExtractor.extract_session_id(kwargs)
 
         logger.warning(f"LLM call failed for session {session_id}: {response_obj}")

@@ -32,7 +32,6 @@ def mocks():
         }
 
 
-@pytest.mark.asyncio
 async def test_initialization(engine, mocks):
     config = {"workflow": {"name": "test_workflow", "states": [], "constraints": []}}
     mock_wf = MagicMock(name="test_workflow", mode="guide", states=[], constraints=[])
@@ -48,7 +47,6 @@ async def test_initialization(engine, mocks):
     assert engine.engine_type == "fsm"
 
 
-@pytest.mark.asyncio
 async def test_evaluate_response_success(engine, mocks):
     mock_workflow = MagicMock(name="test_workflow", mode="guide", states=[], constraints=[])
     mocks["parser"]().parse_dict.return_value = mock_workflow
@@ -79,7 +77,6 @@ async def test_evaluate_response_success(engine, mocks):
     mocks["sm"].return_value.transition.assert_called_once()
 
 
-@pytest.mark.asyncio
 async def test_evaluate_response_guide_mode_intervenes(engine, mocks):
     """In guide mode, all violations produce INTERVENE (never BLOCK)."""
     mock_workflow = MagicMock(name="test_workflow", mode="guide", states=[], constraints=[])
@@ -110,7 +107,6 @@ async def test_evaluate_response_guide_mode_intervenes(engine, mocks):
     assert result.metadata["mode"] == "guide"
 
 
-@pytest.mark.asyncio
 async def test_evaluate_response_guide_mode_never_blocks(engine, mocks):
     """Guide mode produces INTERVENE even for PRECEDENCE violations."""
     mock_workflow = MagicMock(name="test_workflow", mode="guide", states=[], constraints=[])
@@ -141,7 +137,6 @@ async def test_evaluate_response_guide_mode_never_blocks(engine, mocks):
     assert result.metadata["mode"] == "guide"
 
 
-@pytest.mark.asyncio
 async def test_evaluate_response_enforce_mode_blocks_never(engine, mocks):
     """In enforce mode, NEVER violations produce BLOCK."""
     mock_workflow = MagicMock(name="test_workflow", mode="enforce", states=[], constraints=[])
@@ -172,7 +167,6 @@ async def test_evaluate_response_enforce_mode_blocks_never(engine, mocks):
     assert result.metadata["mode"] == "enforce"
 
 
-@pytest.mark.asyncio
 async def test_evaluate_response_enforce_mode_blocks_precedence(engine, mocks):
     """In enforce mode, PRECEDENCE violations produce BLOCK."""
     mock_workflow = MagicMock(name="test_workflow", mode="enforce", states=[], constraints=[])
@@ -202,7 +196,6 @@ async def test_evaluate_response_enforce_mode_blocks_precedence(engine, mocks):
     assert result.decision == Decision.BLOCK
 
 
-@pytest.mark.asyncio
 async def test_evaluate_response_enforce_mode_intervenes_eventually(engine, mocks):
     """In enforce mode, EVENTUALLY violations produce INTERVENE (not BLOCK)."""
     mock_workflow = MagicMock(name="test_workflow", mode="enforce", states=[], constraints=[])
@@ -232,7 +225,6 @@ async def test_evaluate_response_enforce_mode_intervenes_eventually(engine, mock
     assert result.decision == Decision.INTERVENE
 
 
-@pytest.mark.asyncio
 async def test_initialization_with_config_path(engine, mocks):
     """Test initialization using the unified config_path parameter."""
     config = {"config_path": "path/to/workflow.yaml"}
@@ -248,7 +240,6 @@ async def test_initialization_with_config_path(engine, mocks):
     assert engine.engine_type == "fsm"
 
 
-@pytest.mark.asyncio
 async def test_initialization_failure(engine, mocks):
     """Test initialization failure when no valid config provided."""
     config = {}
@@ -256,7 +247,6 @@ async def test_initialization_failure(engine, mocks):
         await engine.initialize(config)
 
 
-@pytest.mark.asyncio
 async def test_session_boundary_evaluation_at_terminal(engine, mocks):
     """Terminal state triggers session-boundary constraint evaluation."""
     mock_workflow = MagicMock(name="test_workflow", mode="enforce", states=[], constraints=[])

@@ -124,7 +124,6 @@ class TestPolicyCompiler:
         """Create a mock compiler."""
         return MockCompiler()
 
-    @pytest.mark.asyncio
     async def test_compile(self, compiler):
         """Test basic compilation."""
         result = await compiler.compile("test policy")

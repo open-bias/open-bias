@@ -102,25 +102,21 @@ class TestRegistration:
 
 
 class TestInitialization:
-    @pytest.mark.asyncio
     async def test_initialize_minimal(self, engine, judge_config):
         await engine.initialize(judge_config)
         assert engine._initialized
         assert engine.name == "judge:agent_behavior"
 
-    @pytest.mark.asyncio
     async def test_initialize_full_config(self, engine, full_config):
         await engine.initialize(full_config)
         assert engine._initialized
         assert engine._conversation_eval_interval == 5
 
-    @pytest.mark.asyncio
     async def test_initialize_raises_without_models(self, engine):
         """Test that engine raises ValueError when no models provided."""
         with pytest.raises(ValueError, match="Judge engine requires a model"):
             await engine.initialize({})
 
-    @pytest.mark.asyncio
     async def test_initialize_raises_when_default_rubric_not_found(self, engine):
         """Test that engine raises ValueError when default rubric doesn't exist."""
         config = {
@@ -132,12 +128,10 @@ class TestInitialization:
 
 
 class TestEvaluateRequest:
-    @pytest.mark.asyncio
     async def test_raises_when_uninitialized(self, engine, sample_request):
         with pytest.raises(RuntimeError, match="not initialized"):
             await engine.evaluate_request("s1", sample_request)
 
-    @pytest.mark.asyncio
     async def test_allow_by_default(self, engine, judge_config, sample_request):
         await engine.initialize(judge_config)
         result = await engine.evaluate_request("s1", sample_request)
@@ -146,12 +140,10 @@ class TestEvaluateRequest:
 
 
 class TestEvaluateResponse:
-    @pytest.mark.asyncio
     async def test_raises_when_uninitialized(self, engine, sample_request, sample_response):
         with pytest.raises(RuntimeError, match="not initialized"):
             await engine.evaluate_response("s1", sample_response, sample_request)
 
-    @pytest.mark.asyncio
     async def test_passing_response(self, engine, judge_config, sample_request, sample_response):
         await engine.initialize(judge_config)
         engine._client.call_judge = AsyncMock(return_value=_passing_judge_response())
@@ -160,7 +152,6 @@ class TestEvaluateResponse:
         assert result.decision == Decision.ALLOW
         assert len(result.metadata.get("violations", [])) == 0
 
-    @pytest.mark.asyncio
     async def test_failing_response(self, engine, judge_config, sample_request, sample_response):
         await engine.initialize(judge_config)
         engine._client.call_judge = AsyncMock(return_value=_failing_judge_response())
@@ -169,7 +160,6 @@ class TestEvaluateResponse:
         assert result.decision in (Decision.BLOCK, Decision.INTERVENE)
         assert len(result.metadata.get("violations", [])) > 0
 
-    @pytest.mark.asyncio
     async def test_judge_metadata_in_result(self, engine, judge_config, sample_request, sample_response):
         await engine.initialize(judge_config)
         engine._client.call_judge = AsyncMock(return_value=_passing_judge_response())
@@ -178,7 +168,6 @@ class TestEvaluateResponse:
         assert "judge" in result.metadata
         assert "verdicts" in result.metadata["judge"]
 
-    @pytest.mark.asyncio
     async def test_llm_error_failopen(self, engine, judge_config, sample_request, sample_response):
         """Engine should fail-open if judge LLM call raises."""
         await engine.initialize(judge_config)
@@ -187,7 +176,6 @@ class TestEvaluateResponse:
         result = await engine.evaluate_response("s1", sample_response, sample_request)
         assert result.decision == Decision.ALLOW
 
-    @pytest.mark.asyncio
     async def test_string_response_data(self, engine, judge_config, sample_request):
         """Should handle string response_data."""
         await engine.initialize(judge_config)
@@ -198,7 +186,6 @@ class TestEvaluateResponse:
 
 
 class TestSessionManagement:
-    @pytest.mark.asyncio
     async def test_get_session_state(self, engine, judge_config):
         await engine.initialize(judge_config)
         engine._get_or_create_session("s1")
@@ -207,13 +194,11 @@ class TestSessionManagement:
         assert state is not None
         assert state["session_id"] == "s1"
 
-    @pytest.mark.asyncio
     async def test_get_session_state_nonexistent(self, engine, judge_config):
         await engine.initialize(judge_config)
         state = await engine.get_session_state("nonexistent")
         assert state is None
 
-    @pytest.mark.asyncio
     async def test_reset_session(self, engine, judge_config):
         await engine.initialize(judge_config)
         engine._get_or_create_session("s1")
@@ -222,13 +207,11 @@ class TestSessionManagement:
         await engine.reset_session("s1")
         assert "s1" not in engine._sessions
 
-    @pytest.mark.asyncio
     async def test_reset_nonexistent_session(self, engine, judge_config):
         """Resetting a nonexistent session should not raise."""
         await engine.initialize(judge_config)
         await engine.reset_session("nonexistent")
 
-    @pytest.mark.asyncio
     async def test_shutdown(self, engine, judge_config):
         await engine.initialize(judge_config)
         engine._get_or_create_session("s1")
@@ -252,7 +235,6 @@ class TestResponseExtraction:
 
 
 class TestConversationEvalTrigger:
-    @pytest.mark.asyncio
     async def test_conversation_eval_on_interval(self, engine, judge_config, sample_request, sample_response):
         """Conversation eval should trigger every N turns."""
         judge_config["conversation_eval_interval"] = 2
@@ -276,7 +258,6 @@ class TestConversationEvalTrigger:
 class TestPerRuleCriteria:
     """Tests for per-rule criteria in inline policies (Step 3)."""
 
-    @pytest.mark.asyncio
     async def test_one_rule_violated_cites_specific_rule(self, engine, sample_request, sample_response):
         """3 rules defined, 1 violated → result cites the specific rule."""
         config = {
@@ -308,7 +289,6 @@ class TestPerRuleCriteria:
         assert "Gave stock tips" in result.message
         assert "Please adjust your response accordingly." in result.message
 
-    @pytest.mark.asyncio
     async def test_all_rules_pass(self, engine, sample_request, sample_response):
         """All rules pass → ALLOW."""
         config = {
@@ -332,7 +312,6 @@ class TestPerRuleCriteria:
         result = await engine.evaluate_response("s1", sample_response, sample_request)
         assert result.decision == Decision.ALLOW
 
-    @pytest.mark.asyncio
     async def test_multiple_rules_violated_all_listed(self, engine, sample_request, sample_response):
         """Multiple rules violated → all are listed in the intervention message."""
         config = {
@@ -521,7 +500,6 @@ class TestTargetedInterventionMessages:
 
 
 class TestInlinePolicy:
-    @pytest.mark.asyncio
     async def test_initialize_with_inline_rules(self, engine):
         """Engine should load inline rules and set default rubric."""
         config = {
@@ -540,7 +518,6 @@ class TestInlinePolicy:
         assert rubric is not None
         assert "No financial advice" in rubric.prompt_overrides["additional_instructions"]
 
-    @pytest.mark.asyncio
     async def test_initialize_with_inline_dict_rules_raises(self, engine):
         """Dict-format inline policy should raise ValueError."""
         config = {
@@ -552,7 +529,6 @@ class TestInlinePolicy:
         with pytest.raises(ValueError, match="Dict-format inline policy is no longer supported"):
             await engine.initialize(config)
 
-    @pytest.mark.asyncio
     async def test_initialize_with_inline_rubrics_dict_raises(self, engine):
         """Dict-format inline policy with rubrics should raise ValueError."""
         config = {
@@ -572,7 +548,6 @@ class TestInlinePolicy:
         with pytest.raises(ValueError, match="Dict-format inline policy is no longer supported"):
             await engine.initialize(config)
 
-    @pytest.mark.asyncio
     async def test_inline_policy_does_not_break_custom_rubrics_path(self, engine):
         """custom_rubrics_path and inline_policy should coexist."""
         config = {
@@ -589,7 +564,6 @@ class TestInlinePolicy:
 class TestInterventionEscalation:
     """Tests for intervention tracking and escalation (Step 6)."""
 
-    @pytest.mark.asyncio
     async def test_first_violation_intervene_second_same_violation_block(
         self, engine, sample_request, sample_response
     ):
@@ -633,7 +607,6 @@ class TestInterventionEscalation:
         assert "repeat" in result2.metadata.get("escalation_reason", "").lower()
         assert "ESCALATED" in result2.message
 
-    @pytest.mark.asyncio
     async def test_different_criteria_violations_no_cross_escalation(
         self, engine, sample_request, sample_response
     ):
@@ -673,7 +646,6 @@ class TestInterventionEscalation:
         # Should NOT escalate — different criterion
         assert result2.metadata.get("escalated") is not True
 
-    @pytest.mark.asyncio
     async def test_intervention_count_cap_triggers_block(
         self, engine, sample_request, sample_response
     ):
@@ -873,7 +845,6 @@ class TestJudgeSessionEviction:
         assert len(engine._sessions) <= 2
         assert "s3" in engine._sessions
 
-    @pytest.mark.asyncio
     async def test_reset_session_clears_timestamp(self, engine):
         """reset_session removes the session from the store."""
         engine._get_or_create_session("s1")
@@ -883,7 +854,6 @@ class TestJudgeSessionEviction:
 
         assert "s1" not in engine._sessions
 
-    @pytest.mark.asyncio
     async def test_shutdown_clears_timestamps(self, engine):
         """shutdown clears all sessions."""
         engine._get_or_create_session("s1")
@@ -893,7 +863,6 @@ class TestJudgeSessionEviction:
 
         assert len(engine._sessions) == 0
 
-    @pytest.mark.asyncio
     async def test_initialize_with_session_config(self):
         """Session TTL and max can be configured via initialize()."""
         engine = JudgePolicyEngine()
@@ -911,7 +880,6 @@ class TestJudgeSessionEviction:
 class TestMissingCriterionFalsePositive:
     """Tests for fix 1C: synthetic fills should not trigger false positives."""
 
-    @pytest.mark.asyncio
     async def test_missing_criterion_not_false_positive(self):
         """When the judge omits a binary criterion, the synthetic fill should not
         cause a criterion_failure (false positive). The composite may still
@@ -965,7 +933,6 @@ class TestMissingCriterionFalsePositive:
 class TestRubricIsolation:
     """Tests for fix 2C: engine instances must not share rubric registries."""
 
-    @pytest.mark.asyncio
     async def test_two_engines_dont_share_rubrics(self):
         """Inline policy registered on one engine must not appear on another."""
         engine_a = JudgePolicyEngine()
@@ -984,7 +951,6 @@ class TestRubricIsolation:
         # Engine B should NOT have it
         assert engine_b._registry.get("inline_policy") is None
 
-    @pytest.mark.asyncio
     async def test_inline_policy_doesnt_corrupt_builtins(self):
         """Registering an inline_policy should not modify built-in rubrics globally."""
         from opensentinel.policy.engines.judge.rubrics import RubricRegistry

@@ -66,7 +66,6 @@ def engine():
 class TestInitialization:
     """Tests for engine initialization."""
 
-    @pytest.mark.asyncio
     async def test_initialize_with_workflow_dict(self, engine, sample_workflow):
         """Test initialization with inline workflow dict."""
         await engine.initialize({"workflow": sample_workflow})
@@ -75,13 +74,11 @@ class TestInitialization:
         assert engine.name == "llm:test-workflow"
         assert engine.engine_type == "llm"
 
-    @pytest.mark.asyncio
     async def test_initialize_missing_config(self, engine):
         """Test initialization fails without config_path or workflow."""
         with pytest.raises(ValueError, match="Either config_path or workflow"):
             await engine.initialize({})
 
-    @pytest.mark.asyncio
     async def test_engine_type(self, engine):
         """Test engine_type property."""
         assert engine.engine_type == "llm"
@@ -90,13 +87,11 @@ class TestInitialization:
 class TestEvaluateRequest:
     """Tests for evaluate_request method."""
 
-    @pytest.mark.asyncio
     async def test_raises_when_uninitialized(self, engine):
         """Uninitialized engine should raise RuntimeError."""
         with pytest.raises(RuntimeError, match="not initialized"):
             await engine.evaluate_request("session1", {"messages": []})
 
-    @pytest.mark.asyncio
     async def test_allow_when_initialized(self, engine, sample_workflow):
         """Initialized engine should allow requests (pass-through)."""
         await engine.initialize({"workflow": sample_workflow})
@@ -108,7 +103,6 @@ class TestEvaluateRequest:
 class TestEvaluateResponse:
     """Tests for evaluate_response method."""
 
-    @pytest.mark.asyncio
     async def test_raises_when_uninitialized(self, engine):
         """Uninitialized engine should raise RuntimeError."""
         with pytest.raises(RuntimeError, match="not initialized"):
@@ -118,7 +112,6 @@ class TestEvaluateResponse:
                 {"messages": []},
             )
 
-    @pytest.mark.asyncio
     async def test_classify_and_evaluate(self, engine, sample_workflow):
         """Test basic classification and evaluation flow."""
         await engine.initialize({"workflow": sample_workflow})
@@ -145,7 +138,6 @@ class TestEvaluateResponse:
 class TestSessionManagement:
     """Tests for session state management."""
 
-    @pytest.mark.asyncio
     async def test_get_current_state(self, engine, sample_workflow):
         """Test getting current state."""
         await engine.initialize({"workflow": sample_workflow})
@@ -153,7 +145,6 @@ class TestSessionManagement:
         state = await engine.get_current_state("session1")
         assert state == "greeting"  # Initial state
 
-    @pytest.mark.asyncio
     async def test_get_state_history_empty(self, engine, sample_workflow):
         """Test getting state history for new session."""
         await engine.initialize({"workflow": sample_workflow})
@@ -162,7 +153,6 @@ class TestSessionManagement:
         history = await engine.get_state_history("session1")
         assert history == []
 
-    @pytest.mark.asyncio
     async def test_get_valid_next_states(self, engine, sample_workflow):
         """Test getting valid next states."""
         await engine.initialize({"workflow": sample_workflow})
@@ -170,7 +160,6 @@ class TestSessionManagement:
         next_states = await engine.get_valid_next_states("session1")
         assert "identify_issue" in next_states
 
-    @pytest.mark.asyncio
     async def test_reset_session(self, engine, sample_workflow):
         """Test resetting session."""
         await engine.initialize({"workflow": sample_workflow})
@@ -187,7 +176,6 @@ class TestSessionManagement:
         await engine.reset_session("session1")
         assert "session1" not in engine._sessions
 
-    @pytest.mark.asyncio
     async def test_get_session_state(self, engine, sample_workflow):
         """Test getting session state dict."""
         await engine.initialize({"workflow": sample_workflow})
@@ -204,7 +192,6 @@ class TestSessionManagement:
         assert state["session_id"] == "session1"
         assert state["workflow_name"] == "test-workflow"
 
-    @pytest.mark.asyncio
     async def test_get_session_state_nonexistent(self, engine, sample_workflow):
         """Test getting state for nonexistent session."""
         await engine.initialize({"workflow": sample_workflow})
@@ -216,7 +203,6 @@ class TestSessionManagement:
 class TestShutdown:
     """Tests for engine shutdown."""
 
-    @pytest.mark.asyncio
     async def test_shutdown_clears_sessions(self, engine, sample_workflow):
         """Test that shutdown clears sessions."""
         await engine.initialize({"workflow": sample_workflow})

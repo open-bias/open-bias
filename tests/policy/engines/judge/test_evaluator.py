@@ -66,7 +66,6 @@ def conversation():
 
 
 class TestEvaluateTurn:
-    @pytest.mark.asyncio
     async def test_passing_verdict(self, evaluator, mock_client, simple_rubric, conversation):
         mock_client.call_judge.return_value = {
             "scores": [
@@ -89,7 +88,6 @@ class TestEvaluateTurn:
         assert verdict.judge_model == "gpt-4o-mini"
         assert len(verdict.scores) == 2
 
-    @pytest.mark.asyncio
     async def test_failing_verdict(self, evaluator, mock_client, simple_rubric, conversation):
         mock_client.call_judge.return_value = {
             "scores": [
@@ -110,7 +108,6 @@ class TestEvaluateTurn:
         assert verdict.action == VerdictAction.INTERVENE
         assert verdict.composite_score == 0.0
 
-    @pytest.mark.asyncio
     async def test_below_threshold_verdict(self, evaluator, mock_client, simple_rubric, conversation):
         mock_client.call_judge.return_value = {
             "scores": [
@@ -131,7 +128,6 @@ class TestEvaluateTurn:
         # 3/5 -> normalized 0.5, below pass_threshold 0.6 -> fail_action = INTERVENE
         assert verdict.action == VerdictAction.INTERVENE
 
-    @pytest.mark.asyncio
     async def test_missing_criterion_filled(self, evaluator, mock_client, simple_rubric, conversation):
         """Missing criteria should be filled with min score."""
         mock_client.call_judge.return_value = {
@@ -156,7 +152,6 @@ class TestEvaluateTurn:
 
 
 class TestEvaluateConversation:
-    @pytest.mark.asyncio
     async def test_conversation_scope(self, evaluator, mock_client, conversation):
         conv_rubric = Rubric(
             name="conv_test",
@@ -186,7 +181,6 @@ class TestEvaluateConversation:
 
 
 class TestEvaluatePairwise:
-    @pytest.mark.asyncio
     async def test_pairwise_evaluation(self, evaluator, mock_client, conversation):
         pairwise_rubric = Rubric(
             name="pair_test",
@@ -306,7 +300,6 @@ class TestBinarySafetyCriteria:
             pass_threshold=0.6,
         )
 
-    @pytest.mark.asyncio
     async def test_tool_use_safety_fail_triggers_intervene(
         self, evaluator, mock_client, agent_behavior_rubric, conversation,
     ):
@@ -332,7 +325,6 @@ class TestBinarySafetyCriteria:
         assert verdict.action == VerdictAction.INTERVENE
         assert "tool_use_safety" in verdict.metadata.get("criterion_failures", [])
 
-    @pytest.mark.asyncio
     async def test_all_criteria_pass(
         self, evaluator, mock_client, agent_behavior_rubric, conversation,
     ):
@@ -357,7 +349,6 @@ class TestBinarySafetyCriteria:
         assert verdict.action == VerdictAction.PASS
         assert verdict.metadata.get("criterion_failures") is None
 
-    @pytest.mark.asyncio
     async def test_low_noncritical_score_still_passes(
         self, evaluator, mock_client, agent_behavior_rubric, conversation,
     ):
@@ -382,7 +373,6 @@ class TestBinarySafetyCriteria:
 
         assert verdict.action == VerdictAction.PASS
 
-    @pytest.mark.asyncio
     async def test_corrective_actions_parsed_from_judge_response(
         self, evaluator, mock_client, agent_behavior_rubric, conversation,
     ):
@@ -426,7 +416,6 @@ class TestBinarySafetyCriteria:
         inst_score = next(s for s in verdict.scores if s.criterion == "instruction_following")
         assert inst_score.corrective_actions is None
 
-    @pytest.mark.asyncio
     async def test_instruction_following_fail_triggers_intervene(
         self, evaluator, mock_client, agent_behavior_rubric, conversation,
     ):
@@ -477,7 +466,6 @@ class TestBinaryEvaluationPath:
             ],
         )
 
-    @pytest.mark.asyncio
     async def test_all_pass_returns_pass(
         self, evaluator: JudgeEvaluator, mock_client: JudgeClient,
         binary_rubric: Rubric, conversation: list,
@@ -500,7 +488,6 @@ class TestBinaryEvaluationPath:
         assert verdict.composite_score == 1.0
         assert not verdict.metadata.get("criterion_failures")
 
-    @pytest.mark.asyncio
     async def test_one_fail_returns_fail_action(
         self, evaluator: JudgeEvaluator, mock_client: JudgeClient,
         binary_rubric: Rubric, conversation: list,
@@ -524,7 +511,6 @@ class TestBinaryEvaluationPath:
         assert verdict.composite_score == 0.0
         assert "rule_a" in verdict.metadata.get("criterion_failures", [])
 
-    @pytest.mark.asyncio
     async def test_binary_path_default_fail_action_is_block(
         self, evaluator: JudgeEvaluator, mock_client: JudgeClient,
         binary_rubric: Rubric, conversation: list,
@@ -546,7 +532,6 @@ class TestBinaryEvaluationPath:
         assert verdict.action == VerdictAction.BLOCK
         assert verdict.composite_score == 0.0
 
-    @pytest.mark.asyncio
     async def test_synthetic_fill_ignored_in_binary_path(
         self, evaluator: JudgeEvaluator, mock_client: JudgeClient,
         binary_rubric: Rubric, conversation: list,

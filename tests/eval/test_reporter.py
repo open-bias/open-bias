@@ -2,48 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from opensentinel.eval.reporter import export_json, print_report
-from opensentinel.eval.runner import EvalResult, TurnResult
-from opensentinel.policy.protocols import Decision, EngineResult
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _make_turn(
-    idx: int,
-    decision: Decision = Decision.ALLOW,
-    violations: list | None = None,
-) -> TurnResult:
-    meta = {"violations": violations or []}
-    return TurnResult(
-        turn_index=idx,
-        request_data={"messages": [], "model": "test"},
-        response_data={},
-        request_eval=EngineResult(decision=Decision.ALLOW),
-        response_eval=EngineResult(decision=decision, metadata=meta),
-    )
-
-
-def _make_result(
-    turns: list[TurnResult] | None = None,
-    scenario_path: str = "test.json",
-    engine_type: str = "fsm",
-    error: str | None = None,
-) -> EvalResult:
-    return EvalResult(
-        scenario_path=scenario_path,
-        session_id="sess-1",
-        turns=turns or [],
-        engine_type=engine_type,
-        error=error,
-    )
-
+from opensentinel.policy.protocols import Decision
+from tests.eval.conftest import make_result, make_turn
 
 # ---------------------------------------------------------------------------
 # export_json
@@ -57,8 +20,8 @@ class TestExportJson:
         assert data["scenarios"] == []
 
     def test_single_allow_turn(self):
-        turn = _make_turn(0, Decision.ALLOW)
-        result = _make_result(turns=[turn])
+        turn = make_turn(0, Decision.ALLOW)
+        result = make_result(turns=[turn])
         data = export_json([result])
 
         assert data["summary"]["total_scenarios"] == 1
@@ -78,31 +41,31 @@ class TestExportJson:
         assert t["intervention_needed"] is False
 
     def test_block_turn_marks_intervention_needed(self):
-        turn = _make_turn(0, Decision.BLOCK)
-        data = export_json([_make_result(turns=[turn])])
+        turn = make_turn(0, Decision.BLOCK)
+        data = export_json([make_result(turns=[turn])])
         assert data["scenarios"][0]["turns"][0]["intervention_needed"] is True
 
     def test_intervene_turn_marks_intervention_needed(self):
-        turn = _make_turn(0, Decision.INTERVENE)
-        data = export_json([_make_result(turns=[turn])])
+        turn = make_turn(0, Decision.INTERVENE)
+        data = export_json([make_result(turns=[turn])])
         assert data["scenarios"][0]["turns"][0]["intervention_needed"] is True
 
     def test_violations_serialized_as_dicts(self):
         violations = [{"name": "v1", "severity": "high", "message": "bad"}]
-        turn = _make_turn(0, Decision.INTERVENE, violations=violations)
-        data = export_json([_make_result(turns=[turn])])
+        turn = make_turn(0, Decision.INTERVENE, violations=violations)
+        data = export_json([make_result(turns=[turn])])
         t = data["scenarios"][0]["turns"][0]
         assert len(t["violations"]) == 1
         assert t["violations"][0]["name"] == "v1"
 
     def test_error_scenario_included(self):
-        result = _make_result(error="something broke")
+        result = make_result(error="something broke")
         data = export_json([result])
         assert data["scenarios"][0]["error"] == "something broke"
 
     def test_multiple_scenarios_summary(self):
-        r1 = _make_result(turns=[_make_turn(0, Decision.ALLOW)])
-        r2 = _make_result(turns=[_make_turn(0, Decision.BLOCK)])
+        r1 = make_result(turns=[make_turn(0, Decision.ALLOW)])
+        r2 = make_result(turns=[make_turn(0, Decision.BLOCK)])
         data = export_json([r1, r2])
         assert data["summary"]["total_scenarios"] == 2
         assert data["summary"]["total_turns"] == 2
@@ -129,8 +92,8 @@ class TestPrintReport:
 
     def test_violations_trigger_warning(self):
         violations = [{"name": "v1"}]
-        turn = _make_turn(0, Decision.INTERVENE, violations=violations)
-        result = _make_result(turns=[turn])
+        turn = make_turn(0, Decision.INTERVENE, violations=violations)
+        result = make_result(turns=[turn])
 
         with patch(f"{_CLI_UI}.config_panel"), \
              patch(f"{_CLI_UI}.make_table"), \
@@ -142,7 +105,7 @@ class TestPrintReport:
             mock_success.assert_not_called()
 
     def test_error_triggers_warning(self):
-        result = _make_result(error="boom")
+        result = make_result(error="boom")
 
         with patch(f"{_CLI_UI}.config_panel"), \
              patch(f"{_CLI_UI}.make_table"), \
@@ -153,8 +116,8 @@ class TestPrintReport:
             mock_warning.assert_called()
 
     def test_verbose_mode_prints_per_turn(self):
-        turn = _make_turn(0, Decision.ALLOW)
-        result = _make_result(turns=[turn])
+        turn = make_turn(0, Decision.ALLOW)
+        result = make_result(turns=[turn])
 
         with patch(f"{_CLI_UI}.config_panel"), \
              patch(f"{_CLI_UI}.make_table"), \
@@ -166,8 +129,8 @@ class TestPrintReport:
             assert mock_console.print.call_count > 0
 
     def test_clean_run_calls_success(self):
-        turn = _make_turn(0, Decision.ALLOW)
-        result = _make_result(turns=[turn])
+        turn = make_turn(0, Decision.ALLOW)
+        result = make_result(turns=[turn])
 
         with patch(f"{_CLI_UI}.config_panel"), \
              patch(f"{_CLI_UI}.make_table"), \

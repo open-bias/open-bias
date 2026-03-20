@@ -105,7 +105,6 @@ class TestConstraintSelection:
 class TestEvaluation:
     """Tests for constraint evaluation."""
 
-    @pytest.mark.asyncio
     async def test_no_violations(self, sample_workflow, mock_llm_client, session):
         """Test evaluation with no violations."""
         mock_llm_client.complete_json.return_value = [
@@ -118,7 +117,6 @@ class TestEvaluation:
 
         assert all(not e.violated for e in evals)
 
-    @pytest.mark.asyncio
     async def test_violation_detected(self, sample_workflow, mock_llm_client, session):
         """Test evaluation with a violation."""
         mock_llm_client.complete_json.return_value = [
@@ -142,7 +140,6 @@ class TestEvaluation:
 class TestEvidenceMemory:
     """Tests for evidence memory accumulation."""
 
-    @pytest.mark.asyncio
     async def test_evidence_accumulated(self, sample_workflow, mock_llm_client, session):
         """Test that evidence is accumulated in session memory."""
         mock_llm_client.complete_json.return_value = [
@@ -162,7 +159,6 @@ class TestEvidenceMemory:
         assert "no_rude_behavior" in session.constraint_memory
         assert "Agent greeted politely" in session.constraint_memory["no_rude_behavior"]
 
-    @pytest.mark.asyncio
     async def test_low_confidence_not_stored(self, sample_workflow, mock_llm_client, session):
         """Test that low-confidence evidence is not stored."""
         mock_llm_client.complete_json.return_value = [
@@ -185,7 +181,6 @@ class TestEvidenceMemory:
 class TestBatching:
     """Tests for constraint batching."""
 
-    @pytest.mark.asyncio
     async def test_batching_large_constraint_set(self, mock_llm_client, session):
         """Test that many constraints are batched."""
         # Create workflow with many constraints
@@ -218,7 +213,6 @@ class TestBatching:
 class TestErrorHandling:
     """Tests for error handling."""
 
-    @pytest.mark.asyncio
     async def test_llm_error_continues(self, sample_workflow, mock_llm_client, session):
         """Test that LLM errors don't crash evaluation."""
         mock_llm_client.complete_json.side_effect = LLMClientError("API error")

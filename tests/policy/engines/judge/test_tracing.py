@@ -63,7 +63,6 @@ class TestTracerIntegration:
         engine.set_tracer(mock_tracer)
         assert engine._tracer is mock_tracer
 
-    @pytest.mark.asyncio
     async def test_trace_verdict_called(
         self, engine, judge_config, mock_tracer, sample_request, sample_response,
     ):
@@ -84,7 +83,6 @@ class TestTracerIntegration:
         assert isinstance(call_kwargs["scores"], list)
         assert len(call_kwargs["scores"]) == 4
 
-    @pytest.mark.asyncio
     async def test_no_tracer_no_error(
         self, engine, judge_config, sample_request, sample_response,
     ):
@@ -95,7 +93,6 @@ class TestTracerIntegration:
         result = await engine.evaluate_response("s1", sample_response, sample_request)
         assert result.decision == Decision.ALLOW
 
-    @pytest.mark.asyncio
     async def test_tracer_error_does_not_break_eval(
         self, engine, judge_config, mock_tracer, sample_request, sample_response,
     ):

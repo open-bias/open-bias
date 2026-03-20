@@ -8,7 +8,6 @@ from opensentinel.policy.engines.judge.compiler import JudgeCompiler
 def judge_compiler():
     return JudgeCompiler(model="gpt-4o-mini", api_key="test-key")
 
-@pytest.mark.asyncio
 async def test_judge_compiler_registration():
     from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
     engine = JudgePolicyEngine()
@@ -32,7 +31,6 @@ def test_get_compiler_forwards_kwargs():
     assert compiler._api_key == "sk-test"
     assert compiler._base_url == "http://localhost:8080"
 
-@pytest.mark.asyncio
 async def test_build_compilation_prompt(judge_compiler):
     policy = "Be professional and never share PII."
     prompt = judge_compiler._build_compilation_prompt(policy, {"domain": "customer support"})
@@ -41,7 +39,6 @@ async def test_build_compilation_prompt(judge_compiler):
     assert "customer support" in prompt
     assert "Generate a JSON object" in prompt
 
-@pytest.mark.asyncio
 async def test_parse_valid_response(judge_compiler):
     response = {
         "rubrics": [
@@ -73,7 +70,6 @@ async def test_parse_valid_response(judge_compiler):
     assert result.metadata["rubric_count"] == 1
     assert result.metadata["criteria_count"] == 1
 
-@pytest.mark.asyncio
 async def test_parse_response_with_invalid_scale(judge_compiler):
     response = {
         "rubrics": [
@@ -96,14 +92,12 @@ async def test_parse_response_with_invalid_scale(judge_compiler):
     assert result.config["rubrics"][0]["criteria"][0]["scale"] == "likert_5"
     assert any("invalid_scale_name" in w for w in result.warnings)
 
-@pytest.mark.asyncio
 async def test_parse_empty_response_fails(judge_compiler):
     response = {"rubrics": []}
     result = judge_compiler._parse_compilation_response(response, "test policy")
     assert not result.success
     assert "No rubrics generated" in result.errors[0]
 
-@pytest.mark.asyncio
 @patch("opensentinel.policy.compiler.base.LLMPolicyCompiler._call_llm")
 async def test_compile_integration(mock_call, judge_compiler):
     mock_call.return_value = '{"rubrics": [{"name": "test", "criteria": [{"name": "c1"}]}]}'

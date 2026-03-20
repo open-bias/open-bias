@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, AsyncMock
-
-import pytest
+import logging
+from unittest.mock import MagicMock
 
 from opensentinel.eval.mocks import MockResponseSequence, apply_mock_provider
-
 
 # ---------------------------------------------------------------------------
 # MockResponseSequence
@@ -106,7 +104,6 @@ class TestApplyMockProvider:
         assert third == r1
 
     def test_judge_engine_without_client_logs_warning(self, caplog):
-        import logging
         engine = MagicMock(spec=[])  # no _client attribute
         with caplog.at_level(logging.WARNING, logger="opensentinel.eval.mocks"):
             apply_mock_provider(engine, "judge", responses=['{}'])
@@ -139,17 +136,12 @@ class TestApplyMockProvider:
         assert await rails.generate_async() == r2
         assert await rails.generate_async() == r1
 
-    def test_invalid_json_stored_as_string(self):
+    async def test_invalid_json_stored_as_string(self):
         client = MagicMock()
         engine = MagicMock()
         engine._client = client
 
         apply_mock_provider(engine, "judge", responses=["not-json"])
         # Should not raise; non-JSON stored as raw string
-        import asyncio
-
-        async def _check():
-            result = await client.call_judge("m", "sp", "up")
-            assert result == "not-json"
-
-        asyncio.get_event_loop().run_until_complete(_check())
+        result = await client.call_judge("m", "sp", "up")
+        assert result == "not-json"

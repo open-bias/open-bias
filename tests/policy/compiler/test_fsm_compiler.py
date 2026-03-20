@@ -189,7 +189,6 @@ class TestFSMCompilerInterface:
     def compiler(self):
         return FSMCompiler()
 
-    @pytest.mark.asyncio
     async def test_compile_with_simple_config(self, compiler: FSMCompiler):
         config = SimpleWorkflowConfig(
             name="test",
@@ -201,7 +200,6 @@ class TestFSMCompilerInterface:
         assert result.success is True
         assert isinstance(result.config, WorkflowDefinition)
 
-    @pytest.mark.asyncio
     async def test_compile_with_dict_config(self, compiler: FSMCompiler):
         result = await compiler.compile(
             "ignored",
@@ -216,13 +214,11 @@ class TestFSMCompilerInterface:
         )
         assert result.success is True
 
-    @pytest.mark.asyncio
     async def test_compile_without_config_fails(self, compiler: FSMCompiler):
         result = await compiler.compile("natural language only")
         assert result.success is False
         assert any("simple_config" in e for e in result.errors)
 
-    @pytest.mark.asyncio
     async def test_compile_with_invalid_config_fails(self, compiler: FSMCompiler):
         result = await compiler.compile(
             "ignored",

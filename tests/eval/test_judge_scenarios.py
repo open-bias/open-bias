@@ -192,12 +192,9 @@ async def test_multi_turn_drift(engine, runner):
     assert len(violation_turns) >= 2, "Expected drift to trigger violations in later turns"
 
 
-async def test_recovery_after_intervention(runner):
-    """Violate → intervene → agent corrects → pass (core value loop).
-
-    Uses a dedicated engine with conversation eval disabled to avoid
-    extra judge calls that would consume mock responses.
-    """
+@pytest.fixture
+async def recovery_engine():
+    """Dedicated engine with conversation eval disabled for recovery test."""
     eng = await PolicyEngineRegistry.create_and_initialize(
         "judge",
         {
@@ -207,7 +204,16 @@ async def test_recovery_after_intervention(runner):
             "models": [{"model": "mock-model"}],
         },
     )
+    yield eng
+    await eng.shutdown()
 
+
+async def test_recovery_after_intervention(recovery_engine, runner):
+    """Violate → intervene → agent corrects → pass (core value loop).
+
+    Uses a dedicated engine with conversation eval disabled to avoid
+    extra judge calls that would consume mock responses.
+    """
     messages = json.loads((EVALS_DIR / "recovery_after_intervention.json").read_text())
 
     responses = [
@@ -219,10 +225,9 @@ async def test_recovery_after_intervention(runner):
         _make_judge_response(1, "Agent provided general information without diagnosing"),
     ]
 
-    _patch_judge(eng, responses)
+    _patch_judge(recovery_engine, responses)
 
-    result = await runner.run(eng, messages)
-    await eng.shutdown()
+    result = await runner.run(recovery_engine, messages)
 
     assert result.error is None
     assert len(result.turns) == 3

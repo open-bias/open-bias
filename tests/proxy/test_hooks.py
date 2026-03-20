@@ -22,7 +22,6 @@ def reset_fail_open_counter():
     _fail_open_counter.clear()
 
 
-@pytest.mark.asyncio
 async def test_safe_hook_success():
     """Normal execution passes through unchanged."""
 
@@ -34,7 +33,6 @@ async def test_safe_hook_success():
     assert get_fail_open_counts() == {}
 
 
-@pytest.mark.asyncio
 async def test_safe_hook_timeout_returns_fallback():
     """A slow hook is cancelled and the fallback is returned."""
 
@@ -49,7 +47,6 @@ async def test_safe_hook_timeout_returns_fallback():
     assert get_fail_open_counts()["test_slow"] == 1
 
 
-@pytest.mark.asyncio
 async def test_safe_hook_exception_returns_fallback():
     """A crashing hook returns the fallback value."""
 
@@ -63,7 +60,6 @@ async def test_safe_hook_exception_returns_fallback():
     assert get_fail_open_counts()["test_crash"] == 1
 
 
-@pytest.mark.asyncio
 async def test_safe_hook_propagates_workflow_violation():
     """WorkflowViolationError is NOT swallowed -- intentional blocks must propagate."""
 
@@ -78,7 +74,6 @@ async def test_safe_hook_propagates_workflow_violation():
     assert get_fail_open_counts() == {}
 
 
-@pytest.mark.asyncio
 async def test_safe_hook_counter_increments_on_repeated_failures():
     """The fail-open counter correctly tracks multiple failures for the same hook."""
 
@@ -91,7 +86,6 @@ async def test_safe_hook_counter_increments_on_repeated_failures():
     assert get_fail_open_counts()["flaky"] == 5
 
 
-@pytest.mark.asyncio
 async def test_safe_hook_passes_kwargs():
     """Keyword arguments are forwarded to the hook function."""
 
@@ -142,7 +136,6 @@ def mock_cache():
     return MagicMock()
 
 
-@pytest.mark.asyncio
 async def test_pre_call_hook_timeout_returns_original_data(
     callback, mock_api_key, mock_cache
 ):
@@ -168,7 +161,6 @@ async def test_pre_call_hook_timeout_returns_original_data(
     assert result is original_data
 
 
-@pytest.mark.asyncio
 async def test_post_call_hook_timeout_returns_original_response(
     callback, mock_api_key
 ):
@@ -193,7 +185,6 @@ async def test_post_call_hook_timeout_returns_original_response(
     assert result is original_response
 
 
-@pytest.mark.asyncio
 async def test_pre_call_hook_exception_returns_original_data(
     callback, mock_api_key, mock_cache
 ):
@@ -212,7 +203,6 @@ async def test_pre_call_hook_exception_returns_original_data(
     assert result is original_data
 
 
-@pytest.mark.asyncio
 async def test_pre_call_hook_returns_exception_on_block(
     callback, mock_api_key, mock_cache
 ):
@@ -234,7 +224,6 @@ async def test_pre_call_hook_returns_exception_on_block(
     assert "blocked by policy" in str(result)
 
 
-@pytest.mark.asyncio
 async def test_post_call_hook_block_raises_workflow_violation(
     callback, mock_api_key
 ):
@@ -259,7 +248,6 @@ async def test_post_call_hook_block_raises_workflow_violation(
         await callback.async_post_call_success_hook(data, mock_api_key, response)
 
 
-@pytest.mark.asyncio
 async def test_post_call_failure_hook_exception_is_swallowed(
     callback, mock_api_key
 ):
@@ -278,7 +266,6 @@ async def test_post_call_failure_hook_exception_is_swallowed(
     assert result is None
 
 
-@pytest.mark.asyncio
 async def test_log_success_event_exception_is_swallowed(callback):
     """Exceptions in async_log_success_event are swallowed (fail-open)."""
 
@@ -295,7 +282,6 @@ async def test_log_success_event_exception_is_swallowed(callback):
     assert result is None
 
 
-@pytest.mark.asyncio
 async def test_log_failure_event_exception_is_swallowed(callback):
     """Exceptions in async_log_failure_event are swallowed (fail-open)."""
 

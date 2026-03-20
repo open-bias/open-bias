@@ -64,7 +64,6 @@ def session():
 class TestClassification:
     """Tests for state classification."""
 
-    @pytest.mark.asyncio
     async def test_confident_classification(
         self, sample_workflow, mock_llm_client, session
     ):
@@ -80,7 +79,6 @@ class TestClassification:
         assert result.best_confidence == 0.95
         assert result.tier == ConfidenceTier.CONFIDENT
 
-    @pytest.mark.asyncio
     async def test_uncertain_classification(
         self, sample_workflow, mock_llm_client, session
     ):
@@ -94,7 +92,6 @@ class TestClassification:
         
         assert result.tier == ConfidenceTier.UNCERTAIN
 
-    @pytest.mark.asyncio
     async def test_lost_classification(
         self, sample_workflow, mock_llm_client, session
     ):
@@ -112,7 +109,6 @@ class TestClassification:
 class TestTransitionLegality:
     """Tests for transition legality checking."""
 
-    @pytest.mark.asyncio
     async def test_legal_transition(
         self, sample_workflow, mock_llm_client, session
     ):
@@ -126,7 +122,6 @@ class TestTransitionLegality:
         
         assert result.transition_legal is True
 
-    @pytest.mark.asyncio
     async def test_illegal_transition(
         self, sample_workflow, mock_llm_client, session
     ):
@@ -145,7 +140,6 @@ class TestTransitionLegality:
 class TestSkipViolations:
     """Tests for skip violation detection."""
 
-    @pytest.mark.asyncio
     async def test_detect_skipped_states(
         self, sample_workflow, mock_llm_client, session
     ):
@@ -164,7 +158,6 @@ class TestSkipViolations:
 class TestErrorHandling:
     """Tests for error handling."""
 
-    @pytest.mark.asyncio
     async def test_llm_error_fallback(
         self, sample_workflow, mock_llm_client, session
     ):
@@ -178,7 +171,6 @@ class TestErrorHandling:
         assert result.best_state == "greeting"
         assert result.tier == ConfidenceTier.LOST
 
-    @pytest.mark.asyncio
     async def test_invalid_state_id_ignored(
         self, sample_workflow, mock_llm_client, session
     ):

@@ -34,7 +34,6 @@ def mock_config():
     mock_nemo.RailsConfig.from_content.return_value = MagicMock()
     return mock_nemo.RailsConfig
 
-@pytest.mark.asyncio
 async def test_initialization(engine, mock_config, mock_rails):
     config = {"config_path": "dummy/path"}
 
@@ -46,7 +45,6 @@ async def test_initialization(engine, mock_config, mock_rails):
     assert engine.name == "nemo:guardrails"
     assert engine.engine_type == "nemo"
 
-@pytest.mark.asyncio
 async def test_evaluate_request_allow(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
 
@@ -59,7 +57,6 @@ async def test_evaluate_request_allow(engine, mock_rails):
 
     assert result.decision == Decision.ALLOW
 
-@pytest.mark.asyncio
 async def test_evaluate_request_blocked(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
 
@@ -74,7 +71,6 @@ async def test_evaluate_request_blocked(engine, mock_rails):
     assert result.decision == Decision.BLOCK
     assert "blocked" in result.message.lower()
 
-@pytest.mark.asyncio
 async def test_evaluate_response_allow(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
 
@@ -88,7 +84,6 @@ async def test_evaluate_response_allow(engine, mock_rails):
 
     assert result.decision == Decision.ALLOW
 
-@pytest.mark.asyncio
 async def test_evaluate_response_blocked(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
 
@@ -103,7 +98,6 @@ async def test_evaluate_response_blocked(engine, mock_rails):
     assert result.decision == Decision.BLOCK
     assert result.message is not None
 
-@pytest.mark.asyncio
 async def test_evaluate_request_error_fail_open(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
 
@@ -118,7 +112,6 @@ async def test_evaluate_request_error_fail_open(engine, mock_rails):
     assert result.decision == Decision.ALLOW
     assert "error" in result.metadata
 
-@pytest.mark.asyncio
 async def test_evaluate_request_error_fail_closed(engine, mock_rails):
     await engine.initialize({
         "config_path": "dummy",

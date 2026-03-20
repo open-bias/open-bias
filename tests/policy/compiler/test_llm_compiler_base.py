@@ -24,7 +24,6 @@ def compiler():
         base_url="http://test.url"
     )
 
-@pytest.mark.asyncio
 @patch("litellm.acompletion")
 async def test_call_llm_uses_litellm(mock_acompletion, compiler):
     # Setup mock response
@@ -50,7 +49,6 @@ async def test_call_llm_uses_litellm(mock_acompletion, compiler):
     assert call_kwargs["api_key"] == "test-key"
     assert call_kwargs["base_url"] == "http://test.url"
 
-@pytest.mark.asyncio
 @patch("litellm.acompletion")
 async def test_call_llm_wraps_exceptions(mock_acompletion, compiler):
     mock_acompletion.side_effect = Exception("API Error")

@@ -28,44 +28,30 @@ Usage:
     ```
 """
 
-from opensentinel.policy.protocols import (
-    PolicyEngine,
-    Decision,
-    EngineResult,
-    require_initialized,
-)
-from opensentinel.policy.engines.stateful import (
-    StatefulPolicyEngine,
-    StateClassificationResult,
-)
-from opensentinel.policy.registry import GenericRegistry, PolicyEngineRegistry, register_engine
-
 # Compiler imports
 from opensentinel.policy.compiler import (
-    PolicyCompiler,
     CompilationResult,
+    LLMPolicyCompiler,
+    PolicyCompiler,
     PolicyCompilerRegistry,
     register_compiler,
-    LLMPolicyCompiler,
 )
 
 # Import engines to trigger auto-registration
-# Note: We use try/except to handle optional dependencies gracefully
-try:
-    from opensentinel.policy.engines.fsm import FSMPolicyEngine
-except ImportError:
-    FSMPolicyEngine = None  # type: ignore
-
-try:
-    from opensentinel.policy.engines.nemo import NemoGuardrailsPolicyEngine
-except ImportError:
-    # NeMo is optional
-    NemoGuardrailsPolicyEngine = None  # type: ignore
-
-try:
-    from opensentinel.policy.engines.judge import JudgePolicyEngine
-except ImportError:
-    JudgePolicyEngine = None  # type: ignore
+from opensentinel.policy.engines.fsm import FSMPolicyEngine
+from opensentinel.policy.engines.judge import JudgePolicyEngine
+from opensentinel.policy.engines.nemo import NemoGuardrailsPolicyEngine
+from opensentinel.policy.engines.stateful import (
+    StateClassificationResult,
+    StatefulPolicyEngine,
+)
+from opensentinel.policy.protocols import (
+    Decision,
+    EngineResult,
+    PolicyEngine,
+    require_initialized,
+)
+from opensentinel.policy.registry import GenericRegistry, PolicyEngineRegistry, register_engine
 
 __all__ = [
     # Core protocols
@@ -81,7 +67,7 @@ __all__ = [
     "GenericRegistry",
     "PolicyEngineRegistry",
     "register_engine",
-    # Engines (may be None if not available)
+    # Engines
     "FSMPolicyEngine",
     "NemoGuardrailsPolicyEngine",
     "JudgePolicyEngine",

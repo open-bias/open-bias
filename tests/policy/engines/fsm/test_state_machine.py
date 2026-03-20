@@ -18,7 +18,6 @@ class TestWorkflowStateMachine:
         """Create a state machine for testing."""
         return WorkflowStateMachine(simple_workflow)
 
-    @pytest.mark.asyncio
     async def test_create_session(self, machine):
         """Test creating a new session."""
         session = await machine.get_or_create_session("test-session")
@@ -27,7 +26,6 @@ class TestWorkflowStateMachine:
         assert session.current_state == "start"
         assert len(session.history) == 1
 
-    @pytest.mark.asyncio
     async def test_get_existing_session(self, machine):
         """Test getting an existing session."""
         session1 = await machine.get_or_create_session("test-session")
@@ -35,7 +33,6 @@ class TestWorkflowStateMachine:
 
         assert session1 is session2
 
-    @pytest.mark.asyncio
     async def test_valid_transition(self, machine):
         """Test a valid state transition."""
         await machine.get_or_create_session("test-session")
@@ -48,7 +45,6 @@ class TestWorkflowStateMachine:
         session = await machine.get_session("test-session")
         assert session.current_state == "middle"
 
-    @pytest.mark.asyncio
     async def test_invalid_transition(self, machine):
         """Test an invalid state transition."""
         await machine.get_or_create_session("test-session")
@@ -59,7 +55,6 @@ class TestWorkflowStateMachine:
         assert result == TransitionResult.INVALID_TRANSITION
         assert error is not None
 
-    @pytest.mark.asyncio
     async def test_same_state_transition(self, machine):
         """Test transitioning to the same state."""
         await machine.get_or_create_session("test-session")
@@ -68,7 +63,6 @@ class TestWorkflowStateMachine:
 
         assert result == TransitionResult.SAME_STATE
 
-    @pytest.mark.asyncio
     async def test_history_tracking(self, machine):
         """Test that state history is tracked."""
         await machine.get_or_create_session("test-session")
@@ -79,7 +73,6 @@ class TestWorkflowStateMachine:
 
         assert history == ["start", "middle", "end"]
 
-    @pytest.mark.asyncio
     async def test_valid_transitions_from_state(self, machine):
         """Test getting valid transitions from current state."""
         await machine.get_or_create_session("test-session")
@@ -88,7 +81,6 @@ class TestWorkflowStateMachine:
 
         assert "middle" in valid
 
-    @pytest.mark.asyncio
     async def test_terminal_state_detection(self, machine):
         """Test detecting terminal state."""
         await machine.get_or_create_session("test-session")
@@ -99,7 +91,6 @@ class TestWorkflowStateMachine:
 
         assert is_terminal is True
 
-    @pytest.mark.asyncio
     async def test_reset_session(self, machine):
         """Test resetting a session."""
         await machine.get_or_create_session("test-session")

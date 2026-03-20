@@ -22,7 +22,6 @@ def test_default_model_selection():
 class TestJSONParsing:
     """Tests for JSON parsing."""
 
-    @pytest.mark.asyncio
     async def test_successful_json_parse(self, client):
         """Test successful JSON parsing."""
         mock_response = MagicMock()
@@ -35,7 +34,6 @@ class TestJSONParsing:
         
         assert result == {"key": "value"}
 
-    @pytest.mark.asyncio
     async def test_markdown_fence_stripping(self, client):
         """Test that markdown fences are stripped."""
         mock_response = MagicMock()
@@ -48,7 +46,6 @@ class TestJSONParsing:
         
         assert result == {"key": "value"}
 
-    @pytest.mark.asyncio
     async def test_plain_fence_stripping(self, client):
         """Test that plain code fences are stripped."""
         mock_response = MagicMock()
@@ -61,7 +58,6 @@ class TestJSONParsing:
         
         assert result == {"key": "value"}
 
-    @pytest.mark.asyncio
     async def test_array_response(self, client):
         """Test parsing JSON array response."""
         mock_response = MagicMock()
@@ -78,7 +74,6 @@ class TestJSONParsing:
 class TestErrorHandling:
     """Tests for error handling."""
 
-    @pytest.mark.asyncio
     async def test_empty_response_error(self, client):
         """Test error on empty response."""
         mock_response = MagicMock()
@@ -90,7 +85,6 @@ class TestErrorHandling:
             with pytest.raises(LLMClientError, match="Empty response"):
                 await client.complete_json("System", "User")
 
-    @pytest.mark.asyncio
     async def test_invalid_json_error(self, client):
         """Test error on invalid JSON."""
         mock_response = MagicMock()
@@ -102,7 +96,6 @@ class TestErrorHandling:
             with pytest.raises(LLMClientError, match="Invalid JSON"):
                 await client.complete_json("System", "User")
 
-    @pytest.mark.asyncio
     async def test_retry_on_failure(self, client):
         """Test retries on transient failures."""
         client = LLMClient(model="gpt-4o-mini", max_retries=2)
@@ -128,7 +121,6 @@ class TestErrorHandling:
         assert result == {"success": True}
         assert call_count == 3
 
-    @pytest.mark.asyncio
     async def test_exhausted_retries(self, client):
         """Test error after exhausting retries."""
         client = LLMClient(model="gpt-4o-mini", max_retries=1)
@@ -144,7 +136,6 @@ class TestErrorHandling:
 class TestTokenTracking:
     """Tests for token usage tracking."""
 
-    @pytest.mark.asyncio
     async def test_token_tracking(self, client):
         """Test that tokens are tracked across calls."""
         mock_response = MagicMock()
