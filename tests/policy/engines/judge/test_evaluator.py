@@ -511,11 +511,11 @@ class TestBinaryEvaluationPath:
         assert verdict.composite_score == 0.0
         assert "rule_a" in verdict.metadata.get("criterion_failures", [])
 
-    async def test_binary_path_default_fail_action_is_block(
+    async def test_binary_path_default_fail_action_is_intervene(
         self, evaluator: JudgeEvaluator, mock_client: JudgeClient,
         binary_rubric: Rubric, conversation: list,
     ) -> None:
-        """Default fail_action (BLOCK) is used when not explicitly passed."""
+        """Default fail_action (INTERVENE) is used when not explicitly passed."""
         mock_client.call_judge.return_value = {
             "scores": [
                 {"criterion": "rule_a", "score": 0, "reasoning": "Bad", "evidence": [], "confidence": 0.9},
@@ -529,7 +529,7 @@ class TestBinaryEvaluationPath:
             response_content="Terrible.",
             conversation=conversation,
         )
-        assert verdict.action == VerdictAction.BLOCK
+        assert verdict.action == VerdictAction.INTERVENE
         assert verdict.composite_score == 0.0
 
     async def test_synthetic_fill_ignored_in_binary_path(
