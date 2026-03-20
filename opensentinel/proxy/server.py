@@ -119,10 +119,10 @@ class SentinelProxy:
         if self._callback is not None:
             try:
                 loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.create_task(self._callback.shutdown())
-                else:
+                if not loop.is_closed():
                     loop.run_until_complete(self._callback.shutdown())
+                else:
+                    asyncio.run(self._callback.shutdown())
             except RuntimeError:
                 try:
                     asyncio.run(self._callback.shutdown())
@@ -197,8 +197,8 @@ class SentinelProxy:
 
         if engine_type == "nemo" and engine_conf.get("config_path"):
             logger.info("Running with NeMo Guardrails engine")
-        elif engine_type == "fsm" and engine_conf.get("workflow_path"):
-            logger.info(f"Running with FSM engine: {engine_conf.get('workflow_path')}")
+        elif engine_type == "fsm" and (engine_conf.get("config_path") or engine_conf.get("workflow")):
+            logger.info(f"Running with FSM engine: {engine_conf.get('config_path', 'inline')}")
         elif engine_type == "judge":
             logger.info("Running with Judge policy engine")
         else:

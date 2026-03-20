@@ -86,6 +86,9 @@ class Interceptor:
             else self.DEFAULT_MAX_ASYNC_TASKS_PER_SESSION
         )
 
+        # Temporary storage for collected-but-not-yet-confirmed async results
+        self._last_collected: dict[str, list[asyncio.Task[_PendingResult]]] = {}
+
         self._sessions: SessionStore[list[asyncio.Task[_PendingResult]]] = SessionStore(
             ttl=session_ttl if session_ttl is not None else self.DEFAULT_SESSION_TTL,
             max_sessions=max_sessions if max_sessions is not None else self.DEFAULT_MAX_SESSIONS,
@@ -134,6 +137,7 @@ class Interceptor:
                     f"Request blocked by async checker '{pending.checker_name}': "
                     f"{result.message}"
                 )
+                self._confirm_collected(session_id)
                 return InterceptionResult(
                     allowed=False,
                     message=result.message,
@@ -154,6 +158,9 @@ class Interceptor:
                     modified_data = self._apply_intervention(
                         modified_data, result.message, self._default_strategy
                     )
+
+        # Async results processed successfully — remove from session store
+        self._confirm_collected(session_id)
 
         # Step 2: Run sync PRE_CALL checkers
         # Note: INTERVENE results accumulate — each checker sees the already-modified
@@ -303,17 +310,22 @@ class Interceptor:
         )
 
     def _collect_completed_async(self, session_id: str) -> list[_PendingResult]:
-        """Collect results from completed async tasks for a session."""
+        """Collect results from completed async tasks for a session.
+
+        Non-destructive: completed tasks are only removed after results are
+        extracted. Call _confirm_collected() after processing to clean up.
+        """
         results: list[_PendingResult] = []
 
         tasks = self._sessions.get(session_id)
         if tasks is None:
             return results
 
-        still_running: list[asyncio.Task[_PendingResult]] = []
+        completed_tasks: list[asyncio.Task[_PendingResult]] = []
 
         for task in tasks:
             if task.done():
+                completed_tasks.append(task)
                 try:
                     result = task.result()
                     results.append(result)
@@ -329,15 +341,29 @@ class Interceptor:
                             ),
                         )
                     )
-            else:
-                still_running.append(task)
+
+        # Store completed tasks for later removal by _confirm_collected
+        self._last_collected[session_id] = completed_tasks
+
+        return results
+
+    def _confirm_collected(self, session_id: str) -> None:
+        """Remove previously collected async tasks after successful processing."""
+        completed_tasks = self._last_collected.pop(session_id, None)
+        if completed_tasks is None:
+            return
+
+        tasks = self._sessions.get(session_id)
+        if tasks is None:
+            return
+
+        completed_set = set(id(t) for t in completed_tasks)
+        still_running = [t for t in tasks if id(t) not in completed_set]
 
         if still_running:
             tasks[:] = still_running
         else:
             self._sessions.remove(session_id)
-
-        return results
 
     def _start_async_checker(
         self,

@@ -39,12 +39,12 @@ def _get_header(
     """
     # Fast path: exact match (common when LiteLLM already lower-cased them)
     val = headers.get(name)
-    if val:
+    if val is not None and val != "":
         return val
     # Slow path: case-insensitive scan
     name_lower = name.lower()
     for k, v in headers.items():
-        if k.lower() == name_lower and v:
+        if k.lower() == name_lower and v is not None and v != "":
             return v
     return None
 
@@ -144,7 +144,7 @@ class SessionExtractor:
         if resolved_headers:
             for header_name in _SESSION_HEADER_NAMES:
                 session_id = _get_header(resolved_headers, header_name)
-                if session_id:
+                if session_id is not None:
                     return session_id
 
         # 1b. Check litellm_params metadata (Library mode)
@@ -153,26 +153,26 @@ class SessionExtractor:
         if isinstance(litellm_params, dict):
             lp_meta = litellm_params.get("metadata")
             if isinstance(lp_meta, dict):
-                if session_id := lp_meta.get("session_id"):
-                    return str(session_id)
+                sid = lp_meta.get("session_id")
+                if sid is not None and str(sid) != "":
+                    return str(sid)
 
         # 2. Check metadata fields
         metadata = data.get("metadata", {})
         if isinstance(metadata, dict):
-            if session_id := metadata.get("session_id"):
-                return str(session_id)
-            if session_id := metadata.get("sentinel_session_id"):
-                return str(session_id)
-            # LangChain often uses run_id
-            if run_id := metadata.get("run_id"):
-                return str(run_id)
+            for key in ("session_id", "sentinel_session_id", "run_id"):
+                val = metadata.get(key)
+                if val is not None and str(val) != "":
+                    return str(val)
 
         # 3. Check user field (OpenAI pattern)
-        if user := data.get("user"):
+        user = data.get("user")
+        if user is not None and str(user) != "":
             return f"user_{user}"
 
         # 4. Check for thread_id (OpenAI Assistants)
-        if thread_id := data.get("thread_id"):
+        thread_id = data.get("thread_id")
+        if thread_id is not None and str(thread_id) != "":
             return str(thread_id)
 
         # 5. Last resort: random UUID

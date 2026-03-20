@@ -253,7 +253,7 @@ class SentinelCallback(CustomLogger):
             engine_config = policy_config.get("config", {})
 
             # Only initialize if we have configuration
-            if engine_type == "fsm" and not engine_config.get("config_path"):
+            if engine_type == "fsm" and not engine_config.get("config_path") and not engine_config.get("workflow"):
                 logger.debug("No config_path configured, skipping policy engine")
                 self._policy_engine_initialized = True
                 return None

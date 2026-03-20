@@ -269,17 +269,22 @@ class ResponseModificationStrategy:
         return None
 
     @staticmethod
-    def _set_response_content(response: Any, content: str) -> None:
-        """Set text content on a response object."""
+    def _set_response_content(response: Any, content: str) -> bool:
+        """Set text content on a response object. Returns True if content was set."""
         if hasattr(response, "choices") and response.choices:
             choice = response.choices[0]
             if hasattr(choice, "message") and choice.message:
                 choice.message.content = content
-                return
+                return True
         if isinstance(response, dict):
             choices = response.get("choices", [])
             if choices and "message" in choices[0]:
                 choices[0]["message"]["content"] = content
+                return True
+        logger.warning(
+            "Response has no choices — intervention message could not be applied"
+        )
+        return False
 
     @staticmethod
     def _strip_tool_calls(response: Any) -> None:
