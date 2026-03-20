@@ -244,6 +244,11 @@ class SentinelCallback(CustomLogger):
                 self._policy_engine_initialized = True
                 return None
 
+            if engine_type == "judge" and not engine_config.get("models"):
+                logger.debug("No judge models configured, skipping policy engine")
+                self._policy_engine_initialized = True
+                return None
+
             logger.info(f"Initializing policy engine: {engine_type}")
             self._policy_engine = await PolicyEngineRegistry.create_and_initialize(
                 engine_type, engine_config
