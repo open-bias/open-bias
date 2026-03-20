@@ -1,87 +1,15 @@
 """Tests for intervention system."""
 
-import pytest
-
 from opensentinel.core.intervention.strategies import (
-    StrategyType,
-    StrategyConfig,
-    SystemPromptAppendStrategy,
-    UserMessageInjectStrategy,
     ResponseModificationStrategy,
-    WorkflowViolationError,
+    StrategyType,
+    UserMessageInjectStrategy,
+    format_message,
 )
-from opensentinel.policy.engines.fsm.intervention import InterventionHandler
 
 
 class TestInterventionStrategies:
     """Tests for intervention strategies."""
-
-    @pytest.fixture
-    def sample_data(self):
-        """Sample LLM request data."""
-        return {
-            "model": "gpt-4",
-            "messages": [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Help me with my account."},
-            ],
-        }
-
-    @pytest.fixture
-    def config(self):
-        """Sample intervention config."""
-        return StrategyConfig(
-            strategy_type=StrategyType.SYSTEM_PROMPT_APPEND,
-            message_template="Please verify identity first. Current state: {current_state}",
-        )
-
-    def test_system_prompt_append(self, sample_data, config):
-        """Test system prompt append strategy."""
-        strategy = SystemPromptAppendStrategy()
-        context = {"current_state": "greeting"}
-
-        result = strategy.apply(sample_data, config, context)
-
-        # Should have modified system message
-        system_msg = result["messages"][0]
-        assert "[WORKFLOW GUIDANCE]" in system_msg["content"]
-        assert "verify identity" in system_msg["content"]
-        assert "greeting" in system_msg["content"]
-
-    def test_system_prompt_append_no_existing_system(self, config):
-        """Test system prompt append when no system message exists."""
-        data = {
-            "model": "gpt-4",
-            "messages": [
-                {"role": "user", "content": "Hello"},
-            ],
-        }
-        strategy = SystemPromptAppendStrategy()
-        context = {"current_state": "test"}
-
-        result = strategy.apply(data, config, context)
-
-        # Should have inserted system message
-        assert result["messages"][0]["role"] == "system"
-        assert "[WORKFLOW GUIDANCE]" in result["messages"][0]["content"]
-
-    def test_user_message_inject(self, sample_data):
-        """Test user message inject strategy."""
-        config = StrategyConfig(
-            strategy_type=StrategyType.USER_MESSAGE_INJECT,
-            message_template="Please check this first.",
-        )
-        strategy = UserMessageInjectStrategy()
-        context = {}
-
-        result = strategy.apply(sample_data, config, context)
-
-        # Should have injected a user message
-        messages = result["messages"]
-        # Find the injected message
-        injected = [m for m in messages if "[System Note]" in m.get("content", "")]
-        assert len(injected) == 1
-        assert injected[0]["role"] == "user"
 
     def test_strategy_types(self):
         """Test that all strategy types exist."""
@@ -92,13 +20,12 @@ class TestInterventionStrategies:
             "response_modification",
         }
 
-    def test_message_format_with_missing_key(self):
+    def test_format_message_with_missing_key(self):
         """Test message formatting handles missing context keys."""
-        strategy = SystemPromptAppendStrategy()
         template = "Value: {missing_key}"
 
         # Should not raise, just leave placeholder
-        result = strategy.format_message(template, {})
+        result = format_message(template, {})
         assert template == result  # Returns original if key missing
 
     def test_user_message_inject_after_last_user(self):
@@ -232,55 +159,3 @@ class TestResponseModificationStrategy:
         assert "warning" not in result.choices[0].message.content.lower()
 
 
-class TestInterventionHandler:
-    """Tests for InterventionHandler."""
-
-    @pytest.fixture
-    def handler(self):
-        """Create InterventionHandler."""
-        return InterventionHandler()
-
-    @pytest.fixture
-    def violation(self):
-        """Create a sample constraint violation."""
-        from opensentinel.policy.engines.fsm.workflow.constraints import (
-            ConstraintViolation,
-            ConstraintType,
-        )
-
-        return ConstraintViolation(
-            constraint_name="verify_before_action",
-            message="Please verify identity first.",
-            constraint_type=ConstraintType.PRECEDENCE,
-            details={"current_state": "start", "proposed_state": "action"},
-        )
-
-    def test_get_config_for_violation(self, handler, violation):
-        """Test building StrategyConfig from a violation."""
-        config = handler.get_config_for_violation(violation)
-
-        assert config is not None
-        assert config.message_template == "Please verify identity first."
-        assert config.strategy_type == StrategyType.SYSTEM_PROMPT_APPEND
-
-    def test_get_message(self, handler, violation):
-        """Test getting message from a violation."""
-        msg = handler.get_message(violation)
-
-        assert msg == "Please verify identity first."
-
-    def test_get_message_empty(self, handler):
-        """Test getting message from a violation with no message."""
-        from opensentinel.policy.engines.fsm.workflow.constraints import (
-            ConstraintViolation,
-            ConstraintType,
-        )
-
-        violation = ConstraintViolation(
-            constraint_name="test",
-            message="",
-            constraint_type=ConstraintType.NEVER,
-            details={},
-        )
-
-        assert handler.get_message(violation) is None
