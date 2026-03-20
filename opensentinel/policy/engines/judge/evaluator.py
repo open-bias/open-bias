@@ -311,13 +311,9 @@ class JudgeEvaluator:
         scores = self._parse_pairwise_scores(demapped_scores, rubric.criteria)
         model_id = self._client.get_model_id(model_name)
 
-        # Check for critical failures
-        failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
-        composite = self._compute_composite(scores, rubric.criteria)
-        action = self._map_action(composite, rubric, fail_action)
-
-        if failed_criteria and action != VerdictAction.BLOCK:
-            action = fail_action
+        action, composite, failed_criteria = self._resolve_verdict(
+            scores, rubric, fail_action,
+        )
 
         return JudgeVerdict(
             scores=scores,
@@ -381,12 +377,9 @@ class JudgeEvaluator:
         scores = self._parse_pointwise_scores(raw, rubric.criteria)
         model_id = self._client.get_model_id(model_name)
 
-        failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
-        composite = self._compute_composite(scores, rubric.criteria)
-        action = self._map_action(composite, rubric, fail_action)
-
-        if failed_criteria and action != VerdictAction.BLOCK:
-            action = fail_action
+        action, composite, failed_criteria = self._resolve_verdict(
+            scores, rubric, fail_action,
+        )
 
         return JudgeVerdict(
             scores=scores,
