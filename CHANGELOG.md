@@ -42,7 +42,7 @@ Initial release.
 ### Added
 
 - Transparent LLM proxy built on LiteLLM. Point any OpenAI-compatible client at it with a one-line `base_url` change.
-- **Judge engine**: scores responses against plain-English rubrics using a sidecar LLM. Three reliability modes (safe/balanced/aggressive). Async by default -- zero latency on the critical path.
+- **Judge engine**: scores responses against plain-English rubrics using a sidecar LLM. Binary pass/fail evaluation with configurable fail action. Async by default -- zero latency on the critical path.
 - **FSM engine**: enforces agent behavior as a finite state machine. Three-tier classification cascade (tool call matching, regex, embedding similarity). LTL-lite temporal constraint evaluation.
 - **LLM engine**: classifies conversation state and detects drift using LLM-based reasoning.
 - **NeMo engine**: integrates NVIDIA NeMo Guardrails for content safety and dialog rails.
