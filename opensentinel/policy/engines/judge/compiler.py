@@ -46,7 +46,6 @@ Generate a JSON object with this structure:
       "description": "What this rubric evaluates",
       "scope": "turn",
       "evaluation_type": "pointwise",
-      "pass_threshold": 0.6,
       "criteria": [
         {
           "name": "criterion_name",
@@ -65,7 +64,6 @@ Field descriptions:
 - description: Clear explanation of what is being evaluated
 - scope: "turn" (single response) or "conversation" (full trajectory)
 - evaluation_type: "pointwise" (score one response)
-- pass_threshold: 0.0-1.0, normalized score needed to pass (default 0.6)
 - scale: Scoring scale for each criterion
   - "binary": 0 or 1 (use for hard prohibitions)
   - "likert_5": 1-5 (use for quality assessments)
