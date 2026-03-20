@@ -112,7 +112,7 @@ Every hook is wrapped in `safe_hook()` with a configurable timeout (default 30s)
 
 ## Engines
 
-Five policy engines, same interface. Pick one or compose them.
+Four policy engines, same interface. Pick one.
 
 | Engine | Mechanism | Critical-path latency | Config |
 |--------|-----------|----------------------|--------|
@@ -120,7 +120,6 @@ Five policy engines, same interface. Pick one or compose them.
 | `fsm` | State machine with LTL-lite temporal constraints | **<1ms** tool call match, **~1ms** regex, **~50ms** embedding fallback | States, transitions, constraints in YAML |
 | `llm` | LLM-based state classification and drift detection | **100-500ms** | Workflow YAML + LLM config |
 | `nemo` | NVIDIA NeMo Guardrails for content safety and dialog rails | **200-800ms** | NeMo config directory |
-| `composite` | Runs multiple engines, most restrictive decision wins | **max(children)** when parallel (default) | List of engine configs |
 
 ### Judge engine (default)
 
@@ -158,7 +157,7 @@ policy:
   - "Your rules here"
 
 # Full (all optional):
-engine: judge              # judge | fsm | llm | nemo | composite
+engine: judge              # judge | fsm | llm | nemo
 port: 4000
 debug: false
 
@@ -191,7 +190,6 @@ osentinel compile "block hacking" --engine nemo -o ./nemo_config
 osentinel validate workflow.yaml                          # check schema + report stats
 osentinel info workflow.yaml -v                           # detailed state/transition/constraint view
 
-See [Policy Compilation](docs/compilation.md) for full details.
 ```
 
 ## Performance
@@ -208,7 +206,7 @@ All hooks are wrapped in `safe_hook()` with configurable timeout (default 30s). 
 
 ## Status
 
-v0.2.1 -- alpha. The proxy layer, five policy engines (judge, FSM, LLM, NeMo, composite), policy compiler, CLI tooling, and OpenTelemetry tracing all work. YAML-first configuration with auto-detection of models and API keys. API surface may change. Session state is in-memory only (not persistent across restarts).
+v0.2.1 -- alpha. The proxy layer, four policy engines (judge, FSM, LLM, NeMo), policy compiler, CLI tooling, and OpenTelemetry tracing all work. YAML-first configuration with auto-detection of models and API keys. API surface may change. Session state is in-memory only (not persistent across restarts).
 
 Missing: persistent session storage, dashboard UI, pre-built policy library, rate limiting. These are planned but not built.
 

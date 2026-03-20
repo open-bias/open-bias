@@ -81,7 +81,7 @@ policy:
   - "No financial advice"
   - "Be professional"
 judge:
-  model: anthropic/claude-3-5-sonnet-latest
+  model: anthropic/claude-sonnet-4-5
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#judge-engine)
@@ -135,10 +135,7 @@ The classifier tries three methods in order, stopping at the first confident mat
 | `precedence` | B must occur before A | Verify identity before refund |
 | `never` | State must never occur | Never share internal info |
 | `eventually` | State must eventually be reached | Must reach resolution |
-| `always` | Property must hold at all times | Always maintain professional tone |
 | `response` | If A occurs, B must eventually follow | If complaint, must acknowledge |
-| `until` | A holds until B occurs | Formal tone until escalation |
-| `next` | B must be the immediate next state | After greeting, must identify issue |
 
 ### Intervention strategies
 
@@ -148,8 +145,6 @@ Intervention templates in the workflow YAML support strategy prefixes:
 |--------|----------|--------|
 | *(none)* | `SYSTEM_PROMPT_APPEND` | Appends guidance to the system message |
 | `inject:` | `USER_MESSAGE_INJECT` | Inserts as a user message |
-| `remind:` | `CONTEXT_REMINDER` | Inserts as assistant context |
-| `block:` | `HARD_BLOCK` | Blocks the response entirely |
 
 ### Minimal config
 
@@ -208,7 +203,7 @@ Uses a lightweight sidecar LLM for state classification, drift detection, and so
 ```yaml
 engine: llm
 llm:
-  model: anthropic/claude-3-5-sonnet-latest
+  model: anthropic/claude-sonnet-4-5
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#llm-engine)

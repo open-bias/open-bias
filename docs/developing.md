@@ -121,8 +121,7 @@ tests/
         │   ├── test_state_machine.py
         │   └── test_workflow_parser.py
         ├── llm/
-        ├── nemo/
-        └── composite/
+        └── nemo/
 ```
 
 ### Key Fixtures
@@ -236,10 +235,16 @@ Register it in `SentinelCallback._get_interceptor()` in `opensentinel/proxy/hook
 
 ### Adding an Intervention Strategy
 
-Two strategies are supported: `SYSTEM_PROMPT_APPEND` and `USER_MESSAGE_INJECT`. The `Interceptor` selects the strategy based on `default_strategy` in `InterventionConfig`. To add a new strategy:
+Three strategies exist as standalone classes in `opensentinel/core/intervention/strategies.py` (no base class):
 
-1. Add to `StrategyType` enum in `opensentinel/core/intervention/strategies.py`.
-2. Create a class extending `InterventionStrategy` with a `merge()` method.
+- **`SystemPromptAppendStrategy`** — appends guidance to the system message via `merge(messages, value)`.
+- **`UserMessageInjectStrategy`** — injects a user message with guidance via `merge(messages, value)`.
+- **`ResponseModificationStrategy`** — modifies the current LLM response (strips tool calls, replaces content, or appends warnings) via `apply_to_response(response, message, modified_messages)`.
+
+The `StrategyType` enum maps to these classes. To add a new strategy:
+
+1. Add a variant to `StrategyType` enum in `opensentinel/core/intervention/strategies.py`.
+2. Create a standalone class with the appropriate static method (`merge()` for request-modifying strategies, or `apply_to_response()` for response-modifying strategies).
 3. Add handling for the new type in `Interceptor._apply_intervention()` in `opensentinel/core/interceptor/interceptor.py`.
 
 ### Adding a Classification Method (FSM Engine)
@@ -389,7 +394,7 @@ At least one state needs `is_initial: true`.
 Check that `trigger` and `target` values in constraints match state names exactly.
 
 **"Unknown policy engine type: '...'"**
-Valid types: `judge`, `fsm`, `llm`, `nemo`, `composite`. Ensure the engine module is imported in `opensentinel/policy/engines/__init__.py`.
+Valid types: `judge`, `fsm`, `llm`, `nemo`. Ensure the engine module is imported in `opensentinel/policy/engines/__init__.py`.
 
 ### NeMo-Specific
 

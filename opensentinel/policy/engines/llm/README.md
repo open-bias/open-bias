@@ -135,7 +135,7 @@ composite = temporal × temporal_weight + semantic × (1 - temporal_weight)
 | `NOMINAL` | < 0.3 | No action |
 | `WARNING` | 0.3 – 0.6 | Gentle nudge via `SYSTEM_PROMPT_APPEND` |
 | `INTERVENTION` | 0.6 – 0.85 | Stronger correction via `USER_MESSAGE_INJECT` |
-| `CRITICAL` | > 0.85 | Hard block via `HARD_BLOCK` |
+| `CRITICAL` | > 0.85 | Escalation; flagged for human review via `BLOCK` decision |
 
 ### Anomaly Flags
 
@@ -183,10 +183,10 @@ Called **after** the LLM call — this is the main evaluation pipeline:
 ### Decision Logic
 
 ```
-if intervention_config.strategy == HARD_BLOCK:
-    decision = DENY
-elif intervention_config is not None:
-    decision = WARN
+if any critical constraint violations:
+    decision = BLOCK
+elif intervention_message is not None:
+    decision = INTERVENE
 else:
     decision = ALLOW
 ```

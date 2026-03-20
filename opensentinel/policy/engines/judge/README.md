@@ -35,7 +35,7 @@ judge/
 | `JudgeClient` | Wraps `LLMClient` to handle specific judge model interactions (e.g., JSON mode). |
 | `Evaluator` | Implements the core evaluation loops: `evaluate_turn`, `evaluate_conversation`, `evaluate_pairwise`. |
 | `RubricRegistry` | Manages available rubrics (built-ins like `safety`, `agent_behavior` + custom YAMLs). |
-| `BiasMitigator` | Handles position randomization for pairwise comparisons to prevent positional bias. |
+| `bias` (module) | Position randomization functions for pairwise comparisons to prevent positional bias. |
 
 ## Core Concepts
 

@@ -34,14 +34,14 @@ This uses the judge engine with inline rules, auto-detected model, default port 
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `engine` | string | `judge` | Policy engine type: `judge`, `fsm`, `llm`, `nemo`, `composite` |
+| `engine` | string | `judge` | Policy engine type: `judge`, `fsm`, `llm`, `nemo` |
 | `model` | string | auto-detected | Default LLM model. Auto-detected from whichever API key is present. Engines can override in their own section. |
 | `port` | int | `4000` | Proxy server port |
 | `host` | string | `0.0.0.0` | Proxy server bind address |
 | `debug` | bool | `false` | Enable debug logging |
 | `log_level` | string | `INFO` | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 
-Model auto-detection priority: `OPENAI_API_KEY` -> `gpt-4o-mini`, `GOOGLE_API_KEY`/`GEMINI_API_KEY` -> `gemini/gemini-1.5-flash`, `ANTHROPIC_API_KEY` -> `anthropic/claude-3-5-sonnet-latest`.
+Model auto-detection priority: `OPENAI_API_KEY` -> `gpt-4o-mini`, `GOOGLE_API_KEY`/`GEMINI_API_KEY` -> `gemini/gemini-2.5-flash`, `ANTHROPIC_API_KEY` -> `anthropic/claude-sonnet-4-5`.
 
 ## Policy
 
@@ -138,36 +138,6 @@ Set `engine: nemo` at the top level. Requires `policy:` pointing to a NeMo Guard
 | `nemo.fail_closed` | bool | `false` | If true, block on NeMo evaluation errors. If false (default), warn and allow. |
 | `nemo.rails` | list | all configured | Which rails to enable. Omit to use all rails from NeMo config. |
 
-## Composite Engine
-
-Set `engine: composite` at the top level. Combines multiple engines. Configure under the `composite:` section.
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `composite.strategy` | string | `all` | Evaluation strategy: `all` (run all engines) or `first_deny` (stop at first denial) |
-| `composite.parallel` | bool | `true` | Run engines concurrently |
-| `composite.engines` | list | -- | List of sub-engine configurations |
-
-Example:
-
-```yaml
-engine: composite
-composite:
-  strategy: all
-  parallel: true
-  engines:
-    - type: judge
-      config:
-        models:
-          - name: primary
-            model: gpt-4o-mini
-        inline_policy:
-          - "No financial advice"
-    - type: fsm
-      config:
-        config_path: ./workflow.yaml
-```
-
 ## Tracing
 
 Configure under the `tracing:` section. Tracing uses OpenTelemetry spans.
@@ -246,14 +216,14 @@ If validation fails, the server prints the error and exits with code 1. Use `--d
 
 ```yaml
 engine: judge
-model: gemini/gemini-1.5-flash
+model: gemini/gemini-2.5-flash
 port: 4000
 debug: false
 
 policy: ./policy.yaml
 
 judge:
-  model: anthropic/claude-3-5-sonnet-latest
+  model: anthropic/claude-sonnet-4-5
   fail_action: block
   pre_call_enabled: false
 

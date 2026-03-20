@@ -65,8 +65,7 @@ Engine-specific docs: [engines.md](engines.md). Engine-specific READMEs live in 
 |----------|-----------|
 | `SYSTEM_PROMPT_APPEND` | Appends guidance to system message |
 | `USER_MESSAGE_INJECT` | Inserts a `[System Note]` as user message |
-| `CONTEXT_REMINDER` | Inserts assistant message with context |
-| `HARD_BLOCK` | Raises `WorkflowViolationError`, blocks request |
+| `RESPONSE_MODIFICATION` | Modifies current response content or tool calls |
 
 ### Tracing (`opensentinel/tracing/`)
 

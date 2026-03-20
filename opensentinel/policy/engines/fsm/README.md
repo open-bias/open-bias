@@ -30,8 +30,6 @@ Response ──► evaluate_response() ──► Classify ──► Check Constr
 fsm/
 ├── engine.py           # FSMPolicyEngine — main entry point
 ├── classifier.py       # StateClassifier — response → state classification
-
-├── intervention.py     # InterventionHandler + InterventionBuilder
 ├── compiler.py         # FSMCompiler — natural language → workflow YAML
 └── workflow/
     ├── schema.py       # WorkflowDefinition, State, Transition, Constraint (Pydantic)
@@ -48,8 +46,6 @@ fsm/
 | `StateClassifier` | Cascade classification (tools → regex → embeddings) | `schema.State` |
 | `WorkflowStateMachine` | Session lifecycle, state transitions | `schema.WorkflowDefinition` |
 | `ConstraintEvaluator` | LTL-lite constraint evaluation | `schema.Constraint`, `SessionState` |
-| `InterventionHandler` | Prompt injection for corrections | `core.intervention.strategies` |
-
 | `FSMCompiler` | NL → YAML via LLM | `schema.*`, `LLMClient` |
 
 ---
@@ -73,11 +69,10 @@ Or with an inline workflow dict:
 await engine.initialize({
     "workflow": {
         "name": "support-flow",
-        "version": "1.0",
+        "mode": "guide",
         "states": [...],
         "transitions": [...],
         "constraints": [...],
-        "interventions": {...},
     }
 })
 ```
@@ -86,7 +81,7 @@ await engine.initialize({
 
 ```yaml
 name: customer-support
-version: "1.0"
+mode: guide
 description: Customer support agent workflow
 
 states:
@@ -134,29 +129,21 @@ constraints:
     type: precedence
     trigger: process_refund
     target: verify_identity
-    severity: critical
-    intervention: prompt_verify_first
+    message: >
+      You must verify the customer's identity before processing any refund.
+      Please ask for their account number or order ID first.
     description: Must verify identity before processing refunds
 
   - name: no_internal_info
     type: never
     target: share_internal_info
-    severity: error
-    intervention: warn_internal_info
+    message: Do not share internal system information with the customer.
     description: Never share internal system information
 
   - name: must_resolve
     type: eventually
     target: resolution
-    severity: warning
     description: Session must eventually reach resolution
-
-interventions:
-  prompt_verify_first: |
-    You must verify the customer's identity before processing any refund.
-    Please ask for their account number or order ID first.
-  warn_internal_info: |
-    block:Do not share internal system information with the customer.
 ```
 
 ### Constraint Types (LTL-Lite)
@@ -166,10 +153,7 @@ interventions:
 | `precedence` | Target must occur BEFORE trigger | Verify identity before refund |
 | `never` | Target state must never occur | Never share internal info |
 | `eventually` | Target must eventually be reached | Must reach resolution |
-| `always` | Property must hold at all times | Always be professional |
 | `response` | If trigger occurs, target must eventually follow | If complaint → must acknowledge |
-| `until` | First condition holds until second occurs | Maintain formal tone until escalation |
-| `next` | Target must be the immediate next state | After greeting, must identify issue |
 
 ### Intervention Prefixes
 
@@ -179,8 +163,6 @@ Intervention templates support strategy prefixes:
 |--------|----------|----------|
 | *(none)* | `SYSTEM_PROMPT_APPEND` | Appends guidance to system message |
 | `inject:` | `USER_MESSAGE_INJECT` | Inserts as user message |
-| `remind:` | `CONTEXT_REMINDER` | Inserts as assistant context |
-| `block:` | `HARD_BLOCK` | Raises `WorkflowViolationError` |
 
 ---
 
@@ -246,18 +228,17 @@ Called **after** the LLM call. This is where the core logic runs:
 Each session maintains:
 - **Current state**: Where the agent is in the workflow
 - **State history**: Full sequence of transitions with timestamps
-- **Pending intervention**: Intervention to apply on next request
 - **Constraint violations**: Accumulated violation records
 
 ```python
 # Inspect session state
 state = await engine.get_session_state("session-123")
 # {
+#   "session_id": "session-123",
+#   "workflow_name": "customer-support",
 #   "current_state": "verify_identity",
-#   "history": ["greeting", "identify_issue", "verify_identity"],
-#   "pending_intervention": null,
+#   "history": [{"state_name": "greeting", ...}, ...],
 #   "constraint_violations": [],
-#   "workflow": "customer-support",
 #   "created_at": "2026-02-15T...",
 #   "last_updated": "2026-02-15T...",
 # }
@@ -326,20 +307,14 @@ Extend `StateClassifier` and add new methods to the cascade in the `classify()` 
 3. Implement evaluation in `ConstraintEvaluator._evaluate_constraint()`
 4. Add message formatting in `_format_violation_message()`
 
-### Custom Intervention Strategies
-Use `InterventionBuilder` to create interventions programmatically:
+### Custom Constraint Messages
+Define intervention messages directly on constraints in your workflow YAML:
 
-```python
-from opensentinel.policy.engines.fsm import InterventionBuilder
-from opensentinel.core.intervention.strategies import StrategyType
-
-builder = InterventionBuilder()
-builder.add(
-    name="custom_warning",
-    template="Please follow the correct procedure: {details}",
-    strategy=StrategyType.SYSTEM_PROMPT_APPEND,
-    max_applications=3,
-    escalation=StrategyType.HARD_BLOCK,
-)
-configs = builder.build()
+```yaml
+constraints:
+  - name: custom_warning
+    type: precedence
+    trigger: target_state
+    target: required_state
+    message: "Please follow the correct procedure before proceeding."
 ```
