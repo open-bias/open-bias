@@ -423,13 +423,13 @@ class JudgePolicyEngine(PolicyEngine):
                 logger.info(f"Loaded {len(policy_data)} inline policy rules as '{rubric.name}'")
                 return
             # List of dicts → formal rubric definitions
-            for item in policy_data:
+            for idx, item in enumerate(policy_data):
                 if isinstance(item, dict):
                     try:
                         rubric = _parse_rubric_dict(item)
                         self._registry.register(rubric)
                         # First rubric becomes default
-                        if policy_data.index(item) == 0:
+                        if idx == 0:
                             self._default_rubric = rubric.name
                         logger.info(f"Loaded inline rubric '{rubric.name}'")
                     except Exception as e:
