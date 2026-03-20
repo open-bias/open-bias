@@ -36,6 +36,7 @@ This uses the judge engine with inline rules, auto-detected model, default port 
 |-----|------|---------|-------------|
 | `engine` | string | `judge` | Policy engine type: `judge`, `fsm`, `llm`, `nemo` |
 | `model` | string | auto-detected | Default LLM model. Auto-detected from whichever API key is present. Engines can override in their own section. |
+| `fail_action` | string | `intervene` | What happens on policy violation: `intervene` (modify next request) or `block` (reject request) |
 | `port` | int | `4000` | Proxy server port |
 | `host` | string | `0.0.0.0` | Proxy server bind address |
 | `debug` | bool | `false` | Enable debug logging |
@@ -73,7 +74,7 @@ Set `engine: judge` at the top level. Configure under the `judge:` section.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `judge.model` | string | global `model` | LLM model for evaluation. Overrides the global model setting. |
-| `judge.fail_action` | string | `block` | What happens on violation: `block` or `intervene` |
+| `judge.fail_action` | string | `intervene` | What happens on violation: `intervene` or `block`. Overrides the global `fail_action` for the judge engine. |
 | `judge.pre_call_enabled` | bool | `false` | Evaluate requests before forwarding to the LLM |
 | `judge.pre_call_rubric` | string | `safety` | Which rubric to use for pre-call evaluation |
 | `judge.default_rubric` | string | `agent_behavior` | Default rubric for per-turn evaluation |
@@ -219,12 +220,12 @@ engine: judge
 model: gemini/gemini-2.5-flash
 port: 4000
 debug: false
+fail_action: intervene
 
 policy: ./policy.yaml
 
 judge:
   model: anthropic/claude-sonnet-4-5
-  fail_action: block
   pre_call_enabled: false
 
 tracing:

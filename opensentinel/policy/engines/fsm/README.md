@@ -80,7 +80,6 @@ await engine.initialize({
 
 ```yaml
 name: customer-support
-mode: guide
 description: Customer support agent workflow
 
 states:
