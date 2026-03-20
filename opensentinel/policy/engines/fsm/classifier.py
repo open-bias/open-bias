@@ -166,8 +166,12 @@ class StateClassifier:
                 )
                 return result
 
-        # Fallback: Stay in current state or return unknown
-        fallback_state = current_state or "unknown"
+        # Fallback: Stay in current state, or use workflow's initial state
+        if current_state:
+            fallback_state = current_state
+        else:
+            initial = [name for name, s in self.states.items() if s.is_initial]
+            fallback_state = initial[0] if initial else next(iter(self.states))
         logger.debug(f"Fallback classification: {fallback_state}")
 
         return StateClassificationResult(
