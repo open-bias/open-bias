@@ -62,8 +62,8 @@ def print_report(results: list[EvalResult], verbose: bool = False) -> None:
                     f"  {marker} Turn {turn.turn_index}: decision={decision}, violations={v_count}"
                 )
                 for v in violations_list:
-                    v_name: str = (v.get("name") or v.get("constraint_id") or "unknown") if isinstance(v, dict) else getattr(v, "name", str(v))
-                    v_msg: str = (v.get("message") or "") if isinstance(v, dict) else getattr(v, "message", "")
+                    v_name = v.get("name") or v.get("constraint_id") or "unknown"
+                    v_msg = v.get("message") or ""
                     console.print(f"      - {v_name}: {v_msg}")
 
     # Final status
@@ -91,14 +91,7 @@ def export_json(results: list[EvalResult]) -> dict[str, Any]:
                     "turn_index": turn.turn_index,
                     "request_decision": turn.request_eval.decision.value,
                     "response_decision": turn.response_eval.decision.value,
-                    "violations": [
-                        v if isinstance(v, dict) else {
-                            "name": getattr(v, "name", str(v)),
-                            "severity": getattr(v, "severity", ""),
-                            "message": getattr(v, "message", ""),
-                        }
-                        for v in turn.response_eval.metadata.get("violations", [])
-                    ],
+                    "violations": turn.response_eval.metadata.get("violations", []),
                     "intervention_needed": turn.response_eval.decision.value in ("intervene", "block"),
                 }
             )
