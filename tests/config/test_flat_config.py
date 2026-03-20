@@ -123,6 +123,33 @@ class TestGetPolicyConfig:
         assert "models" not in result["config"]
 
 
+class TestFailAction:
+    """Tests for fail_action configuration."""
+
+    def _build_source(self, yaml_data):
+        source = YamlConfigSource.__new__(YamlConfigSource)
+        source._yaml_data = yaml_data
+        source._config_file = None
+        return source
+
+    def test_default_fail_action_is_intervene(self):
+        """PolicyConfig defaults to fail_action='intervene'."""
+        settings = SentinelSettings()
+        assert settings.policy.fail_action == "intervene"
+
+    def test_fail_action_maps_from_yaml(self):
+        """Top-level fail_action in YAML maps to policy.fail_action."""
+        source = self._build_source({"fail_action": "block"})
+        result = source._map_to_settings()
+        assert result["policy"]["fail_action"] == "block"
+
+    def test_fail_action_intervene_maps_from_yaml(self):
+        """fail_action: intervene maps correctly."""
+        source = self._build_source({"fail_action": "intervene"})
+        result = source._map_to_settings()
+        assert result["policy"]["fail_action"] == "intervene"
+
+
 if __name__ == "__main__":
     import sys
     sys.exit(pytest.main([__file__]))

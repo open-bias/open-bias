@@ -759,3 +759,87 @@ class TestAsyncContextPassing:
         await asyncio.sleep(0.05)
 
         assert received_context.get("user_request_id") == "req-ctx-002"
+
+
+# ===========================================================================
+# fail_action upgrade logic
+# ===========================================================================
+
+
+class TestFailAction:
+
+    async def test_default_fail_action_is_intervene(self):
+        """Default fail_action is 'intervene' — INTERVENE stays INTERVENE."""
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            decision=Decision.INTERVENE,
+            message="Stay on topic",
+        )
+        interceptor = Interceptor([checker])
+
+        result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+
+        assert result.allowed is True
+        assert result.modified_data is not None
+
+    async def test_fail_action_block_upgrades_intervene_pre_call(self):
+        """fail_action='block' upgrades INTERVENE to BLOCK on PRE_CALL."""
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            decision=Decision.INTERVENE,
+            message="violation",
+        )
+        interceptor = Interceptor([checker], fail_action="block")
+
+        result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+
+        assert result.allowed is False
+        assert result.message == "violation"
+
+    async def test_fail_action_block_upgrades_intervene_post_call(self):
+        """fail_action='block' upgrades INTERVENE to BLOCK on POST_CALL."""
+        checker = _mock_checker(
+            phase=CheckPhase.POST_CALL,
+            decision=Decision.INTERVENE,
+            message="violation",
+        )
+        interceptor = Interceptor([checker], fail_action="block")
+
+        result = await interceptor.run_post_call(
+            SESSION, _request(), {"answer": "bad"}, REQUEST_ID
+        )
+
+        assert result.allowed is False
+        assert result.message == "violation"
+
+    async def test_fail_action_block_does_not_affect_allow(self):
+        """fail_action='block' does not upgrade ALLOW decisions."""
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            decision=Decision.ALLOW,
+        )
+        interceptor = Interceptor([checker], fail_action="block")
+
+        result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+
+        assert result.allowed is True
+
+    async def test_fail_action_block_upgrades_async_intervene(self):
+        """fail_action='block' upgrades async INTERVENE to BLOCK on next request."""
+        async_checker = _mock_checker(
+            name="async_guide",
+            phase=CheckPhase.POST_CALL,
+            mode=CheckerMode.ASYNC,
+            decision=Decision.INTERVENE,
+            message="async violation",
+            delay=0.01,
+        )
+        interceptor = Interceptor([async_checker], fail_action="block")
+
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
+        await asyncio.sleep(0.05)
+
+        result = await interceptor.run_pre_call(SESSION, _request(), "req-002")
+
+        assert result.allowed is False
+        assert "async violation" in (result.message or "")
