@@ -177,32 +177,33 @@ class WorkflowStateMachine:
             Tuple of (TransitionResult, error_message)
         """
         session = await self.get_or_create_session(session_id)
-        current = session.current_state
 
-        # Same state - no transition needed
-        if current == target_state:
-            return (TransitionResult.SAME_STATE, None)
-
-        # Check if target state exists
+        # Check if target state exists (immutable lookup, safe outside lock)
         if target_state not in self._states:
             return (
                 TransitionResult.INVALID_TRANSITION,
                 f"Unknown state: {target_state}",
             )
 
-        # Check if transition is valid
-        valid_transitions = self._transitions.get(current, [])
-        matching = [t for t in valid_transitions if t.to_state == target_state]
-
-        # If no explicit transitions defined from current state, allow any
-        if valid_transitions and not matching:
-            return (
-                TransitionResult.INVALID_TRANSITION,
-                f"No transition from '{current}' to '{target_state}'",
-            )
-
-        # Perform transition
+        # Validate and mutate atomically under lock
         async with self._lock:
+            current = session.current_state
+
+            # Same state - no transition needed
+            if current == target_state:
+                return (TransitionResult.SAME_STATE, None)
+
+            # Check if transition is valid
+            valid_transitions = self._transitions.get(current, [])
+            matching = [t for t in valid_transitions if t.to_state == target_state]
+
+            # If no explicit transitions defined from current state, allow any
+            if valid_transitions and not matching:
+                return (
+                    TransitionResult.INVALID_TRANSITION,
+                    f"No transition from '{current}' to '{target_state}'",
+                )
+
             # Close current history entry
             if session.history:
                 session.history[-1].exited_at = datetime.now(timezone.utc)

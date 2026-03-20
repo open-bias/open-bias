@@ -151,6 +151,9 @@ class SentinelCallback(CustomLogger):
         self._policy_engine: PolicyEngine | None = None
         self._policy_engine_initialized = False
 
+        # Lock for lazy init to prevent concurrent initialization races
+        self._init_lock = asyncio.Lock()
+
         # OpenTelemetry tracer for Open Sentinel events (lazy initialized)
         self._tracer = None
 
@@ -170,6 +173,15 @@ class SentinelCallback(CustomLogger):
         if self._interceptor_initialized:
             return self._interceptor
 
+        async with self._init_lock:
+            # Double-check after acquiring lock
+            if self._interceptor_initialized:
+                return self._interceptor
+
+            return await self._initialize_interceptor()
+
+    async def _initialize_interceptor(self) -> Interceptor | None:
+        """Actually initialize the interceptor. Must be called under _init_lock."""
         try:
             policy_engine = await self._get_policy_engine()
             if not policy_engine:
@@ -224,6 +236,15 @@ class SentinelCallback(CustomLogger):
         if self._policy_engine_initialized:
             return self._policy_engine
 
+        async with self._init_lock:
+            # Double-check after acquiring lock
+            if self._policy_engine_initialized:
+                return self._policy_engine
+
+            return await self._initialize_policy_engine()
+
+    async def _initialize_policy_engine(self) -> PolicyEngine | None:
+        """Actually initialize the policy engine. Must be called under _init_lock."""
         try:
             from opensentinel.policy.registry import PolicyEngineRegistry
 

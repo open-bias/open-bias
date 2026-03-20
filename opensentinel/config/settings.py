@@ -25,6 +25,7 @@ For the complete YAML schema reference, see:
     opensentinel/config/schema.yaml
 """
 
+import contextvars
 import logging
 import os
 from pathlib import Path
@@ -449,6 +450,11 @@ class YamlConfigSource(PydanticBaseSettingsSource):
         return self._map_to_settings()
 
 
+_config_path_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "_config_path_var", default=None
+)
+
+
 class SentinelSettings(BaseSettings):
     """
     Main Open Sentinel configuration.
@@ -469,8 +475,7 @@ class SentinelSettings(BaseSettings):
         populate_by_name=True, # Allow initializing with field names even if aliases are set
     )
 
-    # Path to osentinel.yaml (set via _config_path kwarg, not a real setting field)
-    _config_path: str | None = None
+    # _config_path is passed via contextvars to settings_customise_sources
 
     # General settings
     debug: bool = False
@@ -494,8 +499,11 @@ class SentinelSettings(BaseSettings):
     openrouter_api_key: str | None = Field(None, validation_alias="OPENROUTER_API_KEY")
 
     def __init__(self, _config_path: str | None = None, **kwargs: Any):
-        self.__class__._config_path = _config_path
-        super().__init__(**kwargs)
+        _token = _config_path_var.set(_config_path)
+        try:
+            super().__init__(**kwargs)
+        finally:
+            _config_path_var.reset(_token)
         
         # Sync API keys to os.environ for downstream libraries (LiteLLM, LangChain)
         # This allows us to use .env files without explicit load_dotenv() in CLI
@@ -554,7 +562,7 @@ class SentinelSettings(BaseSettings):
 
         Priority (highest first): init > yaml > env > dotenv > file_secret
         """
-        yaml_source = YamlConfigSource(settings_cls, config_path=cls._config_path)
+        yaml_source = YamlConfigSource(settings_cls, config_path=_config_path_var.get())
         return (
             init_settings,
             yaml_source,
