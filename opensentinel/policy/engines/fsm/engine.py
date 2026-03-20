@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from opensentinel.policy.compiler.protocol import PolicyCompiler
 
 from opensentinel.policy.engines.fsm.classifier import StateClassifier
-from opensentinel.policy.engines.fsm.intervention import InterventionHandler
 from opensentinel.policy.engines.fsm.workflow.constraints import ConstraintEvaluator
 from opensentinel.policy.engines.fsm.workflow.parser import WorkflowParser
 from opensentinel.policy.engines.fsm.workflow.schema import ConstraintType, WorkflowDefinition
@@ -67,7 +66,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         self._state_machine: WorkflowStateMachine | None = None
         self._classifier: StateClassifier | None = None
         self._constraint_evaluator: ConstraintEvaluator | None = None
-        self._intervention_handler: InterventionHandler | None = None
         self._initialized = False
 
     @property
@@ -122,17 +120,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         self._classifier = StateClassifier(self._workflow.states, config=classifier_config)
 
         self._constraint_evaluator = ConstraintEvaluator(self._workflow.constraints)
-
-        # Wire intervention config from engine config
-        from opensentinel.core.intervention.strategies import StrategyType
-        intervention_cfg = config.get("intervention", {})
-        default_strategy_str = intervention_cfg.get("default_strategy", "system_prompt_append")
-        default_strategy = StrategyType(default_strategy_str)
-        max_intervention_attempts = intervention_cfg.get("max_intervention_attempts", 3)
-        self._intervention_handler = InterventionHandler(
-            default_strategy=default_strategy,
-            max_intervention_attempts=max_intervention_attempts,
-        )
 
         self._initialized = True
 

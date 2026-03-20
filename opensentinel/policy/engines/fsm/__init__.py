@@ -7,7 +7,6 @@ as a PolicyEngine for use with the pluggable policy infrastructure.
 This module now contains all FSM-specific components:
 - Workflow: Schema, Parser, StateMachine, Constraints
 - Monitor: StateClassifier, WorkflowTracker
-- Intervention: InterventionHandler
 """
 
 # Monitor components
@@ -18,11 +17,6 @@ from opensentinel.policy.engines.fsm.classifier import (
 # Compiler
 from opensentinel.policy.engines.fsm.compiler import FSMCompiler, compile_workflow
 from opensentinel.policy.engines.fsm.engine import FSMPolicyEngine
-
-# Intervention components
-from opensentinel.policy.engines.fsm.intervention import (
-    InterventionHandler,
-)
 
 # Workflow components
 from opensentinel.policy.engines.fsm.workflow import (
@@ -74,8 +68,6 @@ __all__ = [
     # Monitor
     "StateClassifier",
 
-    # Intervention
-    "InterventionHandler",
     # Compiler
     "FSMCompiler",
     "compile_workflow",
