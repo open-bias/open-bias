@@ -44,7 +44,6 @@ def full_config():
         "default_rubric": "agent_behavior",
         "conversation_rubric": "conversation_policy",
         "pre_call_enabled": False,
-        "pass_threshold": 0.6,
         "conversation_eval_interval": 5,
     }
 
