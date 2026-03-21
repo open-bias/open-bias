@@ -153,6 +153,14 @@ class JudgePolicyEngine(PolicyEngine):
                 f"Available: {available}"
             )
 
+        # Verify conversation rubric exists if configured
+        if self._conversation_rubric and not self._registry.get(self._conversation_rubric):
+            available = self._registry.list_rubrics()
+            raise ValueError(
+                f"Conversation rubric '{self._conversation_rubric}' not found. "
+                f"Available: {available}"
+            )
+
         self._initialized = True
         logger.info(f"JudgePolicyEngine initialized: {self.name}")
 
