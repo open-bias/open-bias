@@ -70,40 +70,58 @@ async def safe_hook(
     timeout: float = 5.0,
     fallback: Any = None,
     hook_name: str = "unknown",
+    fail_open: bool = True,
     **kwargs: Any,
 ) -> Any:
     """
-    Execute a hook with timeout and fail-open semantics.
+    Execute a hook with timeout and fail-open/fail-closed semantics.
 
     If the hook raises ``WorkflowViolationError`` it is intentional (a policy
-    block) and is re-raised.  Every other exception — including
+    block) and is re-raised regardless of the ``fail_open`` setting.
+
+    When ``fail_open=True`` (default), every other exception — including
     ``asyncio.TimeoutError`` — is caught, logged, counted, and the *fallback*
     value is returned so the agent's request passes through unchanged.
+
+    When ``fail_open=False``, exceptions are re-raised after logging, causing
+    the proxy to deny the request on hook failure.
 
     Args:
         hook_fn:   Async callable to execute.
         timeout:   Maximum seconds before the hook is cancelled.
         fallback:  Value to return on failure/timeout.
         hook_name: Human-readable name for logging and metrics.
+        fail_open: If True, swallow exceptions and return fallback.
+                   If False, re-raise exceptions after logging.
     """
     try:
         return await asyncio.wait_for(hook_fn(*args, **kwargs), timeout=timeout)
     except WorkflowViolationError:
         raise  # Intentional policy blocks must propagate
     except asyncio.TimeoutError:
-        _fail_open_counter[hook_name] = _fail_open_counter.get(hook_name, 0) + 1
+        if fail_open:
+            _fail_open_counter[hook_name] = _fail_open_counter.get(hook_name, 0) + 1
+            logger.error(
+                f"Open Sentinel hook '{hook_name}' timed out after {timeout}s "
+                f"(fail-open, count={_fail_open_counter[hook_name]})"
+            )
+            return fallback
         logger.error(
-            f"Open Sentinel hook '{hook_name}' timed out after {timeout}s "
-            f"(fail-open, count={_fail_open_counter[hook_name]})"
+            f"Open Sentinel hook '{hook_name}' timed out after {timeout}s (fail-closed)"
         )
-        return fallback
+        raise
     except Exception as e:
-        _fail_open_counter[hook_name] = _fail_open_counter.get(hook_name, 0) + 1
+        if fail_open:
+            _fail_open_counter[hook_name] = _fail_open_counter.get(hook_name, 0) + 1
+            logger.error(
+                f"Open Sentinel hook '{hook_name}' failed (fail-open, "
+                f"count={_fail_open_counter[hook_name]}): {e}"
+            )
+            return fallback
         logger.error(
-            f"Open Sentinel hook '{hook_name}' failed (fail-open, "
-            f"count={_fail_open_counter[hook_name]}): {e}"
+            f"Open Sentinel hook '{hook_name}' failed (fail-closed): {e}"
         )
-        return fallback
+        raise
 
 # Type alias for call types
 CallType = Literal[
@@ -360,6 +378,7 @@ class SentinelCallback(CustomLogger):
             timeout=self.settings.policy.hook_timeout_seconds,
             fallback=data,
             hook_name="async_pre_call_hook",
+            fail_open=self.settings.policy.fail_open,
         )
 
     async def _pre_call_impl(
@@ -461,6 +480,7 @@ class SentinelCallback(CustomLogger):
             timeout=self.settings.policy.hook_timeout_seconds,
             fallback=response,
             hook_name="async_post_call_success_hook",
+            fail_open=self.settings.policy.fail_open,
         )
 
     async def _post_call_success_impl(
@@ -585,6 +605,7 @@ class SentinelCallback(CustomLogger):
             timeout=self.settings.policy.hook_timeout_seconds,
             fallback=None,
             hook_name="async_post_call_failure_hook",
+            fail_open=self.settings.policy.fail_open,
             **kwargs,
         )
 
@@ -656,6 +677,7 @@ class SentinelCallback(CustomLogger):
             timeout=self.settings.policy.hook_timeout_seconds,
             fallback=None,
             hook_name="async_log_success_event",
+            fail_open=self.settings.policy.fail_open,
         )
 
     async def _log_success_impl(
@@ -714,6 +736,7 @@ class SentinelCallback(CustomLogger):
             timeout=self.settings.policy.hook_timeout_seconds,
             fallback=None,
             hook_name="async_log_failure_event",
+            fail_open=self.settings.policy.fail_open,
         )
 
     async def _log_failure_impl(

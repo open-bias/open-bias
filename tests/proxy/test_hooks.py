@@ -99,6 +99,68 @@ async def test_safe_hook_passes_kwargs():
 
 
 # ---------------------------------------------------------------------------
+# safe_hook fail_open=False tests
+# ---------------------------------------------------------------------------
+
+
+async def test_safe_hook_fail_closed_exception_propagates():
+    """When fail_open=False, exceptions propagate instead of returning fallback."""
+
+    async def bad_hook():
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await safe_hook(
+            bad_hook, timeout=1.0, fallback="ignored", hook_name="test_closed",
+            fail_open=False,
+        )
+    # Counter should NOT be incremented when fail_open=False
+    assert get_fail_open_counts() == {}
+
+
+async def test_safe_hook_fail_closed_timeout_propagates():
+    """When fail_open=False, timeout propagates instead of returning fallback."""
+
+    async def slow_hook():
+        await asyncio.sleep(10)
+        return "should not reach"
+
+    with pytest.raises(asyncio.TimeoutError):
+        await safe_hook(
+            slow_hook, timeout=0.05, fallback="ignored", hook_name="test_closed_timeout",
+            fail_open=False,
+        )
+    # Counter should NOT be incremented when fail_open=False
+    assert get_fail_open_counts() == {}
+
+
+async def test_safe_hook_fail_closed_workflow_violation_still_propagates():
+    """WorkflowViolationError propagates regardless of fail_open setting."""
+
+    async def blocking_hook():
+        raise WorkflowViolationError("policy block", context={"reason": "test"})
+
+    with pytest.raises(WorkflowViolationError, match="policy block"):
+        await safe_hook(
+            blocking_hook, timeout=1.0, fallback=None, hook_name="test_closed_block",
+            fail_open=False,
+        )
+    assert get_fail_open_counts() == {}
+
+
+async def test_safe_hook_fail_closed_success_still_works():
+    """When fail_open=False, successful hooks still return normally."""
+
+    async def good_hook():
+        return 42
+
+    result = await safe_hook(
+        good_hook, timeout=1.0, hook_name="test_closed_ok", fail_open=False,
+    )
+    assert result == 42
+
+
+# ---------------------------------------------------------------------------
 # Integration tests: SentinelCallback hooks with fail-open
 # ---------------------------------------------------------------------------
 

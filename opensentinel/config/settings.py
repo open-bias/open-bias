@@ -276,6 +276,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             "eval",
             "post_call_mode",
             "fail_action",
+            "fail_open",
             # Engine-specific sections are handled below
             "judge",
             "llm",
@@ -337,6 +338,10 @@ class YamlConfigSource(PydanticBaseSettingsSource):
         # fail_action -> policy.fail_action
         if "fail_action" in data:
             result.setdefault("policy", {})["fail_action"] = data["fail_action"]
+
+        # fail_open -> policy.fail_open
+        if "fail_open" in data:
+            result.setdefault("policy", {})["fail_open"] = data["fail_open"]
 
         # port -> proxy.port
         if "port" in data:

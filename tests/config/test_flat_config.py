@@ -150,6 +150,33 @@ class TestFailAction:
         assert result["policy"]["fail_action"] == "intervene"
 
 
+class TestFailOpen:
+    """Tests for fail_open configuration mapping."""
+
+    def _build_source(self, yaml_data):
+        source = YamlConfigSource.__new__(YamlConfigSource)
+        source._yaml_data = yaml_data
+        source._config_file = None
+        return source
+
+    def test_default_fail_open_is_true(self):
+        """PolicyConfig defaults to fail_open=True."""
+        settings = SentinelSettings()
+        assert settings.policy.fail_open is True
+
+    def test_fail_open_false_maps_from_yaml(self):
+        """Top-level fail_open: false in YAML maps to policy.fail_open."""
+        source = self._build_source({"fail_open": False})
+        result = source._map_to_settings()
+        assert result["policy"]["fail_open"] is False
+
+    def test_fail_open_true_maps_from_yaml(self):
+        """Top-level fail_open: true in YAML maps to policy.fail_open."""
+        source = self._build_source({"fail_open": True})
+        result = source._map_to_settings()
+        assert result["policy"]["fail_open"] is True
+
+
 if __name__ == "__main__":
     import sys
     sys.exit(pytest.main([__file__]))
