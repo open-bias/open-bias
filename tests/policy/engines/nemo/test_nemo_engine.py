@@ -68,8 +68,8 @@ async def test_evaluate_request_blocked(engine, mock_rails):
         request_data={"messages": [{"role": "user", "content": "bad request"}]}
     )
 
-    assert result.decision == Decision.BLOCK
-    assert "blocked" in result.message.lower()
+    assert result.decision == Decision.INTERVENE
+    assert "intercepted" in result.message.lower()
 
 async def test_evaluate_response_allow(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
@@ -95,7 +95,7 @@ async def test_evaluate_response_blocked(engine, mock_rails):
         request_data={"messages": []}
     )
 
-    assert result.decision == Decision.BLOCK
+    assert result.decision == Decision.INTERVENE
     assert result.message is not None
 
 async def test_evaluate_request_error_fail_open(engine, mock_rails):

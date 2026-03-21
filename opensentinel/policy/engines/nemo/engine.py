@@ -248,8 +248,8 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
 
             if self._is_blocked_response(response_content):
                 return EngineResult(
-                    decision=Decision.BLOCK,
-                    message="Request blocked by NeMo input guardrails",
+                    decision=Decision.INTERVENE,
+                    message="Request intercepted by NeMo input guardrails",
                     metadata={
                         "nemo_response": response_content,
                         "session_id": session_id,
@@ -335,8 +335,8 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
 
             if self._is_blocked_response(response_content):
                 return EngineResult(
-                    decision=Decision.BLOCK,
-                    message="Response blocked by NeMo output guardrails",
+                    decision=Decision.INTERVENE,
+                    message="Response intercepted by NeMo output guardrails",
                     metadata={
                         "original_response": content[:200],
                         "nemo_response": response_content[:200],
