@@ -102,7 +102,8 @@ class TestJudgeSessionContext:
         )
         session.record_verdict(verdict)
 
-        assert session.turn_count == 1
+        # turn_count is managed by the engine, not record_verdict
+        assert session.turn_count == 0
         assert session.score_trend == [0.8]
         assert session.total_tokens_used == 100
         assert len(session.evaluation_history) == 1

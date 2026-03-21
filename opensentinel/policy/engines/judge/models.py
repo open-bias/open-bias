@@ -150,11 +150,16 @@ class JudgeSessionContext:
     criterion_intervention_counts: dict[str, int] = field(default_factory=dict)
 
     def record_verdict(self, verdict: JudgeVerdict) -> None:
-        """Record a verdict and update trends."""
+        """Record a verdict and update trends.
+
+        Note: turn_count and intervention_count are NOT incremented here.
+        They are managed by the engine's evaluate_response() to avoid
+        double-counting when multiple verdicts (turn + conversation) are
+        recorded per evaluation.
+        """
         self.evaluation_history.append(verdict)
         self.score_trend.append(verdict.composite_score)
         self.total_tokens_used += verdict.token_usage
-        self.turn_count += 1
         self.last_updated_at = datetime.now(tz=timezone.utc)
 
         if verdict.action != VerdictAction.PASS:
@@ -163,7 +168,6 @@ class JudgeSessionContext:
 
         # Track intervention criteria for escalation
         if verdict.action != VerdictAction.PASS:
-            self.intervention_count += 1
             failed = verdict.metadata.get("criterion_failures", [])
             if failed:
                 self.last_intervention_criteria = list(failed)

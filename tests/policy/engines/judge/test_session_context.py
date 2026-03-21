@@ -62,6 +62,7 @@ class TestFormatSessionContextBlock:
             judge_model="test",
             metadata={"criterion_failures": ["tool_use_safety"]},
         ))
+        session.intervention_count += 1  # engine responsibility
 
         # Turn 3: INTERVENE (minor)
         session.record_verdict(JudgeVerdict(
@@ -72,6 +73,7 @@ class TestFormatSessionContextBlock:
             judge_model="test",
             metadata={"criterion_failures": ["tone"]},
         ))
+        session.intervention_count += 1  # engine responsibility
 
         result = format_session_context_block(session)
         assert "Turn 1: No violations" in result

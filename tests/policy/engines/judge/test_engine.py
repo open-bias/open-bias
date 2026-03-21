@@ -683,7 +683,13 @@ class TestInterventionEscalation:
         assert "intervention_count_exceeded" in result.metadata.get("escalation_reason", "")
 
     def test_session_context_tracks_intervention_criteria(self):
-        """JudgeSessionContext correctly tracks intervention criteria."""
+        """JudgeSessionContext correctly tracks intervention criteria.
+
+        record_verdict tracks per-criterion counts and last_intervention_criteria,
+        but does NOT increment intervention_count or turn_count — those are
+        managed by the engine's evaluate_response() to avoid double-counting
+        when multiple verdicts are recorded per evaluation.
+        """
         from opensentinel.policy.engines.judge.models import JudgeSessionContext
         session = JudgeSessionContext(session_id="test")
 
@@ -700,13 +706,14 @@ class TestInterventionEscalation:
         )
         session.record_verdict(verdict)
 
-        assert session.intervention_count == 1
+        # intervention_count is NOT incremented by record_verdict
+        assert session.intervention_count == 0
         assert session.last_intervention_criteria == ["safety"]
         assert session.criterion_intervention_counts == {"safety": 1}
 
         # Record a second intervention on the same criterion
         session.record_verdict(verdict)
-        assert session.intervention_count == 2
+        assert session.intervention_count == 0
         assert session.criterion_intervention_counts == {"safety": 2}
 
     def test_session_context_no_tracking_on_pass(self):
@@ -730,8 +737,8 @@ class TestInterventionEscalation:
         assert session.last_intervention_criteria == []
         assert session.criterion_intervention_counts == {}
 
-    def test_intervene_without_criterion_failures_increments_count(self):
-        """INTERVENE verdict from composite score alone still increments intervention_count."""
+    def test_intervene_without_criterion_failures_no_count(self):
+        """record_verdict does not increment intervention_count (engine does)."""
         from opensentinel.policy.engines.judge.models import JudgeSessionContext
         session = JudgeSessionContext(session_id="test")
 
@@ -747,11 +754,11 @@ class TestInterventionEscalation:
         )
         session.record_verdict(verdict)
 
-        assert session.intervention_count == 1
+        assert session.intervention_count == 0
         assert session.criterion_intervention_counts == {}
 
-    def test_block_without_criterion_failures_increments_count(self):
-        """BLOCK verdict from composite score alone still increments intervention_count."""
+    def test_block_without_criterion_failures_no_count(self):
+        """record_verdict does not increment intervention_count (engine does)."""
         from opensentinel.policy.engines.judge.models import JudgeSessionContext
         session = JudgeSessionContext(session_id="test")
 
@@ -767,7 +774,7 @@ class TestInterventionEscalation:
         )
         session.record_verdict(verdict)
 
-        assert session.intervention_count == 1
+        assert session.intervention_count == 0
         assert session.criterion_intervention_counts == {}
 
     def test_escalation_cap_works_with_composite_only_verdicts(self):
@@ -777,22 +784,10 @@ class TestInterventionEscalation:
         from opensentinel.policy.engines.judge.models import JudgeSessionContext
         session = JudgeSessionContext(session_id="test")
 
-        # Simulate 4 INTERVENE verdicts with no criterion_failures
-        for _ in range(4):
-            verdict = JudgeVerdict(
-                scores=[
-                    JudgeScore(criterion="quality", score=2, max_score=5, reasoning="Low"),
-                ],
-                composite_score=0.3,
-                action=VerdictAction.INTERVENE,
-                summary="Below threshold",
-                judge_model="test",
-                metadata={},  # No criterion_failures
-            )
-            session.record_verdict(verdict)
-
-        # All 4 should be counted
-        assert session.intervention_count == 4
+        # Simulate 4 evaluations each with an INTERVENE verdict.
+        # intervention_count is managed by the engine, so we set it directly
+        # to mimic 4 prior evaluations that each had a failure.
+        session.intervention_count = 4
         # No per-criterion tracking since no failures
         assert session.criterion_intervention_counts == {}
 
