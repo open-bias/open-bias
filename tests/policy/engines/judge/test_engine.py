@@ -567,7 +567,7 @@ class TestInterventionEscalation:
     async def test_first_violation_intervene_second_same_violation_escalated(
         self, engine, sample_request, sample_response
     ):
-        """First violation → INTERVENE, second same criterion → INTERVENE with escalation metadata."""
+        """First violation → INTERVENE, second same criterion → BLOCK via escalation."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_policy": ["Never delete user data"],
@@ -596,9 +596,9 @@ class TestInterventionEscalation:
         assert result1.decision == Decision.INTERVENE
         assert result1.metadata.get("escalated") is not True
 
-        # Second violation on same criterion → should escalate (still INTERVENE, but flagged)
+        # Second violation on same criterion → should escalate INTERVENE → BLOCK
         result2 = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result2.decision == Decision.INTERVENE
+        assert result2.decision == Decision.BLOCK
         assert result2.metadata.get("escalated") is True
         assert "repeat" in result2.metadata.get("escalation_reason", "").lower()
         assert "ESCALATED" in result2.message
@@ -645,7 +645,7 @@ class TestInterventionEscalation:
     async def test_intervention_count_cap_triggers_escalation(
         self, engine, sample_request, sample_response
     ):
-        """Total intervention count exceeding cap (3) triggers escalation metadata."""
+        """Total intervention count exceeding cap (3) triggers escalation to BLOCK."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_policy": [
@@ -677,8 +677,8 @@ class TestInterventionEscalation:
             engine._client.call_judge = AsyncMock(return_value=response)
             result = await engine.evaluate_response("s1", sample_response, sample_request)
 
-        # 4th violation should have triggered the count cap (>3)
-        assert result.decision == Decision.INTERVENE
+        # 4th violation should have triggered the count cap (>3) → BLOCK
+        assert result.decision == Decision.BLOCK
         assert result.metadata.get("escalated") is True
         assert "intervention_count_exceeded" in result.metadata.get("escalation_reason", "")
 

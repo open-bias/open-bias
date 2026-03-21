@@ -577,8 +577,8 @@ class JudgePolicyEngine(PolicyEngine):
         # Check for escalation conditions
         escalation_info = self._check_escalation(worst_verdict, session)
 
-        if escalation_info["should_escalate"] and decision != Decision.INTERVENE:
-            decision = Decision.INTERVENE
+        if escalation_info["should_escalate"] and decision == Decision.INTERVENE:
+            decision = Decision.BLOCK
 
         # message = guidance for INTERVENE, reason for BLOCK
         message: str | None = None
