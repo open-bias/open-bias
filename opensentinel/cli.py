@@ -272,7 +272,7 @@ def _validate_osentinel_config(config_path: Path, raw: dict) -> None:
         # Build summary
         models = engine_config.get("models", [])
         model_name = models[0]["model"] if models else "(none)"
-        fail_action = engine_config.get("fail_action", "block")
+        fail_action = engine_config.get("fail_action", "intervene")
 
         # Count rubrics and criteria
         from opensentinel.policy.engines.judge.rubrics import RubricRegistry
