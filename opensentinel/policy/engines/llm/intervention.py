@@ -99,7 +99,7 @@ class InterventionHandler:
 
         # Check whether any violation or drift warrants intervention
         has_violation = any(v.violated for v in violations)
-        has_drift = drift.level not in (DriftLevel.NOMINAL, None)
+        has_drift = drift.level is not DriftLevel.NOMINAL
 
         if not has_violation and not has_drift:
             return None
