@@ -74,7 +74,6 @@ class JudgePolicyEngine(PolicyEngine):
         self._pre_call_enabled: bool = False
         self._pre_call_rubric: str = "safety"
         self._conversation_eval_interval: int = 5
-        self._fail_action: VerdictAction = VerdictAction.INTERVENE
 
     @property
     def name(self) -> str:
@@ -124,7 +123,6 @@ class JudgePolicyEngine(PolicyEngine):
         )
 
         # Config
-        self._fail_action = VerdictAction(config.get("fail_action", "intervene"))
         self._default_rubric = config.get("default_rubric", "agent_behavior")
         self._conversation_rubric = config.get("conversation_rubric", "conversation_policy")
         self._pre_call_enabled = config.get("pre_call_enabled", False)
@@ -224,7 +222,7 @@ class JudgePolicyEngine(PolicyEngine):
                     tool_calls=tool_calls,
                     session_context=session,
                     tool_definitions=tool_definitions,
-                    fail_action=self._fail_action,
+                    fail_action=VerdictAction.INTERVENE,
                 )
                 self._trace_verdict(session_id, turn_verdict, turn_rubric.name)
                 verdicts.append(turn_verdict)
@@ -248,7 +246,7 @@ class JudgePolicyEngine(PolicyEngine):
                         metadata=metadata,
                         session_id=session_id,
                         session_context=session,
-                        fail_action=self._fail_action,
+                        fail_action=VerdictAction.INTERVENE,
                     )
                     self._trace_verdict(session_id, conv_verdict, conv_rubric.name)
                     verdicts.append(conv_verdict)
@@ -322,15 +320,6 @@ class JudgePolicyEngine(PolicyEngine):
             for i, m in enumerate(models):
                 if not isinstance(m, dict) or not m.get("model"):
                     errors.append(f"models[{i}]: missing 'model' field.")
-
-        # Check fail_action
-        from opensentinel.policy.engines.judge.compiler import VALID_ACTIONS
-
-        fail_action = config.get("fail_action", "intervene")
-        if fail_action not in VALID_ACTIONS:
-            errors.append(
-                f"Invalid fail_action '{fail_action}'. Must be one of: {', '.join(sorted(VALID_ACTIONS))}"
-            )
 
         # Build a temporary registry and load inline policy to check rubrics
         registry = RubricRegistry()
@@ -546,7 +535,7 @@ class JudgePolicyEngine(PolicyEngine):
                 conversation=messages,
                 metadata=(context or {}).get("metadata", {}),
                 session_id=session_id,
-                fail_action=self._fail_action,
+                fail_action=VerdictAction.INTERVENE,
             )
             return self._build_result([verdict], self._get_or_create_session(session_id))
         except Exception as e:

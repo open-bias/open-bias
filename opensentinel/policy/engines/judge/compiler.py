@@ -71,7 +71,7 @@ Field descriptions:
 - weight: Relative importance (default 1.0, use higher for critical criteria)
 - fail_threshold: Per-criterion failure threshold (0.0-1.0), null to use rubric default
 
-Note: fail_action (block/intervene) is configured at the engine level, not per-rubric.
+Note: fail_action is enforced at the interceptor level via policy.fail_action, not per-engine.
 
 Rules for converting natural language policies:
 1. Prohibitions ("never", "do not", "must not") -> binary scale, fail_threshold: 0.5

@@ -990,13 +990,6 @@ class TestValidateConfig:
         })
         assert any("missing 'model' field" in e for e in errors)
 
-    def test_invalid_fail_action(self):
-        errors = JudgePolicyEngine.validate_config({
-            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "fail_action": "explode",
-        })
-        assert any("Invalid fail_action" in e for e in errors)
-
     def test_nonexistent_default_rubric(self):
         errors = JudgePolicyEngine.validate_config({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
@@ -1036,9 +1029,8 @@ class TestValidateConfig:
 
     def test_multiple_errors_collected(self):
         errors = JudgePolicyEngine.validate_config({
-            "fail_action": "nope",
             "default_rubric": "nonexistent",
         })
-        # Should have at least: no model + invalid fail_action + missing rubric
-        assert len(errors) >= 3
+        # Should have at least: no model + missing rubric
+        assert len(errors) >= 2
 
