@@ -573,25 +573,12 @@ class SentinelCallback(CustomLogger):
                     ResponseModificationStrategy,
                 )
 
-                # IMPORTANT: LiteLLM ignores the return value of
-                # async_post_call_success_hook. POST_CALL interventions work
-                # only because apply_to_response mutates the ModelResponse
-                # object in-place. We still reassign `response` for clarity,
-                # but the in-place mutation is what actually reaches the client.
                 for intervention in result.modified_data["_interventions"]:
-                    content_before = extract_response_content(response)
                     response = ResponseModificationStrategy.apply_to_response(
                         response,
                         message=intervention.get("message"),
                         modified_messages=intervention.get("modified_messages"),
                     )
-                    content_after = extract_response_content(response)
-                    if content_before == content_after:
-                        logger.warning(
-                            "POST_CALL intervention from "
-                            f"'{intervention.get('checker')}' did not mutate "
-                            f"response for session {session_id}"
-                        )
                     logger.info(
                         f"Applied POST_CALL intervention from "
                         f"'{intervention.get('checker')}' for session {session_id}"

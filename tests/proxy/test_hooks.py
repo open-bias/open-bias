@@ -310,6 +310,90 @@ async def test_post_call_hook_block_raises_workflow_violation(
         await callback.async_post_call_success_hook(data, mock_api_key, response)
 
 
+async def test_post_call_intervention_modifies_returned_response(
+    callback, mock_api_key
+):
+    """POST_CALL intervention modifies the response returned by the hook."""
+    from opensentinel.core.interceptor.types import InterceptionResult
+    from litellm import ModelResponse
+
+    response = ModelResponse(
+        choices=[{"message": {"role": "assistant", "content": "original answer"}}],
+        model="test-model",
+    )
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(
+            allowed=True,
+            modified_data={
+                "_interventions": [
+                    {
+                        "checker": "test_checker",
+                        "message": "policy warning: be careful",
+                    }
+                ]
+            },
+        )
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._interceptor_initialized = True
+
+    result = await callback.async_post_call_success_hook(
+        {"messages": [{"role": "user", "content": "hello"}]},
+        mock_api_key,
+        response,
+    )
+
+    # The returned response must contain the intervention text
+    content = result.choices[0].message.content
+    assert "original answer" in content
+    assert "[POLICY WARNING]: policy warning: be careful" in content
+    # Verify it's the same object (in-place mutation)
+    assert result is response
+
+
+async def test_post_call_intervention_replaces_response_content(
+    callback, mock_api_key
+):
+    """POST_CALL intervention with modified_messages replaces response content entirely."""
+    from opensentinel.core.interceptor.types import InterceptionResult
+    from litellm import ModelResponse
+
+    response = ModelResponse(
+        choices=[{"message": {"role": "assistant", "content": "dangerous answer"}}],
+        model="test-model",
+    )
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(
+            allowed=True,
+            modified_data={
+                "_interventions": [
+                    {
+                        "checker": "test_checker",
+                        "modified_messages": [
+                            {"role": "assistant", "content": "safe replacement"}
+                        ],
+                    }
+                ]
+            },
+        )
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._interceptor_initialized = True
+
+    result = await callback.async_post_call_success_hook(
+        {"messages": [{"role": "user", "content": "hello"}]},
+        mock_api_key,
+        response,
+    )
+
+    assert result.choices[0].message.content == "safe replacement"
+    assert result is response
+
+
 async def test_post_call_failure_hook_exception_is_swallowed(
     callback, mock_api_key
 ):
