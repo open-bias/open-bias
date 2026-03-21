@@ -8,6 +8,7 @@ enabling pluggable policy evaluation while maintaining a consistent API.
 from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from abc import ABC, abstractmethod
@@ -158,13 +159,13 @@ class PolicyEngine(ABC):
         """
         return None
 
-def require_initialized(method):
+def require_initialized(method: Callable[..., Any]) -> Callable[..., Any]:
     """
     Decorator to ensure engine is initialized before method call.
     Raises RuntimeError if self._initialized is False.
     """
     @functools.wraps(method)
-    async def wrapper(self, *args, **kwargs):
+    async def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
         if not getattr(self, "_initialized", False):
             raise RuntimeError(f"{type(self).__name__} not initialized. Call initialize() first.")
 
