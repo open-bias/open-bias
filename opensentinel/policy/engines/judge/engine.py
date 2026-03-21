@@ -551,8 +551,8 @@ class JudgePolicyEngine(PolicyEngine):
 
         Takes the most restrictive action across all verdicts.
         Applies escalation when repeat violations are detected:
-        - Same criterion fails after prior intervention → escalate to BLOCK
-        - Total intervention count exceeds cap (3) → auto-block
+        if the escalation cap is reached and the current decision is
+        INTERVENE, it is upgraded to BLOCK.
         """
         action_priority = {
             VerdictAction.PASS: 0,
