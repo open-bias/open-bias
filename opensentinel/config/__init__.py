@@ -1,15 +1,13 @@
 """Configuration management for Open Sentinel."""
 
 from opensentinel.config.settings import (
-    SentinelSettings,
     OTelConfig,
     ProxyConfig,
-    ClassifierConfig,
+    SentinelSettings,
 )
 
 __all__ = [
     "SentinelSettings",
     "OTelConfig",
     "ProxyConfig",
-    "ClassifierConfig",
 ]
