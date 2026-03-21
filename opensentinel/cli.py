@@ -80,7 +80,8 @@ def main() -> None:
     default=False,
     help="Enable debug logging",
 )
-def serve(port: int, host: str, config: Path, debug: bool) -> None:
+@click.pass_context
+def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -> None:
     """Start the Open Sentinel proxy server.
 
     The proxy intercepts LLM calls and monitors workflow adherence.
@@ -116,8 +117,10 @@ def serve(port: int, host: str, config: Path, debug: bool) -> None:
                 _config_path=str(config) if config else None,
                 debug=debug,
             )
-            settings.proxy.host = host
-            settings.proxy.port = port
+            if ctx.get_parameter_source("host") == click.core.ParameterSource.COMMANDLINE:
+                settings.proxy.host = host
+            if ctx.get_parameter_source("port") == click.core.ParameterSource.COMMANDLINE:
+                settings.proxy.port = port
             settings.validate()
 
         # Show config summary
@@ -129,14 +132,14 @@ def serve(port: int, host: str, config: Path, debug: bool) -> None:
             {
                 "Engine": engine_type,
                 "Model": display_model,
-                "Host": f"{host}:{port}",
+                "Host": f"{settings.proxy.host}:{settings.proxy.port}",
                 "Fail Open": str(fail_open),
             },
         )
         console.print(
             Text.assemble(
                 ("  Listening on ", ""),
-                (f"http://{host}:{port}/v1", "bold cyan underline"),
+                (f"http://{settings.proxy.host}:{settings.proxy.port}/v1", "bold cyan underline"),
             )
         )
         console.print()

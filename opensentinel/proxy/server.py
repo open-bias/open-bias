@@ -255,7 +255,6 @@ def start_proxy(settings: SentinelSettings | None = None) -> None:
         settings: Optional SentinelSettings. If not provided, will be loaded
                  from environment variables.
     """
-    # Log resolved configuration
     resolved_settings = settings or SentinelSettings()
     logger.info(f"Default model: {resolved_settings.proxy.default_model}")
     logger.info(
@@ -263,22 +262,5 @@ def start_proxy(settings: SentinelSettings | None = None) -> None:
         f" (config_path={resolved_settings.policy.engine.config_path})"
     )
 
-    proxy = SentinelProxy(settings or resolved_settings)
+    proxy = SentinelProxy(resolved_settings)
     asyncio.run(proxy.start())
-
-
-def start_proxy_cli(
-    port: int = 4000,
-    host: str = "0.0.0.0",
-    debug: bool = False,
-) -> None:
-    """
-    Start proxy with CLI-friendly arguments.
-
-    This is called by the CLI to translate CLI args to settings.
-    """
-    settings = SentinelSettings(
-        debug=debug,
-        proxy={"host": host, "port": port},
-    )
-    start_proxy(settings)
