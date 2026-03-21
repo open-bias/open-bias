@@ -14,6 +14,7 @@ Session extraction is designed to work with:
 """
 
 import hashlib
+import json
 import logging
 import uuid
 from typing import Any
@@ -184,7 +185,11 @@ class SessionExtractor:
             if isinstance(first_msg, dict):
                 content = first_msg.get("content", "")
                 if content:
-                    msg_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
+                    if isinstance(content, str):
+                        raw = content.encode()
+                    else:
+                        raw = json.dumps(content, sort_keys=True).encode()
+                    msg_hash = hashlib.sha256(raw).hexdigest()[:16]
                     return f"msg_{msg_hash}"
 
         # 6. Last resort: random UUID

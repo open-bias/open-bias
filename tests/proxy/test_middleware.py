@@ -219,6 +219,33 @@ class TestExtractSessionIdFallback:
         data2 = {"messages": [{"role": "user", "content": "hello world"}]}
         assert SessionExtractor.extract_session_id(data1) == SessionExtractor.extract_session_id(data2)
 
+    def test_multimodal_content_does_not_crash(self):
+        """Multimodal (list) content should hash via JSON, not crash on .encode()."""
+        data = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is this?"},
+                        {"type": "image_url", "image_url": {"url": "https://example.com/img.png"}},
+                    ],
+                }
+            ]
+        }
+        result = SessionExtractor.extract_session_id(data)
+        assert result.startswith("msg_")
+        assert len(result) == 4 + 16
+
+    def test_multimodal_content_is_deterministic(self):
+        """Same multimodal content produces same session ID."""
+        content = [
+            {"type": "text", "text": "describe"},
+            {"type": "image_url", "image_url": {"url": "https://example.com/a.png"}},
+        ]
+        data1 = {"messages": [{"role": "user", "content": content}]}
+        data2 = {"messages": [{"role": "user", "content": content}]}
+        assert SessionExtractor.extract_session_id(data1) == SessionExtractor.extract_session_id(data2)
+
     def test_generates_uuid_when_nothing_available(self):
         data: dict = {}
         result = SessionExtractor.extract_session_id(data)
