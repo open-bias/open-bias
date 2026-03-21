@@ -40,12 +40,10 @@ class DriftDetector:
         self,
         workflow: WorkflowDefinition,
         temporal_weight: float = 0.55,
-        semantic_weight: float = 0.45,
         decay_alpha: float = 0.3,
     ):
         self.workflow = workflow
         self.temporal_weight = temporal_weight
-        self.semantic_weight = semantic_weight
         self.decay_alpha = decay_alpha
         
         # Expected state sequence (computed from workflow)

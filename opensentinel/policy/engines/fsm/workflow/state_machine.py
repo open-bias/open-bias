@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 
+from opensentinel.core.session import SessionStore
 from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition, State, Transition
 
 logger = logging.getLogger(__name__)
@@ -88,9 +89,17 @@ class WorkflowStateMachine:
         ```
     """
 
-    def __init__(self, workflow: WorkflowDefinition):
+    def __init__(
+        self,
+        workflow: WorkflowDefinition,
+        session_ttl: int = 3600,
+        max_sessions: int = 10000,
+    ):
         self.workflow = workflow
-        self._sessions: dict[str, SessionState] = {}
+        self._sessions: SessionStore[SessionState] = SessionStore(
+            ttl=session_ttl,
+            max_sessions=max_sessions,
+        )
         self._lock = asyncio.Lock()
 
         # Build lookup tables for fast access
@@ -131,31 +140,38 @@ class WorkflowStateMachine:
             SessionState for the session
         """
         async with self._lock:
-            if session_id not in self._sessions:
-                if not self._initial_state:
-                    raise ValueError("Workflow has no initial state")
+            existing = self._sessions.get(session_id)
+            if existing is not None:
+                self._sessions.touch(session_id)
+                return existing
 
-                session = SessionState(
-                    session_id=session_id,
-                    workflow_name=self.workflow.name,
-                    current_state=self._initial_state,
-                    history=[
-                        StateHistoryEntry(
-                            state_name=self._initial_state,
-                            entered_at=datetime.now(timezone.utc),
-                        )
-                    ],
-                )
-                self._sessions[session_id] = session
-                logger.debug(
-                    f"Created session {session_id} in state '{self._initial_state}'"
-                )
+            if not self._initial_state:
+                raise ValueError("Workflow has no initial state")
 
-            return self._sessions[session_id]
+            session = SessionState(
+                session_id=session_id,
+                workflow_name=self.workflow.name,
+                current_state=self._initial_state,
+                history=[
+                    StateHistoryEntry(
+                        state_name=self._initial_state,
+                        entered_at=datetime.now(timezone.utc),
+                    )
+                ],
+            )
+            self._sessions.put(session_id, session)
+            logger.debug(
+                f"Created session {session_id} in state '{self._initial_state}'"
+            )
+
+            return session
 
     async def get_session(self, session_id: str) -> SessionState | None:
         """Get session if it exists."""
-        return self._sessions.get(session_id)
+        session = self._sessions.get(session_id)
+        if session is not None:
+            self._sessions.touch(session_id)
+        return session
 
     async def transition(
         self,
@@ -266,10 +282,10 @@ class WorkflowStateMachine:
     async def reset_session(self, session_id: str) -> None:
         """Reset a session to initial state."""
         async with self._lock:
-            if session_id in self._sessions:
-                del self._sessions[session_id]
+            self._sessions.remove(session_id)
         # Next access will create fresh session
 
     async def get_session_count(self) -> int:
         """Get number of active sessions."""
+        self._sessions.evict_stale()
         return len(self._sessions)

@@ -13,9 +13,10 @@ Session extraction is designed to work with:
 - OpenClaw and other agent frameworks that pass custom headers or metadata
 """
 
+import hashlib
 import logging
 import uuid
-from typing import Optional, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,8 @@ class SessionExtractor:
     4. ``metadata.run_id`` (LangChain convention)
     5. ``user`` field (OpenAI convention)
     6. ``thread_id`` field (OpenAI Assistants convention)
-    7. Random UUID (last resort — logged as warning)
+    7. Hash of first message content (deterministic fallback)
+    8. Random UUID (last resort — logged as warning)
     """
 
     @staticmethod
@@ -175,7 +177,17 @@ class SessionExtractor:
         if thread_id is not None and str(thread_id) != "":
             return str(thread_id)
 
-        # 5. Last resort: random UUID
+        # 5. Hash of first message content (deterministic fallback)
+        messages = data.get("messages")
+        if isinstance(messages, list) and messages:
+            first_msg = messages[0]
+            if isinstance(first_msg, dict):
+                content = first_msg.get("content", "")
+                if content:
+                    msg_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
+                    return f"msg_{msg_hash}"
+
+        # 6. Last resort: random UUID
         generated = str(uuid.uuid4())
         logger.warning(
             "No session ID found in request headers or metadata. "

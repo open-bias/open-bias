@@ -134,18 +134,6 @@ class JudgeVerdict:
 
 
 @dataclass
-class EvaluationRequest:
-    """Input for a judge evaluation."""
-    session_id: str
-    response_content: str
-    full_conversation: list[dict[str, Any]]
-    rubric_name: str | None = None
-    candidate_b: str | None = None
-    reference_answer: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
 class JudgeSessionContext:
     """Per-session state for the judge engine."""
     session_id: str

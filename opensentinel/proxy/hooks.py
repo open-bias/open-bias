@@ -6,10 +6,10 @@ This module implements the core hook system that intercepts LLM calls:
 1. async_pre_call_hook: Runs BEFORE LLM call
    - Applies pending async checker results from previous call
    - Runs sync PRE_CALL checkers
-   - Modifies request if WARN with modified_data
+   - Modifies request if INTERVENE with modified_data
 
 2. async_post_call_success_hook: Runs AFTER LLM call succeeds
-   - Runs sync POST_CALL checkers (can modify response on WARN)
+   - Runs sync POST_CALL checkers (can modify response on INTERVENE)
    - Starts async checkers in background
    - Completes tracing
 
@@ -183,7 +183,11 @@ class SentinelCallback(CustomLogger):
     async def _initialize_interceptor(self) -> Interceptor | None:
         """Actually initialize the interceptor. Must be called under _init_lock."""
         try:
-            policy_engine = await self._get_policy_engine()
+            # Call _initialize_policy_engine directly instead of _get_policy_engine
+            # to avoid re-acquiring _init_lock (asyncio.Lock is not reentrant).
+            if not self._policy_engine_initialized:
+                await self._initialize_policy_engine()
+            policy_engine = self._policy_engine
             if not policy_engine:
                 self._interceptor_initialized = True
                 return None

@@ -120,12 +120,6 @@ class WorkflowParser:
     @staticmethod
     def _load(data: dict) -> WorkflowDefinition:
         """Detect format and load accordingly."""
-        if "mode" in data:
-            logger.warning(
-                "Workflow field 'mode' is deprecated and ignored. "
-                "Use top-level 'fail_action' in config instead."
-            )
-            data = {k: v for k, v in data.items() if k != "mode"}
         if "steps" in data:
             config = SimpleWorkflowConfig.model_validate(data)
             return compile_workflow(config)

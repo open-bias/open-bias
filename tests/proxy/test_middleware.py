@@ -206,14 +206,27 @@ class TestExtractSessionIdFromBodyFields:
 # SessionExtractor.extract_session_id — fallback UUID
 # ===========================================================================
 class TestExtractSessionIdFallback:
-    def test_generates_uuid_when_nothing_available(self):
+    def test_hash_of_first_message_fallback(self):
+        """When no explicit session ID, hash of first message is used."""
         data = {"messages": [{"role": "user", "content": "hi"}]}
+        result = SessionExtractor.extract_session_id(data)
+        assert result.startswith("msg_")
+        assert len(result) == 4 + 16  # "msg_" + 16-char hex
+
+    def test_hash_of_first_message_is_deterministic(self):
+        """Same first message content produces same session ID."""
+        data1 = {"messages": [{"role": "user", "content": "hello world"}]}
+        data2 = {"messages": [{"role": "user", "content": "hello world"}]}
+        assert SessionExtractor.extract_session_id(data1) == SessionExtractor.extract_session_id(data2)
+
+    def test_generates_uuid_when_nothing_available(self):
+        data: dict = {}
         result = SessionExtractor.extract_session_id(data)
         # Should be a valid UUID
         uuid.UUID(result)  # raises ValueError if not valid
 
     def test_different_calls_produce_different_uuids(self):
-        data = {"messages": []}
+        data: dict = {}
         id1 = SessionExtractor.extract_session_id(data)
         id2 = SessionExtractor.extract_session_id(data)
         assert id1 != id2
@@ -222,7 +235,7 @@ class TestExtractSessionIdFallback:
         """Ensure a warning is logged when falling back to UUID."""
         import logging
 
-        data = {"messages": []}
+        data: dict = {}
         with caplog.at_level(logging.WARNING, logger="opensentinel.proxy.middleware"):
             SessionExtractor.extract_session_id(data)
         assert "No session ID found" in caplog.text

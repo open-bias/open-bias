@@ -4,7 +4,7 @@ Policy compiler registry for dynamic compiler loading.
 Thin subclass of GenericRegistry specialized for PolicyCompiler.
 """
 
-from typing import Type, List, Callable
+from typing import Type, Callable
 
 from opensentinel.policy.registry import GenericRegistry
 from opensentinel.policy.compiler.protocol import PolicyCompiler
@@ -16,7 +16,7 @@ class PolicyCompilerRegistry(GenericRegistry[PolicyCompiler]):
     _label = "policy compiler"
 
     @classmethod
-    def list_compilers(cls) -> List[str]:
+    def list_compilers(cls) -> list[str]:
         return cls.list_registered()
 
 

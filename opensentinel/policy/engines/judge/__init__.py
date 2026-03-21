@@ -22,7 +22,6 @@ from opensentinel.policy.engines.judge.models import (
     Rubric,
     JudgeScore,
     JudgeVerdict,
-    EvaluationRequest,
     JudgeSessionContext,
 )
 
@@ -42,7 +41,6 @@ __all__ = [
     "Rubric",
     "JudgeScore",
     "JudgeVerdict",
-    "EvaluationRequest",
     "JudgeSessionContext",
     "JudgeClient",
     "JudgeEvaluator",

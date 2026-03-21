@@ -7,7 +7,10 @@ drift detection, and soft constraint evaluation. Registered via
 """
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from opensentinel.policy.compiler.protocol import PolicyCompiler
 
 from opensentinel.policy.registry import register_engine
 from opensentinel.policy.protocols import (
@@ -424,7 +427,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
-    ) -> None:
+    ) -> "PolicyCompiler | None":
         """LLM engine has no dedicated compiler."""
         return None
 

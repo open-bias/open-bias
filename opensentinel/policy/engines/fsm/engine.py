@@ -101,7 +101,7 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         elif "workflow" in config:
             workflow_data = config["workflow"]
             if isinstance(workflow_data, dict):
-                self._workflow = WorkflowParser().parse_dict(workflow_data)
+                self._workflow = WorkflowParser.parse_dict(workflow_data)
             else:
                 self._workflow = workflow_data
         else:
@@ -109,7 +109,12 @@ class FSMPolicyEngine(StatefulPolicyEngine):
                 "FSM engine requires 'config_path' or 'workflow' in config"
             )
 
-        self._state_machine = WorkflowStateMachine(self._workflow)
+        sm_kwargs: dict[str, Any] = {}
+        if "session_ttl" in config:
+            sm_kwargs["session_ttl"] = config["session_ttl"]
+        if "max_sessions" in config:
+            sm_kwargs["max_sessions"] = config["max_sessions"]
+        self._state_machine = WorkflowStateMachine(self._workflow, **sm_kwargs)
 
         # Wire classifier config from engine config
         from opensentinel.config.settings import ClassifierConfig

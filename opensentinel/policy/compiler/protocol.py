@@ -11,7 +11,7 @@ for different policy engines.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 @dataclass
 class CompilationResult:

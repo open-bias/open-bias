@@ -145,7 +145,12 @@ class PolicyEngine(ABC):
         """
         pass
 
-    def get_compiler(self, **kwargs: Any) -> "PolicyCompiler" | None:
+    def get_compiler(
+        self,
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> "PolicyCompiler" | None:
         """Get the compiler for this engine type.
 
         Override in subclasses that have a dedicated compiler.

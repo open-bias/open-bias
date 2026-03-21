@@ -10,7 +10,7 @@ Traces can be exported to any OTLP-compatible backend including:
 import base64
 import json
 import logging
-from typing import Any, List
+from typing import Any
 from contextlib import contextmanager
 
 from opensentinel import __version__

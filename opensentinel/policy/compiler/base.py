@@ -10,7 +10,7 @@ Provides common functionality for policy compilers:
 import json
 import logging
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from opensentinel.policy.compiler.protocol import PolicyCompiler, CompilationResult
 
