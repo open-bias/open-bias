@@ -6,8 +6,9 @@ Uses LiteLLM proxy approach - customers only need to change their base_url.
 
 Supports multiple policy engines:
 - FSM: Finite State Machine workflow enforcement
+- Judge: LLM-as-judge policy evaluation
 - NeMo: NVIDIA NeMo Guardrails integration
-- Composite: Combine multiple engines together
+- LLM: LLM-based drift detection and intervention
 
 Quick Start:
     Configure via `osentinel.yaml`:
