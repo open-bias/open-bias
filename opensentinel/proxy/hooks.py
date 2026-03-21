@@ -300,6 +300,9 @@ class SentinelCallback(CustomLogger):
             self._policy_engine = await PolicyEngineRegistry.create_and_initialize(
                 engine_type, engine_config
             )
+            # Wire up tracer for engines that support it (e.g. judge engine)
+            if hasattr(self._policy_engine, "set_tracer") and self.tracer:
+                self._policy_engine.set_tracer(self.tracer)
             self._policy_engine_initialized = True
             logger.info(f"Policy engine initialized: {self._policy_engine.name}")
 
@@ -495,7 +498,6 @@ class SentinelCallback(CustomLogger):
         llm_start_time = data.get("metadata", {}).get("_opensentinel_llm_start_time")
 
         interceptor = await self._get_interceptor()
-        policy_engine = await self._get_policy_engine()
 
         # Log LLM call via OTEL BEFORE interceptor
         if self.tracer:
@@ -701,26 +703,7 @@ class SentinelCallback(CustomLogger):
         # The logging worker has a short timeout and policy evaluation can take longer.
         # Evaluation is handled in `async_post_call_success_hook` which runs in the main flow.
 
-        # Log LLM call via OTEL
-        if self.tracer:
-            response_content = extract_response_content(response_obj) or None
-
-            usage_info = extract_usage_info(response_obj)
-
-            self.tracer.log_llm_call(
-                session_id=session_id,
-                model=kwargs.get("model", "unknown"),
-                messages=kwargs.get("messages", []),
-                response_content=response_content,
-                response_model=getattr(response_obj, "model", None),
-                usage=usage_info,
-                metadata={
-                    "has_interceptor": interceptor is not None,
-                    "hook": "async_log_success",
-                },
-                start_time=start_time,
-                end_time=end_time,
-            )
+        # LLM call tracing is handled in _post_call_success_impl to avoid duplicate trace entries.
 
     async def async_log_failure_event(
         self,
