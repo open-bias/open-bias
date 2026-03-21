@@ -17,7 +17,10 @@ from opensentinel.policy.engines.fsm.classifier import StateClassifier
 from opensentinel.policy.engines.fsm.workflow.constraints import ConstraintEvaluator
 from opensentinel.policy.engines.fsm.workflow.parser import WorkflowParser
 from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
-from opensentinel.policy.engines.fsm.workflow.state_machine import WorkflowStateMachine
+from opensentinel.policy.engines.fsm.workflow.state_machine import (
+    TransitionResult,
+    WorkflowStateMachine,
+)
 from opensentinel.policy.engines.stateful import (
     StateClassificationResult,
     StatefulPolicyEngine,
@@ -170,12 +173,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
             f"(confidence={classification.confidence:.2f}, method={classification.method})"
         )
 
-        # Check constraints BEFORE transition
-        constraint_violations = self._constraint_evaluator.evaluate_all(
-            session,
-            proposed_state=classification.state_name,
-        )
-
         # Attempt state transition
         transition_result, error = await self._state_machine.transition(
             session_id,
@@ -184,19 +181,27 @@ class FSMPolicyEngine(StatefulPolicyEngine):
             method=classification.method,
         )
 
-        # Session-boundary evaluation: check EVENTUALLY/RESPONSE at terminal state
-        if await self._state_machine.is_in_terminal_state(session_id):
-            boundary_violations = self._constraint_evaluator.evaluate_session_boundary(
+        # Only evaluate constraints when the transition actually happened
+        constraint_violations: list = []
+        if transition_result != TransitionResult.INVALID_TRANSITION:
+            constraint_violations = self._constraint_evaluator.evaluate_all(
                 session,
+                proposed_state=classification.state_name,
             )
-            constraint_violations.extend(boundary_violations)
+
+            # Session-boundary evaluation: check EVENTUALLY/RESPONSE at terminal state
+            if await self._state_machine.is_in_terminal_state(session_id):
+                boundary_violations = self._constraint_evaluator.evaluate_session_boundary(
+                    session,
+                )
+                constraint_violations.extend(boundary_violations)
 
         decision = Decision.ALLOW
         message: str | None = None
 
         if constraint_violations:
             decision = Decision.INTERVENE
-            message = constraint_violations[0].message
+            message = "\n".join(cv.message for cv in constraint_violations)
 
         return EngineResult(
             decision=decision,

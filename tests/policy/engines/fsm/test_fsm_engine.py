@@ -1,11 +1,12 @@
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from opensentinel.policy.engines.fsm.engine import FSMPolicyEngine
+from opensentinel.policy.engines.fsm.workflow.schema import ConstraintType
 from opensentinel.policy.engines.fsm.workflow.state_machine import TransitionResult
 from opensentinel.policy.engines.stateful import StateClassificationResult
-from opensentinel.policy.engines.fsm.workflow.schema import ConstraintType
 from opensentinel.policy.protocols import Decision
 
 
@@ -167,3 +168,61 @@ async def test_session_boundary_evaluation_at_terminal(engine, mocks):
     assert result.decision == Decision.INTERVENE
     assert len(result.metadata["violations"]) == 1
     mocks["constraints"].return_value.evaluate_session_boundary.assert_called_once()
+
+
+async def test_invalid_transition_skips_constraint_evaluation(engine, mocks):
+    """Constraint violations should not be reported for rejected transitions."""
+    mock_workflow = MagicMock(name="test_workflow", states=[], constraints=[])
+    mocks["parser"]().parse_dict.return_value = mock_workflow
+    await engine.initialize({"workflow": {}})
+
+    mock_session = MagicMock()
+    mocks["sm"].return_value.get_or_create_session = AsyncMock(return_value=mock_session)
+
+    mocks["classifier"].return_value.classify.return_value = StateClassificationResult(
+        state_name="invalid_state", confidence=0.9, method="test"
+    )
+
+    mocks["sm"].return_value.transition = AsyncMock(
+        return_value=(TransitionResult.INVALID_TRANSITION, "No such transition")
+    )
+
+    result = await engine.evaluate_response("sid", "response", {})
+
+    assert result.decision == Decision.ALLOW
+    assert len(result.metadata["violations"]) == 0
+    mocks["constraints"].return_value.evaluate_all.assert_not_called()
+
+
+async def test_multiple_violations_joined_in_message(engine, mocks):
+    """All violation messages should be included, not just the first."""
+    mock_workflow = MagicMock(name="test_workflow", states=[], constraints=[])
+    mocks["parser"]().parse_dict.return_value = mock_workflow
+    await engine.initialize({"workflow": {}})
+
+    mock_session = MagicMock()
+    mocks["sm"].return_value.get_or_create_session = AsyncMock(return_value=mock_session)
+
+    mocks["classifier"].return_value.classify.return_value = StateClassificationResult(
+        state_name="bad_state", confidence=0.9, method="test"
+    )
+
+    mocks["sm"].return_value.transition = AsyncMock(
+        return_value=(TransitionResult.SUCCESS, None)
+    )
+
+    violations = []
+    for i in range(3):
+        v = MagicMock()
+        v.constraint_name = f"constraint_{i}"
+        v.message = f"Violation {i}"
+        v.constraint_type = ConstraintType.NEVER
+        v.details = {}
+        violations.append(v)
+
+    mocks["constraints"].return_value.evaluate_all.return_value = violations
+
+    result = await engine.evaluate_response("sid", "response", {})
+
+    assert result.decision == Decision.INTERVENE
+    assert result.message == "Violation 0\nViolation 1\nViolation 2"
