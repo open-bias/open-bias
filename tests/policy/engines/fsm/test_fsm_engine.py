@@ -414,3 +414,22 @@ async def test_max_history_passed_to_state_machine(engine, mocks):
     mocks["sm"].assert_called_once()
     call_kwargs = mocks["sm"].call_args
     assert call_kwargs[1]["max_history"] == 500
+
+
+async def test_initialize_warns_when_embeddings_unavailable(engine, mocks, caplog):
+    """Warn at startup when sentence-transformers is not installed."""
+    import logging
+
+    mock_workflow = MagicMock(name="test_workflow", states=[], constraints=[])
+    mocks["parser"]().parse_dict.return_value = mock_workflow
+
+    # Make the classifier's check return False
+    mocks["classifier"].return_value.check_embedding_availability.return_value = False
+
+    with caplog.at_level(logging.WARNING, logger="opensentinel.policy.engines.fsm.engine"):
+        await engine.initialize({"workflow": {}})
+
+    assert any(
+        "sentence-transformers not installed" in record.message
+        for record in caplog.records
+    )

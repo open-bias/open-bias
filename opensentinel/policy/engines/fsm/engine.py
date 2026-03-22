@@ -128,6 +128,12 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         classifier_config = ClassifierConfig(**classifier_cfg) if classifier_cfg else None
         self._classifier = StateClassifier(self._workflow.states, config=classifier_config)
 
+        if not self._classifier.check_embedding_availability():
+            logger.warning(
+                "sentence-transformers not installed; FSM classification will use "
+                "only tool-call and pattern matching (no semantic fallback)"
+            )
+
         self._constraint_evaluator = ConstraintEvaluator(self._workflow.constraints)
 
         # Wire eviction callback so boundary constraints are evaluated on eviction

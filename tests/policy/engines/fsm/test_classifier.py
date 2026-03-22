@@ -255,6 +255,49 @@ class TestEmbeddingThresholdFiltering:
         assert result is None
 
 
+class TestEmbeddingAvailability:
+    """Tests for embedding availability check."""
+
+    def test_check_embedding_unavailable(self, states):
+        """Warning is surfaced when sentence-transformers is not installed."""
+        from unittest.mock import patch
+
+        classifier = StateClassifier(states)
+
+        with patch.dict("sys.modules", {"sentence_transformers": None}):
+            import importlib
+            # Patch the import to raise ImportError
+            original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
+
+            def mock_import(name, *args, **kwargs):
+                if name == "sentence_transformers":
+                    raise ImportError("No module named 'sentence_transformers'")
+                return original_import(name, *args, **kwargs)
+
+            with patch("builtins.__import__", side_effect=mock_import):
+                assert classifier.check_embedding_availability() is False
+
+    def test_check_embedding_available(self, states):
+        """Returns True when sentence-transformers is importable."""
+        from unittest.mock import patch, MagicMock
+
+        classifier = StateClassifier(states)
+
+        fake_module = MagicMock()
+        with patch.dict("sys.modules", {"sentence_transformers": fake_module}):
+            assert classifier.check_embedding_availability() is True
+
+    @pytest.fixture
+    def states(self):
+        return [
+            State(
+                name="greeting",
+                is_initial=True,
+                classification=ClassificationHint(patterns=[r"\bhello\b"]),
+            ),
+        ]
+
+
 class TestClassificationResult:
     """Tests for ClassificationResult dataclass."""
 

@@ -64,6 +64,18 @@ class StateClassifier:
 
         logger.debug(f"StateClassifier initialized with {len(states)} states")
 
+    def check_embedding_availability(self) -> bool:
+        """Check whether the embedding model can be loaded.
+
+        Returns:
+            True if embeddings are available, False otherwise.
+        """
+        try:
+            import sentence_transformers  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
     @property
     def model(self):
         """Lazy-load sentence transformer model."""
