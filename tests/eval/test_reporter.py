@@ -139,3 +139,50 @@ class TestPrintReport:
              patch(f"{_CLI_UI}.warning"):
             print_report([result])
             mock_success.assert_called_once()
+
+    def test_request_eval_block_shows_as_violation(self):
+        """Pre-call block (request_eval=BLOCK) must not show as pass."""
+        request_violations = [{"name": "input_rail", "message": "blocked input"}]
+        turn = make_turn(
+            0,
+            decision=Decision.ALLOW,
+            request_decision=Decision.BLOCK,
+            request_violations=request_violations,
+        )
+        result = make_result(turns=[turn])
+
+        with patch(f"{_CLI_UI}.config_panel"), \
+             patch(f"{_CLI_UI}.make_table") as mock_table, \
+             patch(f"{_CLI_UI}.console"), \
+             patch(f"{_CLI_UI}.success") as mock_success, \
+             patch(f"{_CLI_UI}.warning") as mock_warning:
+            print_report([result])
+            mock_warning.assert_called()
+            mock_success.assert_not_called()
+            # Verify the scenario row shows 1 violation, not 0
+            scenario_table_call = mock_table.call_args_list[-1]
+            rows = scenario_table_call[0][2]
+            assert rows[0][2] == "1"  # violations column
+
+    def test_request_eval_violations_added_to_response_violations(self):
+        """Violations from both request_eval and response_eval are summed."""
+        request_violations = [{"name": "input_rail"}]
+        response_violations = [{"name": "output_policy"}]
+        turn = make_turn(
+            0,
+            decision=Decision.INTERVENE,
+            violations=response_violations,
+            request_decision=Decision.BLOCK,
+            request_violations=request_violations,
+        )
+        result = make_result(turns=[turn])
+
+        with patch(f"{_CLI_UI}.config_panel"), \
+             patch(f"{_CLI_UI}.make_table") as mock_table, \
+             patch(f"{_CLI_UI}.console"), \
+             patch(f"{_CLI_UI}.success"), \
+             patch(f"{_CLI_UI}.warning"):
+            print_report([result])
+            scenario_table_call = mock_table.call_args_list[-1]
+            rows = scenario_table_call[0][2]
+            assert rows[0][2] == "2"  # 1 request + 1 response violation

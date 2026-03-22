@@ -38,7 +38,9 @@ def print_report(results: list[EvalResult], verbose: bool = False) -> None:
         name = Path(result.scenario_path).name if result.scenario_path else "unknown"
         turns = str(len(result.turns))
         violations = sum(
-            len(t.response_eval.metadata.get("violations", [])) for t in result.turns
+            len(t.request_eval.metadata.get("violations", []))
+            + len(t.response_eval.metadata.get("violations", []))
+            for t in result.turns
         )
         status = (
             "[red]error[/]"

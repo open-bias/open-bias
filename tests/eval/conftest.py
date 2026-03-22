@@ -10,13 +10,16 @@ def make_turn(
     idx: int,
     decision: Decision = Decision.ALLOW,
     violations: list | None = None,
+    request_decision: Decision = Decision.ALLOW,
+    request_violations: list | None = None,
 ) -> TurnResult:
     meta = {"violations": violations or []}
+    request_meta = {"violations": request_violations or []}
     return TurnResult(
         turn_index=idx,
         request_data={"messages": [], "model": "test"},
         response_data={},
-        request_eval=EngineResult(decision=Decision.ALLOW),
+        request_eval=EngineResult(decision=request_decision, metadata=request_meta),
         response_eval=EngineResult(decision=decision, metadata=meta),
     )
 
