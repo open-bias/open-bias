@@ -1,9 +1,10 @@
-"""Tests for SentinelProxy._setup_logging() litellm_verbose behaviour."""
+"""Tests for SentinelProxy._setup_logging() and generate_litellm_config() behaviour."""
 
 from unittest.mock import patch
 
 import litellm
 import pytest
+import yaml
 
 from opensentinel.config.settings import SentinelSettings
 from opensentinel.proxy.server import SentinelProxy
@@ -108,3 +109,29 @@ def test_settings_litellm_verbose_from_env(monkeypatch):
     monkeypatch.setenv("OSNTL_LITELLM_VERBOSE", "true")
     settings = SentinelSettings()
     assert settings.litellm_verbose is True
+
+
+# ---------------------------------------------------------------------------
+# generate_litellm_config: master_key handling
+# ---------------------------------------------------------------------------
+
+
+def test_generate_litellm_config_includes_master_key_when_set():
+    """master_key must appear in general_settings when explicitly configured."""
+    proxy = _make_proxy(proxy={"master_key": "sk-my-secret-key"})
+    config = yaml.safe_load(proxy.generate_litellm_config())
+    assert config["general_settings"].get("master_key") == "sk-my-secret-key"
+
+
+def test_generate_litellm_config_omits_master_key_when_none():
+    """master_key must not appear in general_settings when not configured (None)."""
+    proxy = _make_proxy()  # master_key defaults to None
+    config = yaml.safe_load(proxy.generate_litellm_config())
+    assert "master_key" not in config["general_settings"]
+
+
+def test_generate_litellm_config_omits_master_key_when_empty_string():
+    """master_key must not appear in general_settings when set to empty string."""
+    proxy = _make_proxy(proxy={"master_key": ""})
+    config = yaml.safe_load(proxy.generate_litellm_config())
+    assert "master_key" not in config["general_settings"]

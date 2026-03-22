@@ -175,15 +175,17 @@ class SentinelProxy:
         Returns:
             YAML string for LiteLLM proxy configuration.
         """
+        general_settings: dict[str, object] = {}
+        if self.settings.proxy.master_key:
+            general_settings["master_key"] = self.settings.proxy.master_key
+
         config = {
             "model_list": self.settings.get_model_list(),
             "litellm_settings": {
                 "callbacks": ["opensentinel.proxy.hooks.SentinelCallback"],
                 "set_verbose": self.settings.litellm_verbose,
             },
-            "general_settings": {
-                "master_key": self.settings.proxy.master_key or "sk-sentinel-dev",
-            },
+            "general_settings": general_settings,
         }
 
         return yaml.dump(config, default_flow_style=False)
