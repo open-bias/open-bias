@@ -182,7 +182,7 @@ class TestEvaluateRequest:
 
         result = await engine.evaluate_request("s1", sample_request)
 
-        assert result.decision in (Decision.INTERVENE, Decision.BLOCK)
+        assert result.decision == Decision.INTERVENE
         violations = result.metadata.get("violations", [])
         assert len(violations) > 0
 
@@ -205,7 +205,7 @@ class TestEvaluateResponse:
         engine._client.call_judge = AsyncMock(return_value=_failing_judge_response())
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision in (Decision.BLOCK, Decision.INTERVENE)
+        assert result.decision == Decision.INTERVENE
         violations = result.metadata.get("violations", [])
         assert len(violations) > 0
         for v in violations:
