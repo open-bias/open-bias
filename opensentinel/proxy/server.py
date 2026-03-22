@@ -97,6 +97,13 @@ class SentinelProxy:
         root_logger.addHandler(handler)
 
         if self.settings.debug:
+            logger.warning(
+                "Debug mode enabled. Set OSNTL_LITELLM_VERBOSE=true to also enable "
+                "LiteLLM verbose logging (WARNING: this logs full request payloads "
+                "including API keys)."
+            )
+
+        if self.settings.litellm_verbose:
             litellm.set_verbose = True
 
 
@@ -155,7 +162,7 @@ class SentinelProxy:
         router = Router(
             model_list=model_list,
             routing_strategy="simple-shuffle",
-            set_verbose=self.settings.debug,
+            set_verbose=self.settings.litellm_verbose,
         )
 
         logger.info(f"Created LiteLLM router with {len(model_list)} provider(s) and SentinelCallback")
@@ -172,7 +179,7 @@ class SentinelProxy:
             "model_list": self.settings.get_model_list(),
             "litellm_settings": {
                 "callbacks": ["opensentinel.proxy.hooks.SentinelCallback"],
-                "set_verbose": self.settings.debug,
+                "set_verbose": self.settings.litellm_verbose,
             },
             "general_settings": {
                 "master_key": self.settings.proxy.master_key or "sk-sentinel-dev",

@@ -497,6 +497,7 @@ class SentinelSettings(BaseSettings):
     # General settings
     debug: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    litellm_verbose: bool = False
 
     # Component configurations
     otel: OTelConfig = Field(default_factory=OTelConfig)
