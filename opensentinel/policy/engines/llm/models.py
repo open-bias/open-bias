@@ -148,6 +148,9 @@ class SessionContext:
 
     # Drift score at last intervention (for self-correction detection)
     drift_at_last_intervention: float = 0.0
+
+    # Number of interventions in this session (for max-attempts cap)
+    intervention_count: int = 0
     
     # Timestamps
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

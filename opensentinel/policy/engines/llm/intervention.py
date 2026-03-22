@@ -44,7 +44,6 @@ class InterventionHandler:
         self.cooldown_turns = cooldown_turns
         self.self_correction_margin = self_correction_margin
         self.max_intervention_attempts = max_intervention_attempts
-        self._intervention_counts: dict[str, int] = {}
 
     def decide(
         self,
@@ -69,11 +68,10 @@ class InterventionHandler:
         )
 
         # Check max intervention attempts (critical violations always pass through)
-        session_count = self._intervention_counts.get(session.session_id, 0)
-        if not has_critical and session_count >= self.max_intervention_attempts:
+        if not has_critical and session.intervention_count >= self.max_intervention_attempts:
             logger.warning(
                 f"Session {session.session_id} exceeded max intervention attempts "
-                f"({session_count}/{self.max_intervention_attempts})"
+                f"({session.intervention_count}/{self.max_intervention_attempts})"
             )
             return None
 
@@ -112,7 +110,7 @@ class InterventionHandler:
         message = self._select_template(first_violation, drift, session)
 
         # Track intervention count and update session
-        self._intervention_counts[session.session_id] = session_count + 1
+        session.intervention_count += 1
         session.last_intervention_turn = session.turn_count
         session.drift_at_last_intervention = drift.composite
 

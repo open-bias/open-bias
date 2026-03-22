@@ -336,7 +336,7 @@ class TestCriticalBypassMaxAttempts:
     def test_critical_bypasses_max_attempts(self, engine, session, nominal_drift):
         """Critical violations should intervene even after max attempts exceeded."""
         # Exhaust the max intervention attempts (default 3)
-        engine._intervention_counts[session.session_id] = 3
+        session.intervention_count = 3
 
         violations = [
             ConstraintEvaluation(
@@ -356,7 +356,7 @@ class TestCriticalBypassMaxAttempts:
 
     def test_non_critical_blocked_by_max_attempts(self, engine, session, nominal_drift):
         """Non-critical violations should still be blocked after max attempts."""
-        engine._intervention_counts[session.session_id] = 3
+        session.intervention_count = 3
 
         violations = [
             ConstraintEvaluation(
@@ -371,6 +371,57 @@ class TestCriticalBypassMaxAttempts:
         result = engine.decide(session, violations, nominal_drift)
 
         assert result is None
+
+
+class TestInterventionCountOnSession:
+    """Tests that intervention count is tracked on SessionContext."""
+
+    def test_intervention_increments_session_count(self, engine, session, nominal_drift):
+        """Each intervention should increment session.intervention_count."""
+        assert session.intervention_count == 0
+
+        violations = [
+            ConstraintEvaluation(
+                constraint_id="test",
+                violated=True,
+                confidence=0.9,
+                evidence="Issue",
+                severity="warning",
+            )
+        ]
+
+        result = engine.decide(session, violations, nominal_drift)
+        assert result is not None
+        assert session.intervention_count == 1
+
+        # Advance past cooldown and intervene again
+        session.turn_count = 10
+        result = engine.decide(session, violations, nominal_drift)
+        assert result is not None
+        assert session.intervention_count == 2
+
+    def test_separate_sessions_have_independent_counts(self, engine, nominal_drift):
+        """Intervention counts should be per-session, not shared."""
+        session_a = SessionContext(
+            session_id="a", workflow_name="test", current_state="greeting", turn_count=5,
+        )
+        session_b = SessionContext(
+            session_id="b", workflow_name="test", current_state="greeting", turn_count=5,
+        )
+
+        violations = [
+            ConstraintEvaluation(
+                constraint_id="test",
+                violated=True,
+                confidence=0.9,
+                evidence="Issue",
+                severity="warning",
+            )
+        ]
+
+        engine.decide(session_a, violations, nominal_drift)
+        assert session_a.intervention_count == 1
+        assert session_b.intervention_count == 0
 
 
 class TestEscalation:
