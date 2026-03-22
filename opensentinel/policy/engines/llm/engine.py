@@ -297,11 +297,11 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                     intervention_message, template_context
                 )
 
-            # Critical violations override to BLOCK
-            if any(v["severity"] == "critical" for v in violations):
-                decision = Decision.BLOCK
-                critical = next(v for v in violations if v["severity"] == "critical")
-                result_message = critical["message"]
+            severity_order = ["critical", "error", "warning", "info"]
+            max_severity = next(
+                (s for s in severity_order if any(v["severity"] == s for v in violations)),
+                None,
+            )
 
             return EngineResult(
                 decision=decision,
@@ -314,6 +314,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                     "drift_level": drift.level.value,
                     "transition_legal": classification.transition_legal,
                     "violations": violations,
+                    "max_severity": max_severity,
                 },
             )
 

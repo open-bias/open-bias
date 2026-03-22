@@ -13,7 +13,6 @@ def sample_workflow():
     """Sample workflow definition for testing."""
     return {
         "name": "test-workflow",
-        "version": "1.0",
         "states": [
             {
                 "name": "greeting",
@@ -50,10 +49,8 @@ def sample_workflow():
                 "type": "precedence",
                 "trigger": "identify_issue",
                 "target": "greeting",
-                "severity": "error",
             }
         ],
-        "interventions": {},
     }
 
 
@@ -198,6 +195,116 @@ class TestSessionManagement:
         
         state = await engine.get_session_state("nonexistent")
         assert state is None
+
+
+class TestCriticalViolationDecision:
+    """Tests that critical violations no longer produce BLOCK directly."""
+
+    async def test_critical_violation_returns_intervene_not_block(self, engine, sample_workflow):
+        """Critical constraint violation should produce INTERVENE, not BLOCK."""
+        await engine.initialize({"workflow": sample_workflow})
+
+        # Mock the LLM client
+        engine._llm_client.complete_json = AsyncMock(
+            return_value=[{"state_id": "greeting", "confidence": 0.9, "reasoning": "ok"}]
+        )
+
+        # Inject a critical violation via the constraint evaluator
+        critical_cv = MagicMock()
+        critical_cv.violated = True
+        critical_cv.constraint_id = "critical_rule"
+        critical_cv.severity = "critical"
+        critical_cv.evidence = "critical violation occurred"
+        critical_cv.confidence = 1.0
+        engine._constraint_evaluator.evaluate = AsyncMock(return_value=[critical_cv])
+
+        # Inject an intervention engine that triggers on the violation
+        mock_intervention = MagicMock()
+        mock_intervention.decide = MagicMock(return_value="Policy violation detected.")
+        engine._intervention_engine = mock_intervention
+
+        result = await engine.evaluate_response(
+            "session_crit",
+            {"choices": [{"message": {"content": "Hello!"}}]},
+            {"messages": []},
+        )
+
+        assert result.decision == Decision.INTERVENE
+        assert result.decision != Decision.BLOCK
+
+    async def test_max_severity_metadata_critical(self, engine, sample_workflow):
+        """max_severity metadata should reflect the highest severity violation."""
+        await engine.initialize({"workflow": sample_workflow})
+
+        engine._llm_client.complete_json = AsyncMock(
+            return_value=[{"state_id": "greeting", "confidence": 0.9, "reasoning": "ok"}]
+        )
+
+        critical_cv = MagicMock()
+        critical_cv.violated = True
+        critical_cv.constraint_id = "critical_rule"
+        critical_cv.severity = "critical"
+        critical_cv.evidence = "critical violation occurred"
+        critical_cv.confidence = 1.0
+
+        warning_cv = MagicMock()
+        warning_cv.violated = True
+        warning_cv.constraint_id = "warn_rule"
+        warning_cv.severity = "warning"
+        warning_cv.evidence = "minor issue"
+        warning_cv.confidence = 0.8
+
+        engine._constraint_evaluator.evaluate = AsyncMock(return_value=[warning_cv, critical_cv])
+
+        result = await engine.evaluate_response(
+            "session_meta",
+            {"choices": [{"message": {"content": "Hello!"}}]},
+            {"messages": []},
+        )
+
+        assert result.metadata["max_severity"] == "critical"
+
+    async def test_max_severity_metadata_none_when_no_violations(self, engine, sample_workflow):
+        """max_severity should be None when there are no violations."""
+        await engine.initialize({"workflow": sample_workflow})
+
+        engine._llm_client.complete_json = AsyncMock(
+            return_value=[{"state_id": "greeting", "confidence": 0.9, "reasoning": "ok"}]
+        )
+        engine._constraint_evaluator.evaluate = AsyncMock(return_value=[])
+
+        result = await engine.evaluate_response(
+            "session_no_viol",
+            {"choices": [{"message": {"content": "Hello!"}}]},
+            {"messages": []},
+        )
+
+        assert result.metadata["max_severity"] is None
+
+    async def test_max_severity_metadata_error(self, engine, sample_workflow):
+        """max_severity should be 'error' when highest violation is error severity."""
+        await engine.initialize({"workflow": sample_workflow})
+
+        engine._llm_client.complete_json = AsyncMock(
+            return_value=[{"state_id": "greeting", "confidence": 0.9, "reasoning": "ok"}]
+        )
+
+        error_cv = MagicMock()
+        error_cv.violated = True
+        error_cv.constraint_id = "error_rule"
+        error_cv.severity = "error"
+        error_cv.evidence = "error violation"
+        error_cv.confidence = 0.9
+
+        engine._constraint_evaluator.evaluate = AsyncMock(return_value=[error_cv])
+
+        result = await engine.evaluate_response(
+            "session_err",
+            {"choices": [{"message": {"content": "Hello!"}}]},
+            {"messages": []},
+        )
+
+        assert result.metadata["max_severity"] == "error"
 
 
 class TestShutdown:
