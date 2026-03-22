@@ -604,7 +604,7 @@ class JudgePolicyEngine(PolicyEngine):
         metadata: dict[str, Any] = {
             "judge": {
                 "verdicts": [v.to_dict() for v in verdicts],
-                "session_turn": session.turn_count,
+                "session_turn": session.turn_count + 1,
             },
             "violations": [
                 {

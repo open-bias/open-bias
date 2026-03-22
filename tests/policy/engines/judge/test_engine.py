@@ -173,6 +173,24 @@ class TestEvaluateResponse:
         assert "judge" in result.metadata
         assert "verdicts" in result.metadata["judge"]
 
+    async def test_session_turn_starts_at_one(self, engine, judge_config, sample_request, sample_response):
+        """session_turn in metadata should be 1 on the first evaluation, not 0."""
+        await engine.initialize(judge_config)
+        engine._client.call_judge = AsyncMock(return_value=_passing_judge_response())
+
+        result = await engine.evaluate_response("s1", sample_response, sample_request)
+        assert result.metadata["judge"]["session_turn"] == 1
+
+    async def test_session_turn_increments(self, engine, judge_config, sample_request, sample_response):
+        """session_turn should increment with each evaluation."""
+        await engine.initialize(judge_config)
+        engine._client.call_judge = AsyncMock(return_value=_passing_judge_response())
+
+        result1 = await engine.evaluate_response("s1", sample_response, sample_request)
+        result2 = await engine.evaluate_response("s1", sample_response, sample_request)
+        assert result1.metadata["judge"]["session_turn"] == 1
+        assert result2.metadata["judge"]["session_turn"] == 2
+
     async def test_llm_error_failopen(self, engine, judge_config, sample_request, sample_response):
         """Engine should fail-open if judge LLM call raises."""
         await engine.initialize(judge_config)
