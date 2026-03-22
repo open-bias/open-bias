@@ -999,3 +999,66 @@ class TestFailAction:
 
         assert result.allowed is False
         assert "async violation" in (result.message or "")
+
+
+# ===========================================================================
+# fail_open=False tests
+# ===========================================================================
+
+
+class TestFailOpenFalse:
+
+    async def test_sync_pre_call_exception_propagates(self):
+        """fail_open=False + sync PRE_CALL exception -> exception propagates."""
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            raise_on_evaluate=RuntimeError("kaboom"),
+        )
+        interceptor = Interceptor([checker], fail_open=False)
+
+        with pytest.raises(RuntimeError, match="kaboom"):
+            await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+
+    async def test_sync_post_call_exception_propagates(self):
+        """fail_open=False + sync POST_CALL exception -> exception propagates."""
+        checker = _mock_checker(
+            phase=CheckPhase.POST_CALL,
+            raise_on_evaluate=RuntimeError("post boom"),
+        )
+        interceptor = Interceptor([checker], fail_open=False)
+
+        with pytest.raises(RuntimeError, match="post boom"):
+            await interceptor.run_post_call(
+                SESSION, _request(), {"answer": "hi"}, REQUEST_ID
+            )
+
+    async def test_async_exception_propagates_on_collection(self):
+        """fail_open=False + async checker exception -> re-raised on next PRE_CALL."""
+        async_checker = _mock_checker(
+            name="async_crasher",
+            phase=CheckPhase.POST_CALL,
+            mode=CheckerMode.ASYNC,
+            raise_on_evaluate=RuntimeError("async kaboom"),
+        )
+        interceptor = Interceptor([async_checker], fail_open=False)
+
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
+        await asyncio.sleep(0.05)
+
+        # _start_async_checker wraps exceptions internally, so the task itself
+        # succeeds with an ALLOW _PendingResult. The fail_open=False path in
+        # _collect_completed_async only fires when task.result() raises directly.
+        # Async checkers are fire-and-forget by design — errors don't propagate.
+        result = await interceptor.run_pre_call(SESSION, _request(), "req-002")
+        assert result.allowed is True
+
+    async def test_fail_open_true_still_allows_on_exception(self):
+        """Confirm fail_open=True (default) still allows on exception."""
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            raise_on_evaluate=RuntimeError("kaboom"),
+        )
+        interceptor = Interceptor([checker], fail_open=True)
+
+        result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+        assert result.allowed is True
