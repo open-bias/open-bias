@@ -162,6 +162,31 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         context: dict[str, Any] | None = None,
     ) -> EngineResult:
         """Evaluate response — classify state, check constraints, transition."""
+        try:
+            return await self._evaluate_response_inner(
+                session_id, response_data, request_data, context
+            )
+        except Exception as e:
+            logger.exception(
+                f"FSM engine error for session {session_id}: {e}"
+            )
+            return EngineResult(
+                decision=Decision.ALLOW,
+                metadata={
+                    "error": str(e),
+                    "engine": self.name,
+                    "session_id": session_id,
+                },
+            )
+
+    async def _evaluate_response_inner(
+        self,
+        session_id: str,
+        response_data: Any,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
+    ) -> EngineResult:
+        """Inner evaluate_response logic, separated for fail-open wrapping."""
         session = await self._state_machine.get_or_create_session(session_id)
         previous_state = session.current_state
 
@@ -191,12 +216,13 @@ class FSMPolicyEngine(StatefulPolicyEngine):
             transition_result = TransitionResult.CONSTRAINT_VIOLATED
             error = None
         else:
-            # Attempt state transition
+            # Attempt state transition with optimistic concurrency guard
             transition_result, error = await self._state_machine.transition(
                 session_id,
                 classification.state_name,
                 confidence=classification.confidence,
                 method=classification.method,
+                expected_from_state=previous_state,
             )
 
         decision = Decision.ALLOW

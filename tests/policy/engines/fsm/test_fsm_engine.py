@@ -283,3 +283,69 @@ async def test_constraints_evaluated_before_transition(engine, mocks):
     # Constraints evaluated first, then transition
     mocks["constraints"].return_value.evaluate_all.assert_called_once()
     mocks["sm"].return_value.transition.assert_called_once()
+
+
+async def test_evaluate_response_fail_open_on_exception(engine, mocks):
+    """Exceptions in evaluate_response return ALLOW (fail-open)."""
+    mock_workflow = MagicMock(name="test_workflow", states=[], constraints=[])
+    mocks["parser"]().parse_dict.return_value = mock_workflow
+    await engine.initialize({"workflow": {}})
+
+    # Make get_or_create_session raise
+    mocks["sm"].return_value.get_or_create_session = AsyncMock(
+        side_effect=RuntimeError("store exploded")
+    )
+
+    result = await engine.evaluate_response("sid", "response", {})
+
+    assert result.decision == Decision.ALLOW
+    assert "store exploded" in result.metadata["error"]
+    assert result.metadata["session_id"] == "sid"
+
+
+async def test_evaluate_response_fail_open_on_classifier_error(engine, mocks):
+    """Classifier exception returns ALLOW (fail-open)."""
+    mock_workflow = MagicMock(name="test_workflow", states=[], constraints=[])
+    mocks["parser"]().parse_dict.return_value = mock_workflow
+    await engine.initialize({"workflow": {}})
+
+    mock_session = MagicMock()
+    mock_session.current_state = "start"
+    mocks["sm"].return_value.get_or_create_session = AsyncMock(return_value=mock_session)
+
+    # Classifier raises
+    mocks["classifier"].return_value.classify.side_effect = ValueError("bad input")
+
+    result = await engine.evaluate_response("sid", "response", {})
+
+    assert result.decision == Decision.ALLOW
+    assert "bad input" in result.metadata["error"]
+
+
+async def test_transition_called_with_expected_from_state(engine, mocks):
+    """evaluate_response passes expected_from_state to transition."""
+    mock_workflow = MagicMock(name="test_workflow", states=[], constraints=[])
+    mocks["parser"]().parse_dict.return_value = mock_workflow
+    await engine.initialize({"workflow": {}})
+
+    mock_session = MagicMock()
+    mock_session.current_state = "start"
+    mocks["sm"].return_value.get_or_create_session = AsyncMock(return_value=mock_session)
+
+    mocks["classifier"].return_value.classify.return_value = StateClassificationResult(
+        state_name="middle", confidence=0.9, method="test"
+    )
+    mocks["constraints"].return_value.evaluate_all.return_value = []
+    mocks["sm"].return_value.transition = AsyncMock(
+        return_value=(TransitionResult.SUCCESS, None)
+    )
+
+    await engine.evaluate_response("sid", "response", {})
+
+    mocks["sm"].return_value.transition.assert_called_once_with(
+        "sid",
+        "middle",
+        confidence=0.9,
+        method="test",
+        expected_from_state="start",
+    )

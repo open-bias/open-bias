@@ -100,7 +100,8 @@ class WorkflowStateMachine:
             ttl=session_ttl,
             max_sessions=max_sessions,
         )
-        self._lock = asyncio.Lock()
+        self._meta_lock = asyncio.Lock()  # protects SessionStore operations
+        self._session_locks: dict[str, asyncio.Lock] = {}  # per-session state locks
 
         # Build lookup tables for fast access
         self._states: dict[str, State] = {s.name: s for s in workflow.states}
@@ -129,6 +130,12 @@ class WorkflowStateMachine:
 
         return result
 
+    def _get_session_lock(self, session_id: str) -> asyncio.Lock:
+        """Get or create a per-session lock for state transitions."""
+        if session_id not in self._session_locks:
+            self._session_locks[session_id] = asyncio.Lock()
+        return self._session_locks[session_id]
+
     async def get_or_create_session(self, session_id: str) -> SessionState:
         """
         Get existing session or create new one.
@@ -139,7 +146,7 @@ class WorkflowStateMachine:
         Returns:
             SessionState for the session
         """
-        async with self._lock:
+        async with self._meta_lock:
             existing = self._sessions.get(session_id)
             if existing is not None:
                 self._sessions.touch(session_id)
@@ -160,6 +167,7 @@ class WorkflowStateMachine:
                 ],
             )
             self._sessions.put(session_id, session)
+            self._get_session_lock(session_id)  # pre-create per-session lock
             logger.debug(
                 f"Created session {session_id} in state '{self._initial_state}'"
             )
@@ -179,6 +187,7 @@ class WorkflowStateMachine:
         target_state: str,
         confidence: float = 1.0,
         method: str = "explicit",
+        expected_from_state: str | None = None,
     ) -> tuple[TransitionResult, str | None]:
         """
         Attempt to transition to target state.
@@ -188,6 +197,9 @@ class WorkflowStateMachine:
             target_state: State to transition to
             confidence: Classification confidence (0-1)
             method: Classification method used
+            expected_from_state: If set, validates that the session is still in this
+                state before transitioning. Guards against TOCTOU races when
+                classification runs without holding the lock.
 
         Returns:
             Tuple of (TransitionResult, error_message)
@@ -201,9 +213,18 @@ class WorkflowStateMachine:
                 f"Unknown state: {target_state}",
             )
 
-        # Validate and mutate atomically under lock
-        async with self._lock:
+        # Validate and mutate atomically under per-session lock
+        session_lock = self._get_session_lock(session_id)
+        async with session_lock:
             current = session.current_state
+
+            # Optimistic concurrency: verify state hasn't changed since classification
+            if expected_from_state is not None and current != expected_from_state:
+                return (
+                    TransitionResult.INVALID_TRANSITION,
+                    f"Stale state: expected '{expected_from_state}' "
+                    f"but session is now in '{current}'",
+                )
 
             # Same state - no transition needed
             if current == target_state:
@@ -289,8 +310,9 @@ class WorkflowStateMachine:
 
     async def reset_session(self, session_id: str) -> None:
         """Reset a session to initial state."""
-        async with self._lock:
+        async with self._meta_lock:
             self._sessions.remove(session_id)
+            self._session_locks.pop(session_id, None)
         # Next access will create fresh session
 
     async def get_session_count(self) -> int:

@@ -1,12 +1,14 @@
 """Tests for workflow state machine."""
 
-import pytest
+import asyncio
 from datetime import datetime, timezone
 
+import pytest
+
 from opensentinel.policy.engines.fsm.workflow.state_machine import (
-    WorkflowStateMachine,
-    TransitionResult,
     SessionState,
+    TransitionResult,
+    WorkflowStateMachine,
 )
 
 
@@ -171,3 +173,101 @@ class TestSessionState:
 
         sequence = session.get_state_sequence()
         assert sequence == ["start", "middle", "end"]
+
+
+class TestPerSessionLocks:
+    """Per-session locks allow concurrent transitions on different sessions."""
+
+    @pytest.fixture
+    def machine(self, simple_workflow):
+        return WorkflowStateMachine(simple_workflow)
+
+    async def test_different_sessions_not_serialized(self, machine):
+        """Transitions on different sessions can proceed concurrently."""
+        await machine.get_or_create_session("s1")
+        await machine.get_or_create_session("s2")
+
+        # Both transitions should succeed without blocking each other
+        results = await asyncio.gather(
+            machine.transition("s1", "middle"),
+            machine.transition("s2", "middle"),
+        )
+
+        assert results[0] == (TransitionResult.SUCCESS, None)
+        assert results[1] == (TransitionResult.SUCCESS, None)
+
+    async def test_session_lock_created_on_session_creation(self, machine):
+        """Per-session lock is created when session is created."""
+        await machine.get_or_create_session("s1")
+        assert "s1" in machine._session_locks
+
+    async def test_session_lock_cleaned_on_reset(self, machine):
+        """Per-session lock is removed when session is reset."""
+        await machine.get_or_create_session("s1")
+        assert "s1" in machine._session_locks
+
+        await machine.reset_session("s1")
+        assert "s1" not in machine._session_locks
+
+    async def test_meta_lock_protects_session_store(self, machine):
+        """Concurrent get_or_create_session calls don't create duplicates."""
+        results = await asyncio.gather(
+            machine.get_or_create_session("s1"),
+            machine.get_or_create_session("s1"),
+        )
+        # Both should return the same session object
+        assert results[0] is results[1]
+
+
+class TestExpectedFromState:
+    """Optimistic concurrency: expected_from_state guards against TOCTOU races."""
+
+    @pytest.fixture
+    def machine(self, simple_workflow):
+        return WorkflowStateMachine(simple_workflow)
+
+    async def test_expected_from_state_matches(self, machine):
+        """Transition succeeds when expected_from_state matches current state."""
+        await machine.get_or_create_session("s1")
+
+        result, error = await machine.transition(
+            "s1", "middle", expected_from_state="start"
+        )
+
+        assert result == TransitionResult.SUCCESS
+        assert error is None
+
+    async def test_expected_from_state_mismatch(self, machine):
+        """Transition rejected when expected_from_state differs from current."""
+        await machine.get_or_create_session("s1")
+        await machine.transition("s1", "middle")
+
+        # Caller thinks we're still in "start", but we moved to "middle"
+        result, error = await machine.transition(
+            "s1", "end", expected_from_state="start"
+        )
+
+        assert result == TransitionResult.INVALID_TRANSITION
+        assert "Stale state" in error
+        assert "'start'" in error
+        assert "'middle'" in error
+
+    async def test_expected_from_state_none_skips_check(self, machine):
+        """When expected_from_state is None, no staleness check is performed."""
+        await machine.get_or_create_session("s1")
+
+        # Should work without expected_from_state (backward compat)
+        result, error = await machine.transition("s1", "middle")
+        assert result == TransitionResult.SUCCESS
+
+    async def test_stale_state_preserves_session(self, machine):
+        """Stale state rejection doesn't alter session state."""
+        await machine.get_or_create_session("s1")
+        await machine.transition("s1", "middle")
+
+        # Stale transition attempt
+        await machine.transition("s1", "end", expected_from_state="start")
+
+        session = await machine.get_session("s1")
+        assert session.current_state == "middle"
+        assert session.get_state_sequence() == ["start", "middle"]
