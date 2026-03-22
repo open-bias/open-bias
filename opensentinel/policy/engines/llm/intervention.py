@@ -86,9 +86,16 @@ class InterventionHandler:
                 )
                 return None
 
-        # Self-correction check: if drift is decreasing from last intervention, skip
+        # Check whether any violation or drift warrants intervention
+        has_violation = any(v.violated for v in violations)
+        has_drift = drift.level is not DriftLevel.NOMINAL
+
+        # Self-correction check: if drift is decreasing from last intervention, skip.
+        # Only applies when there are no active violations and no critical violation.
         if (
-            session.last_intervention_turn >= 0
+            not has_violation
+            and not has_critical
+            and session.last_intervention_turn >= 0
             and drift.composite < session.drift_at_last_intervention - self.self_correction_margin
         ):
             logger.info(
@@ -96,10 +103,6 @@ class InterventionHandler:
                 f"{drift.composite:.3f}"
             )
             return None
-
-        # Check whether any violation or drift warrants intervention
-        has_violation = any(v.violated for v in violations)
-        has_drift = drift.level is not DriftLevel.NOMINAL
 
         if not has_violation and not has_drift:
             return None

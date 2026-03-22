@@ -217,9 +217,10 @@ class TestSelfCorrection:
     """Tests for self-correction detection."""
 
     def test_self_correction_skips_intervention(self, engine, session):
-        """Decreasing drift should skip intervention."""
+        """Decreasing drift should skip intervention when no violations."""
         session.last_intervention_turn = 0  # Previous intervention happened
         session.drift_score = 0.6  # Previous drift
+        session.drift_at_last_intervention = 0.6
         session.turn_count = 5  # Past cooldown
 
         # Current drift is lower (agent self-correcting)
@@ -231,6 +232,58 @@ class TestSelfCorrection:
 
         # Should return None (intervention skipped due to self-correction)
         assert result is None
+
+    def test_self_correction_does_not_suppress_critical(self, engine, session):
+        """Critical violations must not be suppressed by self-correction (Task 51)."""
+        session.last_intervention_turn = 0
+        session.drift_at_last_intervention = 0.6
+        session.turn_count = 5  # Past cooldown
+
+        violations = [
+            ConstraintEvaluation(
+                constraint_id="test",
+                violated=True,
+                confidence=0.95,
+                evidence="Critical security breach",
+                severity="critical",
+            )
+        ]
+
+        # Drift is decreasing — self-correction would normally fire
+        current_drift = DriftScores(
+            temporal=0.1, semantic=0.1, composite=0.1, level=DriftLevel.NOMINAL
+        )
+
+        result = engine.decide(session, violations, current_drift)
+
+        # Critical violation must NOT be suppressed
+        assert result is not None
+
+    def test_self_correction_does_not_suppress_active_violation(self, engine, session):
+        """Active constraint violations must not be suppressed by self-correction (Task 79)."""
+        session.last_intervention_turn = 0
+        session.drift_at_last_intervention = 0.6
+        session.turn_count = 5  # Past cooldown
+
+        violations = [
+            ConstraintEvaluation(
+                constraint_id="no_rude_behavior",
+                violated=True,
+                confidence=0.9,
+                evidence="Agent used rude language",
+                severity="warning",
+            )
+        ]
+
+        # Drift is decreasing — self-correction would normally fire
+        current_drift = DriftScores(
+            temporal=0.1, semantic=0.1, composite=0.1, level=DriftLevel.NOMINAL
+        )
+
+        result = engine.decide(session, violations, current_drift)
+
+        # Active violation must NOT be suppressed by self-correction
+        assert result is not None
 
 
 class TestEscalation:
