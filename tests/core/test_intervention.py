@@ -1,9 +1,13 @@
 """Tests for intervention system."""
 
+import pytest
+
 from opensentinel.core.intervention.strategies import (
+    HardBlockStrategy,
     ResponseModificationStrategy,
     StrategyType,
     UserMessageInjectStrategy,
+    WorkflowViolationError,
     format_message,
 )
 
@@ -18,6 +22,7 @@ class TestInterventionStrategies:
             "system_prompt_append",
             "user_message_inject",
             "response_modification",
+            "hard_block",
         }
 
     def test_format_message_with_missing_key(self):
@@ -159,3 +164,21 @@ class TestResponseModificationStrategy:
         assert "warning" not in result.choices[0].message.content.lower()
 
 
+class TestHardBlockStrategy:
+    """Tests for HardBlockStrategy."""
+
+    def test_apply_raises_workflow_violation_error(self):
+        """HardBlockStrategy.apply raises WorkflowViolationError."""
+        with pytest.raises(WorkflowViolationError, match="Policy violation detected"):
+            HardBlockStrategy.apply("Policy violation detected")
+
+    def test_apply_preserves_message(self):
+        """The exception message matches the input."""
+        msg = "Unauthorized action: file deletion"
+        with pytest.raises(WorkflowViolationError) as exc_info:
+            HardBlockStrategy.apply(msg)
+        assert str(exc_info.value) == msg
+
+    def test_hard_block_strategy_type_exists(self):
+        """StrategyType.HARD_BLOCK has the correct value."""
+        assert StrategyType.HARD_BLOCK.value == "hard_block"

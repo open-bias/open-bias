@@ -12,15 +12,17 @@ are detected:
 """
 
 from opensentinel.core.intervention.strategies import (
+    HardBlockStrategy,
+    ResponseModificationStrategy,
     StrategyType,
-    format_message,
     SystemPromptAppendStrategy,
     UserMessageInjectStrategy,
-    ResponseModificationStrategy,
     WorkflowViolationError,
+    format_message,
 )
 
 __all__ = [
+    "HardBlockStrategy",
     "StrategyType",
     "format_message",
     "SystemPromptAppendStrategy",

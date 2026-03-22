@@ -160,7 +160,7 @@ class PolicyConfig(BaseModel):
 
     # Default strategy when not specified in workflow
     default_strategy: Literal[
-        "system_prompt_append", "user_message_inject"
+        "system_prompt_append", "user_message_inject", "hard_block"
     ] = "user_message_inject"
 
     # What happens when a policy violation is detected.
