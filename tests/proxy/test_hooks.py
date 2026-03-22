@@ -763,7 +763,6 @@ def test_judge_engine_timeout_empty_client():
 
 async def test_post_call_traces_once_when_both_hooks_fire(callback, mock_api_key):
     """log_llm_call is called exactly once even if both hooks process the same data dict."""
-    from opensentinel.proxy.hooks import SentinelCallback
     from datetime import datetime, timezone
 
     mock_tracer = MagicMock()
