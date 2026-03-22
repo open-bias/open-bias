@@ -75,26 +75,84 @@ class TestErrorHandling:
     """Tests for error handling."""
 
     async def test_empty_response_error(self, client):
-        """Test error on empty response."""
+        """Test error after all retries on empty response."""
+        client = LLMClient(model="gpt-4o-mini", max_retries=1)
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = ""
         mock_response.usage = MagicMock(total_tokens=0)
-        
+
         with patch("litellm.acompletion", AsyncMock(return_value=mock_response)):
-            with pytest.raises(LLMClientError, match="Empty response"):
+            with pytest.raises(LLMClientError, match="failed after 2 attempts"):
                 await client.complete_json("System", "User")
 
     async def test_invalid_json_error(self, client):
-        """Test error on invalid JSON."""
+        """Test error after all retries on invalid JSON."""
+        client = LLMClient(model="gpt-4o-mini", max_retries=1)
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = "not valid json"
         mock_response.usage = MagicMock(total_tokens=50)
-        
+
         with patch("litellm.acompletion", AsyncMock(return_value=mock_response)):
-            with pytest.raises(LLMClientError, match="Invalid JSON"):
+            with pytest.raises(LLMClientError, match="failed after 2 attempts"):
                 await client.complete_json("System", "User")
+
+    async def test_retry_on_empty_response(self, client):
+        """Test that empty response triggers retry and succeeds on next attempt."""
+        client = LLMClient(model="gpt-4o-mini", max_retries=2)
+
+        empty_response = MagicMock()
+        empty_response.choices = [MagicMock()]
+        empty_response.choices[0].message.content = ""
+        empty_response.usage = MagicMock(total_tokens=0)
+
+        good_response = MagicMock()
+        good_response.choices = [MagicMock()]
+        good_response.choices[0].message.content = '{"recovered": true}'
+        good_response.usage = MagicMock(total_tokens=80)
+
+        responses = iter([empty_response, good_response])
+
+        async def side_effect(*args, **kwargs):
+            return next(responses)
+
+        with patch("litellm.acompletion", AsyncMock(side_effect=side_effect)):
+            result = await client.complete_json("System", "User")
+
+        assert result == {"recovered": True}
+
+    async def test_retry_on_invalid_json(self, client):
+        """Test that invalid JSON triggers retry and succeeds on next attempt."""
+        client = LLMClient(model="gpt-4o-mini", max_retries=2)
+
+        bad_response = MagicMock()
+        bad_response.choices = [MagicMock()]
+        bad_response.choices[0].message.content = "not valid json"
+        bad_response.usage = MagicMock(total_tokens=50)
+
+        good_response = MagicMock()
+        good_response.choices = [MagicMock()]
+        good_response.choices[0].message.content = '{"recovered": true}'
+        good_response.usage = MagicMock(total_tokens=80)
+
+        responses = iter([bad_response, good_response])
+
+        async def side_effect(*args, **kwargs):
+            return next(responses)
+
+        with patch("litellm.acompletion", AsyncMock(side_effect=side_effect)):
+            result = await client.complete_json("System", "User")
+
+        assert result == {"recovered": True}
+
+    async def test_no_model_configured_skips_retry(self):
+        """Test that missing model raises immediately without entering retry loop."""
+        client = LLMClient(model=None, max_retries=2)
+        with patch("litellm.acompletion", AsyncMock()) as mock_acompletion:
+            with pytest.raises(LLMClientError, match="No LLM model configured"):
+                await client.complete_json("System", "User")
+        mock_acompletion.assert_not_called()
 
     async def test_retry_on_failure(self, client):
         """Test retries on transient failures."""

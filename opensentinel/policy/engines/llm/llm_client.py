@@ -124,9 +124,7 @@ class LLMClient:
                 
                 # Parse JSON
                 return self._parse_json(content)
-                
-            except LLMClientError:
-                raise
+
             except Exception as e:
                 last_error = e
                 logger.warning(
