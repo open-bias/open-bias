@@ -213,8 +213,10 @@ class WorkflowStateMachine:
                 f"Unknown state: {target_state}",
             )
 
-        # Validate and mutate atomically under per-session lock
-        session_lock = self._get_session_lock(session_id)
+        # Retrieve per-session lock under _meta_lock to prevent races
+        # with reset_session which clears lock entries.
+        async with self._meta_lock:
+            session_lock = self._get_session_lock(session_id)
         async with session_lock:
             current = session.current_state
 
