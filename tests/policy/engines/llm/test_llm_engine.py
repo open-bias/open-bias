@@ -350,3 +350,21 @@ class TestShutdown:
 
         await engine.shutdown()
         assert len(engine._sessions) == 0
+
+    async def test_shutdown_resets_initialized_flag(self, engine, sample_workflow):
+        """Shutdown should reset _initialized to False."""
+        await engine.initialize({"workflow": sample_workflow})
+        assert engine._initialized
+        await engine.shutdown()
+        assert not engine._initialized
+
+    async def test_evaluate_response_raises_after_shutdown(self, engine, sample_workflow):
+        """evaluate_response should raise RuntimeError after shutdown."""
+        await engine.initialize({"workflow": sample_workflow})
+        await engine.shutdown()
+        with pytest.raises(RuntimeError, match="not initialized"):
+            await engine.evaluate_response(
+                "s1",
+                {"choices": [{"message": {"content": "Hello!"}}]},
+                {"messages": []},
+            )

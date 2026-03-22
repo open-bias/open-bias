@@ -399,6 +399,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
     async def shutdown(self) -> None:
         """Cleanup resources."""
         self._sessions.clear()
+        self._initialized = False
         logger.info("LLMPolicyEngine shutdown complete")
 
     def _get_or_create_session(self, session_id: str) -> SessionContext:
