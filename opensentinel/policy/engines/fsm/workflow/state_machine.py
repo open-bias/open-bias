@@ -9,13 +9,14 @@ Tracks agent progress through workflow states with:
 
 import asyncio
 import logging
-from typing import Any
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Any
 
 from opensentinel.core.session import SessionStore
-from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition, State, Transition
+from opensentinel.policy.engines.fsm.workflow.schema import State, Transition, WorkflowDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +95,10 @@ class WorkflowStateMachine:
         workflow: WorkflowDefinition,
         session_ttl: int = 3600,
         max_sessions: int = 10000,
+        max_history: int = 1000,
     ):
         self.workflow = workflow
+        self._max_history = max_history
         self._sessions: SessionStore[SessionState] = SessionStore(
             ttl=session_ttl,
             max_sessions=max_sessions,
@@ -267,6 +270,10 @@ class WorkflowStateMachine:
             session.current_state = target_state
             session.last_updated = datetime.now(timezone.utc)
 
+            # Trim history to prevent unbounded growth
+            if len(session.history) > self._max_history:
+                session.history = session.history[-self._max_history:]
+
         logger.debug(
             f"Session {session_id}: '{current}' -> '{target_state}' "
             f"(confidence={confidence:.2f}, method={method})"
@@ -316,6 +323,12 @@ class WorkflowStateMachine:
             self._sessions.remove(session_id)
             self._session_locks.pop(session_id, None)
         # Next access will create fresh session
+
+    def set_eviction_callback(
+        self, callback: Callable[[str, SessionState], None]
+    ) -> None:
+        """Set a callback invoked when sessions are evicted from the store."""
+        self._sessions._on_evict = callback
 
     async def get_session_count(self) -> int:
         """Get number of active sessions."""

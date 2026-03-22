@@ -446,3 +446,96 @@ class TestNeverNoPoisoning:
 
         violations = evaluator.evaluate_all(session)
         assert violations == []
+
+
+class TestNullTargetTriggerSatisfied:
+    """Task 86: Null target/trigger returns SATISFIED, not PENDING.
+
+    Schema validation normally prevents None target/trigger, so we test
+    the internal evaluator methods directly as a defensive-coding check.
+    """
+
+    def test_eventually_none_target_satisfied(self):
+        """EVENTUALLY with no target is trivially satisfied (not PENDING)."""
+        evaluator = ConstraintEvaluator([])
+        result = evaluator._eval_eventually(None, ["start", "middle"])
+        assert result == EvaluationResult.SATISFIED
+
+    def test_never_none_target_satisfied(self):
+        """NEVER with no target is trivially satisfied."""
+        evaluator = ConstraintEvaluator([])
+        result = evaluator._eval_never(None, "anything")
+        assert result == EvaluationResult.SATISFIED
+
+    def test_response_none_trigger_satisfied(self):
+        """RESPONSE with no trigger is trivially satisfied."""
+        evaluator = ConstraintEvaluator([])
+        result = evaluator._eval_response(None, "ack", ["start"])
+        assert result == EvaluationResult.SATISFIED
+
+    def test_response_none_target_satisfied(self):
+        """RESPONSE with no target is trivially satisfied."""
+        evaluator = ConstraintEvaluator([])
+        result = evaluator._eval_response("req", None, ["start", "req"])
+        assert result == EvaluationResult.SATISFIED
+
+    def test_precedence_none_trigger_satisfied(self):
+        """PRECEDENCE with no trigger is trivially satisfied."""
+        evaluator = ConstraintEvaluator([])
+        result = evaluator._eval_precedence(None, "v", ["start"])
+        assert result == EvaluationResult.SATISFIED
+
+    def test_precedence_none_target_satisfied(self):
+        """PRECEDENCE with no target is trivially satisfied."""
+        evaluator = ConstraintEvaluator([])
+        result = evaluator._eval_precedence("a", None, ["start", "a"])
+        assert result == EvaluationResult.SATISFIED
+
+    def test_none_target_not_violated_at_boundary(self):
+        """EVENTUALLY with None target should not fire at session boundary.
+
+        Uses model_construct to bypass pydantic validation for this edge case.
+        """
+        constraint = Constraint.model_construct(
+            name="test", type=ConstraintType.EVENTUALLY, target=None, message=""
+        )
+        evaluator = ConstraintEvaluator([constraint])
+        session = make_session(["start", "end"])
+
+        # Previously this returned PENDING which boundary treated as violated
+        assert evaluator.evaluate_session_boundary(session) == []
+
+
+class TestEvaluateTransitionSignature:
+    """Task 59: evaluate_transition no longer accepts from_state."""
+
+    def test_evaluate_transition_without_from_state(self):
+        """evaluate_transition works with just session and to_state."""
+        constraints = [
+            Constraint(name="no_bad", type=ConstraintType.NEVER, target="bad")
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start"])
+
+        # Should work without from_state
+        violations = evaluator.evaluate_transition(session, "safe")
+        assert violations == []
+
+        violations = evaluator.evaluate_transition(session, "bad")
+        assert len(violations) == 1
+
+    def test_evaluate_transition_delegates_to_evaluate_all(self):
+        """evaluate_transition delegates to evaluate_all with proposed_state."""
+        constraints = [
+            Constraint(
+                name="test",
+                type=ConstraintType.PRECEDENCE,
+                trigger="action",
+                target="verify",
+            )
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start"])
+
+        violations = evaluator.evaluate_transition(session, "action")
+        assert len(violations) == 1

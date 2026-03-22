@@ -140,7 +140,6 @@ class ConstraintEvaluator:
     def evaluate_transition(
         self,
         session: SessionState,
-        from_state: str,
         to_state: str,
     ) -> list[ConstraintViolation]:
         """Evaluate constraints for a specific transition."""
@@ -177,7 +176,7 @@ class ConstraintEvaluator:
     ) -> EvaluationResult:
         """F(target): Must eventually reach target state."""
         if not target:
-            return EvaluationResult.PENDING
+            return EvaluationResult.SATISFIED
 
         if target in history:
             return EvaluationResult.SATISFIED
@@ -189,7 +188,7 @@ class ConstraintEvaluator:
     ) -> EvaluationResult:
         """G(!target): Target state must never occur."""
         if not target:
-            return EvaluationResult.PENDING
+            return EvaluationResult.SATISFIED
 
         if proposed_state == target:
             return EvaluationResult.VIOLATED
@@ -204,7 +203,7 @@ class ConstraintEvaluator:
     ) -> EvaluationResult:
         """G(trigger -> F(target)): If trigger occurs, target must eventually follow."""
         if not trigger or not target:
-            return EvaluationResult.PENDING
+            return EvaluationResult.SATISFIED
 
         trigger_indices = [i for i, s in enumerate(history) if s == trigger]
 
@@ -231,7 +230,7 @@ class ConstraintEvaluator:
     ) -> EvaluationResult:
         """Target must precede trigger."""
         if not trigger or not target:
-            return EvaluationResult.PENDING
+            return EvaluationResult.SATISFIED
 
         target_seen = False
         for state in history:

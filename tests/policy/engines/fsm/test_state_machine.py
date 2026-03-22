@@ -271,3 +271,89 @@ class TestExpectedFromState:
         session = await machine.get_session("s1")
         assert session.current_state == "middle"
         assert session.get_state_sequence() == ["start", "middle"]
+
+
+class TestMaxHistory:
+    """Task 13: History trimming prevents unbounded growth."""
+
+    async def test_history_trimmed_to_max(self, simple_workflow):
+        """History is trimmed when it exceeds max_history."""
+        machine = WorkflowStateMachine(simple_workflow, max_history=3)
+        await machine.get_or_create_session("s1")
+
+        # Transition through states multiple times (workflow allows start->middle->end)
+        # We'll reset and re-create to accumulate history entries
+        # Actually, each transition adds 1 entry; initial session has 1
+        # start(1) -> middle(2) -> reset -> start(1) -> middle(2) -> ...
+        # Instead, let's just verify the cap works with direct history manipulation
+        session = await machine.get_or_create_session("s1")
+        from opensentinel.policy.engines.fsm.workflow.state_machine import StateHistoryEntry
+        from datetime import datetime, timezone
+
+        # Manually stuff history to simulate many transitions
+        for i in range(10):
+            session.history.append(
+                StateHistoryEntry(
+                    state_name=f"state_{i}",
+                    entered_at=datetime.now(timezone.utc),
+                )
+            )
+        session.current_state = "start"
+
+        # Now transition — this should trigger trimming
+        await machine.transition("s1", "middle")
+
+        assert len(session.history) <= 3
+        # Most recent entry should be the transition target
+        assert session.history[-1].state_name == "middle"
+
+    async def test_default_max_history_is_1000(self, simple_workflow):
+        """Default max_history is 1000."""
+        machine = WorkflowStateMachine(simple_workflow)
+        assert machine._max_history == 1000
+
+    async def test_history_not_trimmed_when_under_limit(self, simple_workflow):
+        """History is not trimmed when below max_history."""
+        machine = WorkflowStateMachine(simple_workflow, max_history=100)
+        await machine.get_or_create_session("s1")
+        await machine.transition("s1", "middle")
+        await machine.transition("s1", "end")
+
+        session = await machine.get_session("s1")
+        assert len(session.history) == 3
+        assert session.get_state_sequence() == ["start", "middle", "end"]
+
+
+class TestEvictionCallback:
+    """Task 21: Evicted sessions invoke callback."""
+
+    async def test_set_eviction_callback(self, simple_workflow):
+        """set_eviction_callback wires the callback to the session store."""
+        machine = WorkflowStateMachine(simple_workflow, max_sessions=2)
+        evicted: list[tuple[str, SessionState]] = []
+
+        def on_evict(sid: str, session: SessionState) -> None:
+            evicted.append((sid, session))
+
+        machine.set_eviction_callback(on_evict)
+
+        # Create 3 sessions; the first should be evicted
+        await machine.get_or_create_session("s1")
+        await machine.get_or_create_session("s2")
+        await machine.get_or_create_session("s3")
+
+        assert len(evicted) == 1
+        assert evicted[0][0] == "s1"
+        assert evicted[0][1].session_id == "s1"
+
+    async def test_eviction_callback_not_called_on_explicit_remove(self, simple_workflow):
+        """reset_session uses remove(), which does not invoke on_evict."""
+        machine = WorkflowStateMachine(simple_workflow)
+        evicted: list[str] = []
+
+        machine.set_eviction_callback(lambda sid, _s: evicted.append(sid))
+
+        await machine.get_or_create_session("s1")
+        await machine.reset_session("s1")
+
+        assert evicted == []

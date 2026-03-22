@@ -14,10 +14,14 @@ if TYPE_CHECKING:
     from opensentinel.policy.compiler.protocol import PolicyCompiler
 
 from opensentinel.policy.engines.fsm.classifier import StateClassifier
-from opensentinel.policy.engines.fsm.workflow.constraints import ConstraintEvaluator
+from opensentinel.policy.engines.fsm.workflow.constraints import (
+    ConstraintEvaluator,
+    ConstraintViolation,
+)
 from opensentinel.policy.engines.fsm.workflow.parser import WorkflowParser
 from opensentinel.policy.engines.fsm.workflow.schema import ConstraintType, WorkflowDefinition
 from opensentinel.policy.engines.fsm.workflow.state_machine import (
+    SessionState,
     TransitionResult,
     WorkflowStateMachine,
 )
@@ -117,6 +121,8 @@ class FSMPolicyEngine(StatefulPolicyEngine):
             sm_kwargs["session_ttl"] = config["session_ttl"]
         if "max_sessions" in config:
             sm_kwargs["max_sessions"] = config["max_sessions"]
+        if "max_history" in config:
+            sm_kwargs["max_history"] = config["max_history"]
         self._state_machine = WorkflowStateMachine(self._workflow, **sm_kwargs)
 
         # Wire classifier config from engine config
@@ -126,6 +132,17 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         self._classifier = StateClassifier(self._workflow.states, config=classifier_config)
 
         self._constraint_evaluator = ConstraintEvaluator(self._workflow.constraints)
+
+        # Wire eviction callback so boundary constraints are evaluated on eviction
+        def _on_session_evict(session_id: str, session: SessionState) -> None:
+            violations = self._constraint_evaluator.evaluate_session_boundary(session)
+            if violations:
+                logger.warning(
+                    f"Session {session_id} evicted with {len(violations)} "
+                    "unsatisfied constraints"
+                )
+
+        self._state_machine.set_eviction_callback(_on_session_evict)
 
         self._initialized = True
 
@@ -332,12 +349,17 @@ class FSMPolicyEngine(StatefulPolicyEngine):
             "last_updated": session.last_updated.isoformat(),
         }
 
-    async def reset_session(self, session_id: str) -> None:
-        """Reset session state, evaluating boundary constraints first."""
+    async def reset_session(self, session_id: str) -> list[ConstraintViolation]:
+        """Reset session state, evaluating boundary constraints first.
+
+        Returns:
+            List of boundary constraint violations found before reset.
+        """
         if not self._initialized:
-            return
+            return []
 
         # Evaluate session-boundary constraints before reset
+        boundary_violations: list[ConstraintViolation] = []
         session = await self._state_machine.get_session(session_id)
         if session:
             boundary_violations = self._constraint_evaluator.evaluate_session_boundary(
@@ -351,6 +373,7 @@ class FSMPolicyEngine(StatefulPolicyEngine):
 
         await self._state_machine.reset_session(session_id)
         logger.debug(f"Session {session_id} reset")
+        return boundary_violations
 
     def get_compiler(
         self,
