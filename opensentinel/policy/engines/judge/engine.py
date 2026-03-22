@@ -575,8 +575,21 @@ class JudgePolicyEngine(PolicyEngine):
         worst_verdict = max(verdicts, key=lambda v: action_priority.get(v.action, 0))
         decision = _VERDICT_MAP[worst_verdict.action]
 
-        # Check for escalation conditions
-        escalation_info = self._check_escalation(worst_verdict, session)
+        # Check escalation across all non-PASS verdicts, not just the worst.
+        # A turn verdict with repeat criterion violations must trigger escalation
+        # even when a conversation verdict is the worst overall.
+        escalation_info: dict[str, Any] = {
+            "should_escalate": False,
+            "reason": "",
+            "escalation_prefix": "",
+        }
+        for v in verdicts:
+            if v.action == VerdictAction.PASS:
+                continue
+            info = self._check_escalation(v, session)
+            if info["should_escalate"]:
+                escalation_info = info
+                break
 
         if escalation_info["should_escalate"] and decision == Decision.INTERVENE:
             decision = Decision.BLOCK

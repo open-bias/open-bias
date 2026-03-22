@@ -812,6 +812,77 @@ class TestInterventionEscalation:
         assert result["should_escalate"] is True
         assert "intervention_count_exceeded" in result["reason"]
 
+    def test_escalation_detected_on_non_worst_verdict(self):
+        """Escalation from a non-worst verdict is detected.
+
+        Scenario: conversation verdict is BLOCK (worst), turn verdict is
+        INTERVENE with a repeat criterion violation. Escalation should still
+        be detected because _build_result checks ALL non-PASS verdicts.
+        """
+        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+
+        session = JudgeSessionContext(session_id="esc-nonworst")
+        # Record that "no_pii" was flagged in a prior intervention
+        session.last_intervention_criteria = {"no_pii"}
+        session.intervention_count = 1
+
+        engine = JudgePolicyEngine()
+
+        # Conversation verdict: BLOCK (worst) — no criterion_failures
+        conv_verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(criterion="tone", score=0, max_score=5, reasoning="Hostile"),
+            ],
+            composite_score=0.1,
+            action=VerdictAction.BLOCK,
+            summary="Severe tone violation",
+            judge_model="test",
+            scope=EvaluationScope.CONVERSATION,
+            metadata={},
+        )
+
+        # Turn verdict: INTERVENE with repeat criterion "no_pii"
+        turn_verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(criterion="no_pii", score=1, max_score=5, reasoning="PII leaked"),
+            ],
+            composite_score=0.3,
+            action=VerdictAction.INTERVENE,
+            summary="PII violation",
+            judge_model="test",
+            scope=EvaluationScope.TURN,
+            metadata={"criterion_failures": ["no_pii"]},
+        )
+
+        result = engine._build_result([conv_verdict, turn_verdict], session)
+
+        # Decision stays BLOCK (worst), but escalation metadata must be present
+        assert result.decision == Decision.BLOCK
+        assert result.metadata.get("escalated") is True
+        assert "repeat" in result.metadata.get("escalation_reason", "").lower()
+
+    def test_no_escalation_when_all_verdicts_pass(self):
+        """No escalation when all verdicts are PASS."""
+        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+
+        session = JudgeSessionContext(session_id="all-pass")
+        engine = JudgePolicyEngine()
+
+        pass_verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(criterion="safety", score=5, max_score=5, reasoning="Fine"),
+            ],
+            composite_score=0.9,
+            action=VerdictAction.PASS,
+            summary="All good",
+            judge_model="test",
+            metadata={},
+        )
+
+        result = engine._build_result([pass_verdict], session)
+        assert result.decision == Decision.ALLOW
+        assert result.metadata.get("escalated") is not True
+
 
 class TestJudgeSessionEviction:
     """Tests for judge engine session TTL and LRU eviction."""
