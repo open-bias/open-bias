@@ -559,6 +559,8 @@ class SentinelCallback(CustomLogger):
                 logger.warning(
                     f"Request blocked for session {session_id}: {message}"
                 )
+                # LiteLLM convention: returning an Exception instance (not raising)
+                # signals the proxy to reject the request with this error message.
                 return Exception(message)
 
             # Apply modifications if any
