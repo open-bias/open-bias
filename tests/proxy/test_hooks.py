@@ -833,3 +833,92 @@ async def test_log_success_impl_guard_returns_early_if_traced(callback):
     await callback._log_success_impl(kwargs, MagicMock(), now, now)
 
     mock_tracer.log_llm_call.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# UUID request ID tests
+# ---------------------------------------------------------------------------
+
+
+async def test_pre_call_generates_uuid_request_id(callback, mock_api_key, mock_cache):
+    """_pre_call_impl generates a UUID and stores it in data metadata."""
+    import uuid as uuid_mod
+    from opensentinel.core.interceptor.types import InterceptionResult
+
+    data: dict = {"messages": [{"role": "user", "content": "hello"}], "model": "gpt-4"}
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_pre_call = AsyncMock(
+        return_value=InterceptionResult(allowed=True)
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._interceptor_initialized = True
+
+    await callback.async_pre_call_hook(mock_api_key, mock_cache, data, "completion")
+
+    # Verify UUID was stored in metadata
+    request_id = data["metadata"]["_opensentinel_request_id"]
+    # Should be a valid UUID4 string
+    parsed = uuid_mod.UUID(request_id, version=4)
+    assert str(parsed) == request_id
+
+    # Verify it was passed to run_pre_call
+    call_kwargs = mock_interceptor.run_pre_call.call_args
+    assert call_kwargs.kwargs.get("user_request_id") == request_id
+
+
+async def test_post_call_reuses_uuid_from_pre_call(callback, mock_api_key):
+    """_post_call_success_impl reads the UUID stored by _pre_call_impl."""
+    import uuid as uuid_mod
+    from opensentinel.core.interceptor.types import InterceptionResult
+
+    stored_id = str(uuid_mod.uuid4())
+    data: dict = {
+        "messages": [{"role": "user", "content": "hello"}],
+        "model": "gpt-4",
+        "metadata": {"_opensentinel_request_id": stored_id},
+    }
+    response = MagicMock()
+    response.choices = []
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(allowed=True)
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._get_policy_engine = AsyncMock(return_value=None)
+    callback._interceptor_initialized = True
+
+    await callback.async_post_call_success_hook(data, mock_api_key, response)
+
+    call_kwargs = mock_interceptor.run_post_call.call_args
+    assert call_kwargs.kwargs.get("user_request_id") == stored_id
+
+
+async def test_post_call_generates_fallback_uuid_when_missing(callback, mock_api_key):
+    """_post_call_success_impl generates a new UUID if metadata has no stored ID."""
+    import uuid as uuid_mod
+    from opensentinel.core.interceptor.types import InterceptionResult
+
+    data: dict = {
+        "messages": [{"role": "user", "content": "hello"}],
+        "model": "gpt-4",
+    }
+    response = MagicMock()
+    response.choices = []
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(allowed=True)
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._get_policy_engine = AsyncMock(return_value=None)
+    callback._interceptor_initialized = True
+
+    await callback.async_post_call_success_hook(data, mock_api_key, response)
+
+    call_kwargs = mock_interceptor.run_post_call.call_args
+    request_id = call_kwargs.kwargs.get("user_request_id")
+    # Should be a valid UUID4 string
+    parsed = uuid_mod.UUID(request_id, version=4)
+    assert str(parsed) == request_id
