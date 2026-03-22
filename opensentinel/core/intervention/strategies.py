@@ -63,9 +63,13 @@ class SystemPromptAppendStrategy:
         guidance = f"\n\n[WORKFLOW GUIDANCE]: {value}"
 
         if system_idx is not None:
-            messages[system_idx]["content"] = (
-                messages[system_idx].get("content", "") + guidance
-            )
+            existing = messages[system_idx].get("content", "")
+            if isinstance(existing, list):
+                messages[system_idx]["content"] = existing + [
+                    {"type": "text", "text": guidance}
+                ]
+            else:
+                messages[system_idx]["content"] = (existing or "") + guidance
         else:
             messages.insert(0, {
                 "role": "system",
