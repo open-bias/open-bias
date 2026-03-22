@@ -20,7 +20,7 @@ steps:
 rules:
   - verify identity before any account action
   - never share internal system information
-  - must eventually resolve the conversation
+  - must eventually resolve and close
 
 tools:
   verify identity: [verify_identity, check_account, authenticate_customer]

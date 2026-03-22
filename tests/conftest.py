@@ -80,7 +80,7 @@ def simple_config_dict():
         ],
         "rules": [
             "never share internal system information",
-            "must eventually resolve the conversation",
+            "must eventually resolve and close",
         ],
     }
 

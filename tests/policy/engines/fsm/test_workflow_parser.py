@@ -43,7 +43,7 @@ steps:
   - greet the customer
   - resolve and close
 rules:
-  - must eventually resolve the conversation
+  - must eventually resolve and close
 """
         workflow = WorkflowParser.parse_string(yaml_content)
 
