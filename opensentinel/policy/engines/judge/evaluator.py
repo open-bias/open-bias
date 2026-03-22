@@ -373,12 +373,26 @@ class JudgeEvaluator:
         raw = await self._client.call_judge(model_name, system_prompt, user_prompt, session_id=session_id)
         latency_ms = (time.monotonic() - start) * 1000
 
-        self._validate_judge_response(raw, rubric.criteria)
-        scores = self._parse_pointwise_scores(raw, rubric.criteria)
+        # Add reference_alignment criterion so the parser accepts it; it should
+        # not affect pass/fail decisions so _resolve_verdict still uses rubric.criteria.
+        ref_criterion = RubricCriterion(
+            name="reference_alignment",
+            description="How well the response aligns with the reference answer",
+            scale=ScoreScale.LIKERT_5,
+            weight=1.0,
+        )
+        augmented_criteria = list(rubric.criteria) + [ref_criterion]
+
+        self._validate_judge_response(raw, augmented_criteria)
+        scores = self._parse_pointwise_scores(raw, augmented_criteria)
         model_id = self._client.get_model_id(model_name)
 
+        # Pass only rubric criteria scores to _resolve_verdict so reference_alignment
+        # does not influence composite score or pass/fail decisions.
+        rubric_criterion_names = {c.name for c in rubric.criteria}
+        rubric_scores = [s for s in scores if s.criterion in rubric_criterion_names]
         action, composite, failed_criteria = self._resolve_verdict(
-            scores, rubric, fail_action,
+            rubric_scores, rubric, fail_action,
         )
 
         return JudgeVerdict(

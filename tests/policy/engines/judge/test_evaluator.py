@@ -553,3 +553,93 @@ class TestBinaryEvaluationPath:
         # Synthetic fill has confidence=0.0, should not trigger failure
         assert verdict.action == VerdictAction.PASS
         assert verdict.composite_score == 1.0
+
+
+class TestEvaluateWithReference:
+    """Tests for _evaluate_with_reference — reference_alignment criterion handling."""
+
+    @pytest.fixture
+    def ref_rubric(self):
+        return Rubric(
+            name="ref_rubric",
+            description="Reference rubric",
+            criteria=[
+                RubricCriterion(
+                    name="accuracy",
+                    description="Factual accuracy",
+                    scale=ScoreScale.LIKERT_5,
+                    weight=1.0,
+                ),
+            ],
+            pass_threshold=0.6,
+        )
+
+    async def test_reference_alignment_score_is_parsed(
+        self, evaluator, mock_client, ref_rubric, conversation,
+    ):
+        """reference_alignment score from judge should be included in verdict scores."""
+        mock_client.call_judge.return_value = {
+            "scores": [
+                {"criterion": "accuracy", "score": 4, "reasoning": "Mostly correct", "evidence": [], "confidence": 0.9},
+                {"criterion": "reference_alignment", "score": 5, "reasoning": "Matches reference", "evidence": [], "confidence": 0.85},
+            ],
+            "summary": "Good alignment",
+        }
+
+        verdict = await evaluator._evaluate_with_reference(
+            model_name="primary",
+            rubric=ref_rubric,
+            response_content="Python is a high-level language.",
+            conversation=conversation,
+            reference="Python is a high-level, interpreted programming language.",
+        )
+
+        criterion_names = {s.criterion for s in verdict.scores}
+        assert "reference_alignment" in criterion_names
+        ref_score = next(s for s in verdict.scores if s.criterion == "reference_alignment")
+        assert ref_score.score == 5
+
+    async def test_reference_alignment_does_not_affect_verdict(
+        self, evaluator, mock_client, ref_rubric, conversation,
+    ):
+        """A low reference_alignment score should not affect pass/fail since it's not in rubric criteria."""
+        mock_client.call_judge.return_value = {
+            "scores": [
+                {"criterion": "accuracy", "score": 5, "reasoning": "Correct", "evidence": [], "confidence": 0.95},
+                {"criterion": "reference_alignment", "score": 1, "reasoning": "Poor alignment", "evidence": [], "confidence": 0.8},
+            ],
+            "summary": "Accurate but misaligned",
+        }
+
+        verdict = await evaluator._evaluate_with_reference(
+            model_name="primary",
+            rubric=ref_rubric,
+            response_content="Python is a language.",
+            conversation=conversation,
+            reference="Python is a high-level, interpreted programming language.",
+        )
+
+        # accuracy=5 -> normalized 1.0, above pass_threshold 0.6 -> PASS
+        assert verdict.action == VerdictAction.PASS
+
+    async def test_reference_alignment_absent_does_not_break_parsing(
+        self, evaluator, mock_client, ref_rubric, conversation,
+    ):
+        """If judge omits reference_alignment, parsing should still succeed."""
+        mock_client.call_judge.return_value = {
+            "scores": [
+                {"criterion": "accuracy", "score": 3, "reasoning": "OK", "evidence": [], "confidence": 0.8},
+            ],
+            "summary": "Average",
+        }
+
+        verdict = await evaluator._evaluate_with_reference(
+            model_name="primary",
+            rubric=ref_rubric,
+            response_content="Python is a language.",
+            conversation=conversation,
+            reference="Python is a high-level, interpreted programming language.",
+        )
+
+        # Should still produce a verdict without error
+        assert verdict is not None
