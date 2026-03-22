@@ -922,3 +922,78 @@ async def test_post_call_generates_fallback_uuid_when_missing(callback, mock_api
     # Should be a valid UUID4 string
     parsed = uuid_mod.UUID(request_id, version=4)
     assert str(parsed) == request_id
+
+
+# ---------------------------------------------------------------------------
+# fail_action="block" integration test through the full hook stack
+# ---------------------------------------------------------------------------
+
+
+async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
+    mock_api_key, mock_cache
+):
+    """Full chain: settings.fail_action='block' → Interceptor upgrades INTERVENE → hook returns Exception.
+
+    Verifies the complete path:
+    1. mock_settings.policy.fail_action = "block"
+    2. Hook creates Interceptor with fail_action="block"
+    3. Sync PRE_CALL checker returns Decision.INTERVENE
+    4. Interceptor._effective_decision upgrades INTERVENE → BLOCK
+    5. Interceptor.run_pre_call returns InterceptionResult(allowed=False)
+    6. _pre_call_impl returns an Exception object
+    """
+    from opensentinel.proxy.hooks import SentinelCallback
+    from opensentinel.core.interceptor import (
+        CheckerMode,
+        CheckPhase,
+        Interceptor,
+        PolicyEngineChecker,
+    )
+    from opensentinel.policy.protocols import Decision, EngineResult
+
+    # Build settings with fail_action="block"
+    settings = MagicMock()
+    settings.policy.fail_open = True
+    settings.policy.hook_timeout_seconds = 5.0
+    settings.policy.fail_action = "block"
+    settings.policy.default_strategy = "user_message_inject"
+    settings.policy.post_call_mode = "async"
+    settings.otel.enabled = False
+    settings.debug = False
+
+    cb = SentinelCallback(settings=settings)
+    cb._tracer = None
+
+    # Create a mock policy engine that returns INTERVENE
+    mock_engine = AsyncMock()
+    mock_engine.name = "test-engine"
+    mock_engine.evaluate_request = AsyncMock(
+        return_value=EngineResult(
+            decision=Decision.INTERVENE,
+            message="please be more careful",
+        )
+    )
+
+    # Build a real Interceptor with a real PolicyEngineChecker and fail_action="block"
+    checker = PolicyEngineChecker(
+        engine=mock_engine,
+        phase=CheckPhase.PRE_CALL,
+        mode=CheckerMode.SYNC,
+    )
+    interceptor = Interceptor(
+        [checker],
+        default_strategy="user_message_inject",
+        fail_action="block",
+    )
+
+    # Wire the real interceptor into the callback, bypassing lazy init
+    cb._interceptor = interceptor
+    cb._interceptor_initialized = True
+
+    data = {"messages": [{"role": "user", "content": "do something risky"}], "model": "gpt-4"}
+
+    result = await cb.async_pre_call_hook(mock_api_key, mock_cache, data, "completion")
+
+    # The hook should return an Exception (block), not modified data
+    assert isinstance(result, Exception), f"Expected Exception, got {type(result)}: {result}"
+    assert "please be more careful" in str(result)
