@@ -102,6 +102,8 @@ class JudgeEvaluator:
                 reference, metadata, session_id=session_id,
                 session_context=session_context,
                 fail_action=fail_action,
+                tool_calls=tool_calls,
+                tool_definitions=tool_definitions,
             )
 
         criteria_block = format_criteria_block(rubric.criteria)
@@ -344,11 +346,14 @@ class JudgeEvaluator:
         session_id: str | None = None,
         session_context: JudgeSessionContext | None = None,
         fail_action: VerdictAction = VerdictAction.INTERVENE,
+        tool_calls: list[dict[str, Any]] | None = None,
+        tool_definitions: dict[str, dict[str, Any]] | None = None,
     ) -> JudgeVerdict:
         """Evaluate a response against a reference answer."""
         criteria_block = format_criteria_block(rubric.criteria)
         conversation_block = format_conversation_block(conversation)
         metadata_block = format_metadata_block(metadata or {})
+        tool_calls_block = format_tool_calls_block(tool_calls or [], tool_definitions)
         session_block = format_session_context_block(session_context)
 
         system_prompt = (
@@ -366,6 +371,7 @@ class JudgeEvaluator:
                 conversation_block=conversation_block,
                 response_content=response_content,
                 reference_answer=reference,
+                tool_calls_block=tool_calls_block,
                 metadata_block=metadata_block,
             )
         )

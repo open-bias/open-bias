@@ -169,6 +169,7 @@ Conversation:
 Assistant response to evaluate:
 {response_content}
 
+{tool_calls_block}\
 Reference (ideal) answer:
 {reference_answer}
 

@@ -728,3 +728,61 @@ class TestEvaluateWithReference:
 
         # Should still produce a verdict without error
         assert verdict is not None
+
+    async def test_tool_calls_forwarded_to_reference_eval_prompt(
+        self, evaluator, mock_client, ref_rubric, conversation,
+    ):
+        """tool_calls and tool_definitions should appear in the reference eval user prompt."""
+        mock_client.call_judge.return_value = {
+            "scores": [
+                {"criterion": "accuracy", "score": 4, "reasoning": "Good", "evidence": [], "confidence": 0.9},
+                {"criterion": "reference_alignment", "score": 4, "reasoning": "Aligned", "evidence": [], "confidence": 0.85},
+            ],
+            "summary": "Good",
+        }
+
+        tool_calls = [{"function_name": "search", "arguments": {"q": "Python"}, "id": "call_1"}]
+        tool_definitions = {
+            "search": {"description": "Search the web", "parameters": {"q": {"type": "string"}}},
+        }
+
+        await evaluator._evaluate_with_reference(
+            model_name="primary",
+            rubric=ref_rubric,
+            response_content="Python is a language.",
+            conversation=conversation,
+            reference="Python is a high-level language.",
+            tool_calls=tool_calls,
+            tool_definitions=tool_definitions,
+        )
+
+        assert mock_client.call_judge.called
+        _, user_prompt = mock_client.call_judge.call_args[0][1], mock_client.call_judge.call_args[0][2]
+        assert "search" in user_prompt
+
+    async def test_tool_calls_forwarded_via_evaluate_turn(
+        self, evaluator, mock_client, ref_rubric, conversation,
+    ):
+        """evaluate_turn should forward tool_calls/tool_definitions to _evaluate_with_reference."""
+        mock_client.call_judge.return_value = {
+            "scores": [
+                {"criterion": "accuracy", "score": 4, "reasoning": "Good", "evidence": [], "confidence": 0.9},
+                {"criterion": "reference_alignment", "score": 4, "reasoning": "Aligned", "evidence": [], "confidence": 0.85},
+            ],
+            "summary": "Good",
+        }
+
+        tool_calls = [{"function_name": "fetch_data", "arguments": {"url": "example.com"}, "id": "call_2"}]
+
+        await evaluator.evaluate_turn(
+            model_name="primary",
+            rubric=ref_rubric,
+            response_content="Fetched the data.",
+            conversation=conversation,
+            reference="The data was fetched from example.com.",
+            tool_calls=tool_calls,
+        )
+
+        assert mock_client.call_judge.called
+        _, user_prompt = mock_client.call_judge.call_args[0][1], mock_client.call_judge.call_args[0][2]
+        assert "fetch_data" in user_prompt
