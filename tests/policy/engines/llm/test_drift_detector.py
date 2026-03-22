@@ -166,6 +166,28 @@ class TestCompositeDrift:
         
         assert drift.anomaly_flags.get("missing_expected_tool_call") is True
 
+    def test_anomaly_flag_unexpected_tool_no_expected_list(self, detector, session):
+        """Test unexpected flag fires when expected list is empty."""
+        drift = detector.compute_drift(
+            session,
+            "Calling tools...",
+            tool_calls=["some_tool"],
+            expected_tool_calls=[],
+        )
+
+        assert drift.anomaly_flags.get("unexpected_tool_call") is True
+
+    def test_anomaly_flag_missing_tool_no_actual_calls(self, detector, session):
+        """Test missing flag fires when tool_calls is empty."""
+        drift = detector.compute_drift(
+            session,
+            "I did nothing",
+            tool_calls=[],
+            expected_tool_calls=["search_kb"],
+        )
+
+        assert drift.anomaly_flags.get("missing_expected_tool_call") is True
+
 
 class TestDriftLevels:
     """Tests for drift level thresholds."""

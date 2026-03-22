@@ -282,13 +282,14 @@ class DriftDetector:
         tool_calls = tool_calls or []
         expected_tool_calls = expected_tool_calls or []
         
-        if tool_calls and expected_tool_calls:
-            # Check for unexpected tool calls
+        # Check for unexpected tool calls (agent called tools not in expected list)
+        if tool_calls:
             unexpected = set(tool_calls) - set(expected_tool_calls)
             if unexpected:
                 drift.anomaly_flags["unexpected_tool_call"] = True
-            
-            # Check for missing expected tool calls
+
+        # Check for missing expected tool calls
+        if expected_tool_calls:
             missing = set(expected_tool_calls) - set(tool_calls)
             if missing:
                 drift.anomaly_flags["missing_expected_tool_call"] = True
