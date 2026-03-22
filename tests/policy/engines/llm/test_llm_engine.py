@@ -5,6 +5,7 @@ Tests for LLMPolicyEngine.
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from opensentinel.policy.engines.llm import LLMPolicyEngine
+from opensentinel.policy.engines.llm.models import ConfidenceTier, SessionContext
 from opensentinel.policy.protocols import Decision
 
 
@@ -305,6 +306,33 @@ class TestCriticalViolationDecision:
         )
 
         assert result.metadata["max_severity"] == "error"
+
+
+class TestGetStateSequence:
+    """Tests for SessionContext.get_state_sequence()."""
+
+    def test_empty_history_returns_current_state(self):
+        """Empty history returns [current_state]."""
+        ctx = SessionContext(session_id="s1", workflow_name="wf", current_state="A")
+        assert ctx.get_state_sequence() == ["A"]
+
+    def test_empty_history_no_current_state_returns_empty(self):
+        """Empty history with no current_state returns []."""
+        ctx = SessionContext(session_id="s1", workflow_name="wf", current_state="")
+        assert ctx.get_state_sequence() == []
+
+    def test_single_transition(self):
+        """Single A→B transition returns [A, B]."""
+        ctx = SessionContext(session_id="s1", workflow_name="wf", current_state="A")
+        ctx.record_transition("A", "B", 0.9, ConfidenceTier.CONFIDENT, 0.1)
+        assert ctx.get_state_sequence() == ["A", "B"]
+
+    def test_multiple_transitions(self):
+        """A→B→C transitions return [A, B, C]."""
+        ctx = SessionContext(session_id="s1", workflow_name="wf", current_state="A")
+        ctx.record_transition("A", "B", 0.9, ConfidenceTier.CONFIDENT, 0.1)
+        ctx.record_transition("B", "C", 0.85, ConfidenceTier.CONFIDENT, 0.15)
+        assert ctx.get_state_sequence() == ["A", "B", "C"]
 
 
 class TestShutdown:

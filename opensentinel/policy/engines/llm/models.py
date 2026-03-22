@@ -155,10 +155,9 @@ class SessionContext:
 
     def get_state_sequence(self) -> list[str]:
         """Get chronological list of states visited."""
-        states = [t.to_state for t in self.state_history]
-        if not states and self.current_state:
-            return [self.current_state]
-        return states
+        if not self.state_history:
+            return [self.current_state] if self.current_state else []
+        return [self.state_history[0].from_state] + [t.to_state for t in self.state_history]
 
     def add_confidence(self, confidence: float, max_size: int = 3) -> None:
         """Add a confidence score to the ring buffer."""
