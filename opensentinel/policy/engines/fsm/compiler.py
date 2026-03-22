@@ -99,7 +99,7 @@ def _resolve_state(
         if overlap > best_overlap:
             best_overlap = overlap
             best = name
-    if best is not None and best_overlap > 0:
+    if best is not None and best_overlap >= 2:
         return best
 
     return slug
@@ -417,7 +417,7 @@ def _generate_patterns(description: str) -> list[str]:
         phrase = r"\b" + r"\b.*?\b".join(re.escape(w) for w in words[:3]) + r"\b"
         patterns.append(f"(?i){phrase}")
     for w in words:
-        if len(w) >= 5:  # Only longer words as standalone patterns
+        if len(w) >= 8:  # Only longer words as standalone patterns
             patterns.append(f"(?i)\\b{re.escape(w)}\\b")
     return patterns
 

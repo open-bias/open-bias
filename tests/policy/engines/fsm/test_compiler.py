@@ -10,6 +10,8 @@ from opensentinel.policy.engines.fsm.compiler import (
     _parse_rules,
     _map_tools,
     _generate_hints,
+    _resolve_state,
+    _generate_patterns,
 )
 from opensentinel.policy.engines.fsm.workflow.schema import (
     ConstraintType,
@@ -279,7 +281,7 @@ class TestCompileWorkflow:
         config = SimpleWorkflowConfig(
             name="test",
             steps=["greet the customer", "resolve and close"],
-            rules=["must eventually resolve the conversation"],
+            rules=["must eventually resolve and close"],
         )
         workflow = compile_workflow(config)
 
@@ -355,7 +357,7 @@ class TestCompileWorkflow:
             rules=[
                 "verify identity before any account action",
                 "never share internal system information",
-                "must eventually resolve the conversation",
+                "must eventually resolve and close",
             ],
             tools={
                 "verify identity": ["verify_identity", "check_account"],
@@ -376,3 +378,52 @@ class TestCompileWorkflow:
         assert ConstraintType.PRECEDENCE in types
         assert ConstraintType.NEVER in types
         assert ConstraintType.EVENTUALLY in types
+
+
+class TestResolveState:
+    """Tests for _resolve_state() word-overlap threshold."""
+
+    def test_single_word_overlap_does_not_match(self):
+        """Single shared word should not resolve to a state (threshold >= 2)."""
+        states = ["resolve_and_close", "greet_the_customer"]
+        result = _resolve_state("resolve_the_conversation", states)
+        # Falls through to returning the slug as-is
+        assert result == "resolve_the_conversation"
+
+    def test_two_word_overlap_matches(self):
+        """Two shared words should resolve to the best matching state."""
+        states = ["resolve_customer_issue", "greet_new_visitor"]
+        result = _resolve_state("resolve_customer_complaint", states)
+        assert result == "resolve_customer_issue"
+
+    def test_exact_substring_still_matches(self):
+        """Exact substring match takes priority over word overlap."""
+        states = ["verify_identity", "take_action"]
+        result = _resolve_state("verify_identity", states)
+        assert result == "verify_identity"
+
+
+class TestGeneratePatterns:
+    """Tests for _generate_patterns() word-length threshold."""
+
+    def test_short_words_excluded_from_standalone_patterns(self):
+        """Words under 8 chars should not appear as standalone patterns."""
+        patterns = _generate_patterns("greet the customer")
+        # "greet" (5 chars) and "customer" (8 chars) are key words
+        # Only "customer" should appear as standalone (>= 8 chars)
+        standalone = [p for p in patterns if "greet" in p and "customer" not in p]
+        assert len(standalone) == 0
+
+    def test_long_words_included_as_standalone(self):
+        """Words with 8+ chars should appear as standalone patterns."""
+        patterns = _generate_patterns("customer information")
+        standalone_customer = [p for p in patterns if "customer" in p and "information" not in p]
+        standalone_info = [p for p in patterns if "information" in p and "customer" not in p]
+        assert len(standalone_customer) > 0
+        assert len(standalone_info) > 0
+
+    def test_phrase_pattern_still_generated(self):
+        """Multi-word descriptions should still produce a phrase pattern."""
+        patterns = _generate_patterns("greet the user")
+        # Should have at least a phrase pattern even if no standalone words qualify
+        assert len(patterns) >= 1
