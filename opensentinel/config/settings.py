@@ -68,6 +68,9 @@ class OTelConfig(BaseModel):
         "https://cloud.langfuse.com", validation_alias="LANGFUSE_HOST"
     )
 
+    # When True, user/assistant message content is replaced with "[REDACTED]" in traces
+    redact_content: bool = False
+
 
 class ProxyConfig(BaseModel):
     """LiteLLM proxy server configuration."""
