@@ -16,10 +16,35 @@ Session extraction is designed to work with:
 import hashlib
 import json
 import logging
+import re
 import uuid
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Session ID validation — prevents log/OTEL injection via external input.
+# Accepts only alphanumerics plus underscore, hyphen, and dot, 1–256 chars.
+# ---------------------------------------------------------------------------
+_VALID_SESSION_ID: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_\-\.]{1,256}$")
+
+
+def _validate_session_id(value: str) -> str | None:
+    """Return *value* if it matches the allowed session ID pattern, else None.
+
+    Invalid values are rejected with a warning to prevent log injection and
+    OTEL span poisoning via newlines, null bytes, path traversal sequences,
+    or oversized strings embedded in externally supplied session identifiers.
+    """
+    if _VALID_SESSION_ID.match(value):
+        return value
+    logger.warning(
+        "Rejected session ID from external input — failed validation "
+        "(contains disallowed characters or exceeds 256 chars): %r",
+        value[:80],  # truncate to avoid log flooding on huge payloads
+    )
+    return None
+
 
 # ---------------------------------------------------------------------------
 # Header names checked for session identity, in priority order.
@@ -148,7 +173,9 @@ class SessionExtractor:
             for header_name in _SESSION_HEADER_NAMES:
                 session_id = _get_header(resolved_headers, header_name)
                 if session_id is not None:
-                    return session_id
+                    validated = _validate_session_id(session_id)
+                    if validated is not None:
+                        return validated
 
         # 1b. Check litellm_params metadata (Library mode)
         # Internal calls via LLMClient/litellm.acompletion pass context here
@@ -158,7 +185,9 @@ class SessionExtractor:
             if isinstance(lp_meta, dict):
                 sid = lp_meta.get("session_id")
                 if sid is not None and str(sid) != "":
-                    return str(sid)
+                    validated = _validate_session_id(str(sid))
+                    if validated is not None:
+                        return validated
 
         # 2. Check metadata fields
         metadata = data.get("metadata", {})
@@ -166,17 +195,23 @@ class SessionExtractor:
             for key in ("session_id", "sentinel_session_id", "run_id"):
                 val = metadata.get(key)
                 if val is not None and str(val) != "":
-                    return str(val)
+                    validated = _validate_session_id(str(val))
+                    if validated is not None:
+                        return validated
 
         # 3. Check user field (OpenAI pattern)
         user = data.get("user")
         if user is not None and str(user) != "":
-            return f"user_{user}"
+            validated = _validate_session_id(str(user))
+            if validated is not None:
+                return f"user_{validated}"
 
         # 4. Check for thread_id (OpenAI Assistants)
         thread_id = data.get("thread_id")
         if thread_id is not None and str(thread_id) != "":
-            return str(thread_id)
+            validated = _validate_session_id(str(thread_id))
+            if validated is not None:
+                return validated
 
         # 5. Hash of first message content (deterministic fallback)
         messages = data.get("messages")

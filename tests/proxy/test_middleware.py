@@ -13,6 +13,7 @@ import pytest
 from opensentinel.proxy.middleware import (
     SessionExtractor,
     _get_header,
+    _validate_session_id,
 )
 
 
@@ -46,6 +47,95 @@ def _litellm_proxy_data(
             "body": {},
         }
     return data
+
+
+# ===========================================================================
+# _validate_session_id — injection-safe validation
+# ===========================================================================
+class TestValidateSessionId:
+    def test_valid_alphanumeric(self):
+        assert _validate_session_id("abc123") == "abc123"
+
+    def test_valid_with_allowed_special_chars(self):
+        assert _validate_session_id("sess-ion_1.0") == "sess-ion_1.0"
+
+    def test_valid_max_length(self):
+        value = "a" * 256
+        assert _validate_session_id(value) == value
+
+    def test_newline_injection_rejected(self):
+        assert _validate_session_id("good\nbad") is None
+
+    def test_null_byte_rejected(self):
+        assert _validate_session_id("good\x00bad") is None
+
+    def test_path_traversal_rejected(self):
+        assert _validate_session_id("../../etc/passwd") is None
+
+    def test_oversized_id_rejected(self):
+        assert _validate_session_id("a" * 257) is None
+
+    def test_empty_string_rejected(self):
+        assert _validate_session_id("") is None
+
+    def test_invalid_logs_warning(self, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="opensentinel.proxy.middleware"):
+            _validate_session_id("bad\nvalue")
+        assert "Rejected session ID" in caplog.text
+
+
+# ===========================================================================
+# Session ID validation integration — injection attempts are skipped
+# ===========================================================================
+class TestSessionIdValidationIntegration:
+    def test_header_with_newline_falls_through_to_next_source(self):
+        """Malicious header is rejected; extraction falls through to metadata."""
+        data = _litellm_proxy_data(
+            headers={"x-sentinel-session-id": "evil\ninjected"},
+            metadata={"session_id": "safe-fallback"},
+        )
+        assert SessionExtractor.extract_session_id(data) == "safe-fallback"
+
+    def test_metadata_with_null_byte_falls_through(self):
+        """Metadata session ID with null byte is rejected; falls to next source."""
+        data = {"metadata": {"session_id": "bad\x00session"}, "user": "alice"}
+        assert SessionExtractor.extract_session_id(data) == "user_alice"
+
+    def test_user_with_path_traversal_falls_through(self):
+        """User field with path traversal is rejected; falls to thread_id."""
+        data = {"user": "../../etc/passwd", "thread_id": "thread-ok"}
+        assert SessionExtractor.extract_session_id(data) == "thread-ok"
+
+    def test_thread_id_with_newline_falls_through_to_hash(self):
+        """Bad thread_id falls through to message hash."""
+        data = {
+            "thread_id": "bad\nthread",
+            "messages": [{"role": "user", "content": "hello"}],
+        }
+        result = SessionExtractor.extract_session_id(data)
+        assert result.startswith("msg_")
+
+    def test_oversized_header_rejected(self):
+        """A 257-char session ID header is rejected."""
+        data = _litellm_proxy_data(
+            headers={"x-sentinel-session-id": "a" * 257},
+            metadata={"session_id": "safe"},
+        )
+        assert SessionExtractor.extract_session_id(data) == "safe"
+
+    def test_all_external_sources_invalid_falls_to_uuid(self):
+        """If all external sources are malicious, falls through to UUID."""
+        data = {
+            "user": "bad\nuser",
+            "thread_id": "bad\nthread",
+            "metadata": {"session_id": "bad\nsession"},
+        }
+        result = SessionExtractor.extract_session_id(data)
+        # Should be a valid UUID (last resort fallback)
+        import uuid as _uuid
+        _uuid.UUID(result)
 
 
 # ===========================================================================
