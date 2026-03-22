@@ -234,30 +234,28 @@ class StateClassifier:
             # Compute content embedding
             content_embedding = self.model.encode(content, convert_to_numpy=True)
 
-            # Find most similar state
-            best_state = None
-            best_similarity = -1.0
+            # Compute similarity for each state and filter by per-state threshold
+            candidates: list[tuple[str, float]] = []
 
             for state_name, state_embedding in state_embeddings.items():
                 # Cosine similarity
-                similarity = np.dot(content_embedding, state_embedding) / (
-                    np.linalg.norm(content_embedding) * np.linalg.norm(state_embedding)
+                similarity = float(
+                    np.dot(content_embedding, state_embedding)
+                    / (np.linalg.norm(content_embedding) * np.linalg.norm(state_embedding))
                 )
-                if similarity > best_similarity:
-                    best_similarity = similarity
-                    best_state = state_name
+                threshold = self.states[state_name].classification.min_similarity
+                if similarity >= threshold:
+                    candidates.append((state_name, similarity))
 
-            if best_state:
-                # Get threshold from state config
-                threshold = self.states[best_state].classification.min_similarity
-
-                if best_similarity >= threshold:
-                    return StateClassificationResult(
-                        state_name=best_state,
-                        confidence=float(best_similarity),
-                        method="embedding",
-                        details={"similarity": float(best_similarity)},
-                    )
+            # Pick highest similarity among candidates that passed their threshold
+            if candidates:
+                best_state, best_similarity = max(candidates, key=lambda c: c[1])
+                return StateClassificationResult(
+                    state_name=best_state,
+                    confidence=best_similarity,
+                    method="embedding",
+                    details={"similarity": best_similarity},
+                )
 
         except Exception as e:
             logger.error(f"Embedding classification failed: {e}")

@@ -163,6 +163,98 @@ class TestStateClassifier:
         assert result.method == "pattern"
 
 
+class TestEmbeddingThresholdFiltering:
+    """Tests for per-state threshold filtering in embedding classification."""
+
+    def test_lower_similarity_state_wins_when_highest_fails_its_threshold(self):
+        """A state with lower similarity but lower threshold should be returned
+        when the highest-similarity state doesn't meet its own threshold."""
+        import numpy as np
+        from unittest.mock import MagicMock, patch
+
+        # State A: high threshold (0.95) — similarity will be 0.85 (fails)
+        # State B: low threshold (0.5)  — similarity will be 0.70 (passes)
+        states = [
+            State(
+                name="strict_state",
+                classification=ClassificationHint(
+                    exemplars=["exemplar for strict"],
+                    min_similarity=0.95,
+                ),
+            ),
+            State(
+                name="lenient_state",
+                classification=ClassificationHint(
+                    exemplars=["exemplar for lenient"],
+                    min_similarity=0.5,
+                ),
+            ),
+        ]
+
+        classifier = StateClassifier(states)
+
+        # Mock the model and embeddings so we control similarity values
+        mock_model = MagicMock()
+        classifier._model = mock_model
+
+        # Create unit vectors with known cosine similarities to a query vector
+        # query = [1, 0], strict_embedding = [0.85, 0.527], lenient_embedding = [0.70, 0.714]
+        query = np.array([1.0, 0.0])
+        strict_emb = np.array([0.85, 0.5268])  # cos sim ~ 0.85
+        strict_emb = strict_emb / np.linalg.norm(strict_emb)
+        lenient_emb = np.array([0.70, 0.7141])  # cos sim ~ 0.70
+        lenient_emb = lenient_emb / np.linalg.norm(lenient_emb)
+
+        mock_model.encode.return_value = query
+
+        with patch.object(
+            classifier,
+            "_get_state_embeddings",
+            return_value={"strict_state": strict_emb, "lenient_state": lenient_emb},
+        ):
+            result = classifier._classify_by_embeddings("test content")
+
+        assert result is not None
+        assert result.state_name == "lenient_state"
+        assert result.method == "embedding"
+        # strict_state had higher similarity but didn't meet its 0.95 threshold
+        # lenient_state with ~0.70 similarity meets its 0.5 threshold
+
+    def test_no_candidates_when_all_fail_threshold(self):
+        """Returns None when no state meets its threshold."""
+        import numpy as np
+        from unittest.mock import MagicMock, patch
+
+        states = [
+            State(
+                name="high_bar",
+                classification=ClassificationHint(
+                    exemplars=["exemplar"],
+                    min_similarity=0.99,
+                ),
+            ),
+        ]
+
+        classifier = StateClassifier(states)
+        mock_model = MagicMock()
+        classifier._model = mock_model
+
+        query = np.array([1.0, 0.0])
+        emb = np.array([0.5, 0.866])  # cos sim ~ 0.5, below 0.99
+        emb = emb / np.linalg.norm(emb)
+
+        mock_model.encode.return_value = query
+
+        with patch.object(
+            classifier,
+            "_get_state_embeddings",
+            return_value={"high_bar": emb},
+        ):
+            result = classifier._classify_by_embeddings("test content")
+
+        assert result is None
+
+
 class TestClassificationResult:
     """Tests for ClassificationResult dataclass."""
 
