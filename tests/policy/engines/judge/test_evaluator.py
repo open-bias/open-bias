@@ -2,18 +2,19 @@
 Tests for the core judge evaluator.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-from opensentinel.policy.engines.judge.evaluator import JudgeEvaluator
+import pytest
+
 from opensentinel.policy.engines.judge.client import JudgeClient
+from opensentinel.policy.engines.judge.evaluator import JudgeEvaluator, _predominant_scale
 from opensentinel.policy.engines.judge.models import (
-    VerdictAction,
     EvaluationScope,
-    ScoreScale,
-    RubricCriterion,
-    Rubric,
     EvaluationType,
+    Rubric,
+    RubricCriterion,
+    ScoreScale,
+    VerdictAction,
 )
 
 
@@ -786,3 +787,86 @@ class TestEvaluateWithReference:
         assert mock_client.call_judge.called
         _, user_prompt = mock_client.call_judge.call_args[0][1], mock_client.call_judge.call_args[0][2]
         assert "fetch_data" in user_prompt
+
+    async def test_ref_scale_derived_from_criteria(
+        self, evaluator, mock_client, conversation,
+    ):
+        """ref_scale in the system prompt should reflect the rubric's predominant scale."""
+        rubric = Rubric(
+            name="likert3_rubric",
+            description="Rubric with likert-3 criteria",
+            criteria=[
+                RubricCriterion(
+                    name="accuracy",
+                    description="Factual accuracy",
+                    scale=ScoreScale.LIKERT_3,
+                    weight=1.0,
+                ),
+                RubricCriterion(
+                    name="completeness",
+                    description="Completeness",
+                    scale=ScoreScale.LIKERT_3,
+                    weight=1.0,
+                ),
+            ],
+            pass_threshold=0.6,
+        )
+
+        mock_client.call_judge.return_value = {
+            "scores": [
+                {"criterion": "accuracy", "score": 2, "reasoning": "OK", "evidence": [],
+                 "confidence": 0.9},
+                {"criterion": "completeness", "score": 3, "reasoning": "Good", "evidence": [],
+                 "confidence": 0.9},
+                {"criterion": "reference_alignment", "score": 3, "reasoning": "Aligned",
+                 "evidence": [], "confidence": 0.85},
+            ],
+            "summary": "Decent",
+        }
+
+        await evaluator._evaluate_with_reference(
+            model_name="primary",
+            rubric=rubric,
+            response_content="Answer.",
+            conversation=conversation,
+            reference="Reference answer.",
+        )
+
+        system_prompt = mock_client.call_judge.call_args[0][1]
+        assert "1-3" in system_prompt
+        assert "1-5" not in system_prompt
+
+
+class TestPredominantScale:
+    """Unit tests for _predominant_scale helper."""
+
+    def test_default_likert5(self):
+        criteria = [
+            RubricCriterion(name="a", description="a"),
+            RubricCriterion(name="b", description="b"),
+        ]
+        assert _predominant_scale(criteria) == "1-5"
+
+    def test_binary_scale(self):
+        criteria = [
+            RubricCriterion(name="a", description="a", scale=ScoreScale.BINARY),
+        ]
+        assert _predominant_scale(criteria) == "0-1"
+
+    def test_likert3_scale(self):
+        criteria = [
+            RubricCriterion(name="a", description="a", scale=ScoreScale.LIKERT_3),
+            RubricCriterion(name="b", description="b", scale=ScoreScale.LIKERT_3),
+        ]
+        assert _predominant_scale(criteria) == "1-3"
+
+    def test_mixed_scales_picks_most_common(self):
+        criteria = [
+            RubricCriterion(name="a", description="a", scale=ScoreScale.LIKERT_3),
+            RubricCriterion(name="b", description="b", scale=ScoreScale.LIKERT_3),
+            RubricCriterion(name="c", description="c", scale=ScoreScale.LIKERT_5),
+        ]
+        assert _predominant_scale(criteria) == "1-3"
+
+    def test_empty_criteria_defaults(self):
+        assert _predominant_scale([]) == "1-5"

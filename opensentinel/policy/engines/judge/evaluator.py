@@ -8,41 +8,51 @@ into structured verdicts.
 
 import logging
 import time
+from collections import Counter
 from typing import Any
 
-from opensentinel.policy.engines.judge.models import (
-    Rubric,
-    RubricCriterion,
-    JudgeScore,
-    JudgeVerdict,
-    JudgeSessionContext,
-    VerdictAction,
-    EvaluationScope,
-    EvaluationType,
-    ScoreScale,
+from opensentinel.policy.engines.judge.bias import (
+    demap_pairwise_scores,
+    randomize_positions,
 )
 from opensentinel.policy.engines.judge.client import JudgeClient
-from opensentinel.policy.engines.judge.bias import (
-    randomize_positions,
-    demap_pairwise_scores,
+from opensentinel.policy.engines.judge.models import (
+    EvaluationScope,
+    EvaluationType,
+    JudgeScore,
+    JudgeSessionContext,
+    JudgeVerdict,
+    Rubric,
+    RubricCriterion,
+    ScoreScale,
+    VerdictAction,
 )
 from opensentinel.policy.engines.judge.prompts import (
-    TURN_POINTWISE_SYSTEM,
-    TURN_POINTWISE_USER,
-    TURN_PAIRWISE_SYSTEM,
-    TURN_PAIRWISE_USER,
-    TURN_REFERENCE_SYSTEM,
-    TURN_REFERENCE_USER,
     CONVERSATION_SYSTEM,
     CONVERSATION_USER,
-    format_criteria_block,
+    TURN_PAIRWISE_SYSTEM,
+    TURN_PAIRWISE_USER,
+    TURN_POINTWISE_SYSTEM,
+    TURN_POINTWISE_USER,
+    TURN_REFERENCE_SYSTEM,
+    TURN_REFERENCE_USER,
     format_conversation_block,
+    format_criteria_block,
     format_metadata_block,
-    format_tool_calls_block,
     format_session_context_block,
+    format_tool_calls_block,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _predominant_scale(criteria: list[RubricCriterion]) -> str:
+    """Derive the ref_scale string from the most common scale across criteria."""
+    if not criteria:
+        return "1-5"
+    counts: Counter[ScoreScale] = Counter(c.scale for c in criteria)
+    scale = counts.most_common(1)[0][0]
+    return f"{scale.min_score}-{scale.max_score}"
 
 
 class JudgeEvaluator:
@@ -360,7 +370,7 @@ class JudgeEvaluator:
             rubric.prompt_overrides.get("system")
             or TURN_REFERENCE_SYSTEM.format(
                 criteria_block=criteria_block,
-                ref_scale="1-5",
+                ref_scale=_predominant_scale(rubric.criteria),
                 additional_instructions=rubric.prompt_overrides.get("additional_instructions", ""),
                 session_context_block=session_block,
             )
@@ -611,7 +621,7 @@ class JudgeEvaluator:
         """Validate the structure of the judge LLM response."""
         if "scores" not in raw:
             raise ValueError("Judge response missing 'scores' key")
-        
+
         if not isinstance(raw["scores"], list):
             raise ValueError("Judge response 'scores' must be a list")
 
