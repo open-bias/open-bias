@@ -58,7 +58,6 @@ class Interceptor:
         checkers: list[PolicyEngineChecker],
         default_strategy: str = "user_message_inject",
         fail_action: Literal["intervene", "block"] = "intervene",
-        fail_open: bool = True,
         session_ttl: int | None = None,
         max_sessions: int | None = None,
         max_async_tasks_per_session: int | None = None,
@@ -88,7 +87,6 @@ class Interceptor:
             )
         self._default_strategy = default_strategy
         self._fail_action = fail_action
-        self._fail_open = fail_open
 
         # Session memory management
         self._max_async_tasks = (
@@ -220,8 +218,6 @@ class Interceptor:
 
             except Exception as e:
                 logger.error(f"Checker '{checker.name}' failed: {e}")
-                if not self._fail_open:
-                    raise
                 # Fail-open: log and continue instead of blocking
                 all_metadata["results"].append(
                     {"checker": checker.name, "decision": "error", "error": str(e)}
@@ -311,8 +307,6 @@ class Interceptor:
 
             except Exception as e:
                 logger.error(f"Checker '{checker.name}' failed: {e}")
-                if not self._fail_open:
-                    raise
                 all_metadata["results"].append(
                     {"checker": checker.name, "decision": "error", "error": str(e)}
                 )
@@ -370,8 +364,6 @@ class Interceptor:
                     )
                 except Exception as e:
                     logger.error(f"Async checker task failed: {e}")
-                    if not self._fail_open:
-                        raise
                     results.append(
                         _PendingResult(
                             checker_name="async_task_error",
