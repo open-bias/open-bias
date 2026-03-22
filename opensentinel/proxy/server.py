@@ -145,7 +145,7 @@ class SentinelProxy:
                     pass
 
             # Remove from logging callback manager's async success list
-            if self._callback in litellm._async_success_callback:
+            if isinstance(litellm._async_success_callback, list) and self._callback in litellm._async_success_callback:
                 litellm._async_success_callback.remove(self._callback)
 
             self._callback = None

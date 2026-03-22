@@ -75,3 +75,4 @@ class TestShutdownCallbackCleanup:
 
         proxy._shutdown()
         proxy._shutdown()  # second call should be a no-op
+        assert proxy._callback is None
