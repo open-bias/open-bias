@@ -458,8 +458,13 @@ class Interceptor:
 
         if effective_strategy == "user_message_inject":
             result["messages"] = UserMessageInjectStrategy.merge(messages, message)
-        else:
+        elif effective_strategy == "system_prompt_append":
             result["messages"] = SystemPromptAppendStrategy.merge(messages, message)
+        elif effective_strategy == "response_modification":
+            logger.warning(
+                "response_modification is a response-time strategy and cannot be applied "
+                "during request modification (PRE_CALL); intervention skipped"
+            )
 
         return result
 

@@ -27,6 +27,7 @@ from opensentinel.core.interceptor import (
     Interceptor,
 )
 from opensentinel.core.interceptor.adapters import PolicyEngineChecker
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -252,6 +253,26 @@ class TestSyncPreCall:
         assert result.allowed is True
         assert result.modified_data is not None
         assert result.modified_data["messages"] == sanitized
+
+    async def test_intervene_response_modification_strategy_does_not_modify_request(self):
+        """INTERVENE with response_modification strategy leaves request unmodified during PRE_CALL.
+
+        response_modification is a response-time strategy and must not be applied
+        at request-modification time.
+        """
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            decision=Decision.INTERVENE,
+            message="Some guidance",
+        )
+        interceptor = Interceptor([checker], default_strategy="response_modification")
+        req = _request()
+
+        result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
+
+        assert result.allowed is True
+        # response_modification is response-time only; request must be returned unmodified
+        assert result.modified_data is None
 
 
 # ===========================================================================
