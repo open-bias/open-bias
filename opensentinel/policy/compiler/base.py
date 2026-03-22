@@ -222,7 +222,8 @@ class LLMPolicyCompiler(PolicyCompiler):
             # Validate
             validation_errors = self.validate_result(result)
             if validation_errors:
-                result.warnings.extend(validation_errors)
+                result.errors.extend(validation_errors)
+                result.success = False
 
             return result
 
