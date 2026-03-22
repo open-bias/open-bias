@@ -256,7 +256,7 @@ def _parse_single_rule(
         )
 
     # --- PRECEDENCE: "X before Y" ---
-    before_match = re.search(r"(.+?)\s+before\s+(.+)", normalized)
+    before_match = re.match(r"(.+?)\s+\bbefore\b\s+(.+)", normalized)
     if before_match:
         target_text = _strip_filler(before_match.group(1))
         trigger_text = _strip_filler(before_match.group(2))

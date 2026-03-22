@@ -136,6 +136,17 @@ class TestParseRules:
         assert c.trigger == "account_action"
         assert len(hidden) == 0
 
+    def test_precedence_not_matched_mid_string(self):
+        """A RESPONSE rule containing 'before' should not match as PRECEDENCE."""
+        states = self._state_names(["action", "check", "proceeding"])
+        constraints, hidden = _parse_rules(
+            ["if action then check before proceeding"], states
+        )
+
+        assert len(constraints) == 1
+        c = constraints[0]
+        assert c.type == ConstraintType.RESPONSE
+
     def test_never_rule_creates_hidden_state(self):
         states = self._state_names(["greet", "resolve"])
         constraints, hidden = _parse_rules(
