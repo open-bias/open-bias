@@ -27,8 +27,6 @@ from opensentinel.core.interceptor import (
     Interceptor,
 )
 from opensentinel.core.interceptor.adapters import PolicyEngineChecker
-from opensentinel.core.intervention.strategies import WorkflowViolationError
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -254,41 +252,6 @@ class TestSyncPreCall:
         assert result.allowed is True
         assert result.modified_data is not None
         assert result.modified_data["messages"] == sanitized
-
-
-# ===========================================================================
-# Hard block strategy tests
-# ===========================================================================
-
-
-class TestHardBlockInterceptor:
-
-    async def test_hard_block_strategy_raises_on_intervene(self):
-        """INTERVENE with hard_block strategy raises WorkflowViolationError."""
-        checker = _mock_checker(
-            phase=CheckPhase.PRE_CALL,
-            decision=Decision.INTERVENE,
-            message="Unauthorized action detected",
-        )
-        interceptor = Interceptor([checker], default_strategy="hard_block")
-        req = _request()
-
-        with pytest.raises(WorkflowViolationError, match="Unauthorized action detected"):
-            await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
-
-    async def test_hard_block_does_not_affect_allow_decisions(self):
-        """ALLOW decisions pass through even with hard_block default strategy."""
-        checker = _mock_checker(
-            phase=CheckPhase.PRE_CALL,
-            decision=Decision.ALLOW,
-        )
-        interceptor = Interceptor([checker], default_strategy="hard_block")
-        req = _request()
-
-        result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
-
-        assert result.allowed is True
-        assert result.modified_data is None
 
 
 # ===========================================================================
@@ -626,7 +589,7 @@ class TestInterceptorInit:
 
     @pytest.mark.parametrize(
         "strategy",
-        ["system_prompt_append", "user_message_inject", "response_modification", "hard_block"],
+        ["system_prompt_append", "user_message_inject", "response_modification"],
     )
     def test_valid_default_strategies_accepted(self, strategy: str) -> None:
         """All StrategyType values should be accepted without error."""

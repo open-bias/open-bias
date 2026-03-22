@@ -11,11 +11,9 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from opensentinel.core.intervention.strategies import (
-    HardBlockStrategy,
     StrategyType,
     SystemPromptAppendStrategy,
     UserMessageInjectStrategy,
-    WorkflowViolationError,
 )
 from opensentinel.core.session import SessionStore
 from opensentinel.policy.protocols import Decision, EngineResult
@@ -214,8 +212,6 @@ class Interceptor:
                             modified_data, result.message, self._default_strategy
                         )
 
-            except WorkflowViolationError:
-                raise
             except Exception as e:
                 logger.error(f"Checker '{checker.name}' failed: {e}")
                 # Fail-open: log and continue instead of blocking
@@ -305,8 +301,6 @@ class Interceptor:
                         }
                     )
 
-            except WorkflowViolationError:
-                raise
             except Exception as e:
                 logger.error(f"Checker '{checker.name}' failed: {e}")
                 all_metadata["results"].append(
@@ -462,9 +456,7 @@ class Interceptor:
         messages = result.get("messages", [])
         effective_strategy = strategy or self._default_strategy
 
-        if effective_strategy == "hard_block":
-            HardBlockStrategy.apply(message)
-        elif effective_strategy == "user_message_inject":
+        if effective_strategy == "user_message_inject":
             result["messages"] = UserMessageInjectStrategy.merge(messages, message)
         else:
             result["messages"] = SystemPromptAppendStrategy.merge(messages, message)

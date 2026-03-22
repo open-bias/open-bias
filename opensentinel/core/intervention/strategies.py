@@ -15,9 +15,6 @@ Strategies define HOW to modify LLM requests or responses when deviation is dete
    - Strips tool calls, replaces content, or appends warnings
    - Used by sync POST_CALL checkers for real-time enforcement
 
-4. HARD_BLOCK: Raise WorkflowViolationError to halt execution (request)
-   - Most aggressive — LLM call never happens
-   - Used when policy requires immediate rejection
 """
 
 import logging
@@ -33,7 +30,6 @@ class StrategyType(Enum):
     SYSTEM_PROMPT_APPEND = "system_prompt_append"
     USER_MESSAGE_INJECT = "user_message_inject"
     RESPONSE_MODIFICATION = "response_modification"
-    HARD_BLOCK = "hard_block"
 
 
 def format_message(template: str, context: dict[str, Any]) -> str:
@@ -216,15 +212,3 @@ class WorkflowViolationError(Exception):
         self.context = context or {}
 
 
-class HardBlockStrategy:
-    """
-    Immediately block the request by raising WorkflowViolationError.
-
-    Unlike other strategies that modify requests or responses,
-    this strategy halts execution entirely — the LLM call never happens.
-    """
-
-    @staticmethod
-    def apply(message: str) -> None:
-        """Raise WorkflowViolationError to block the request."""
-        raise WorkflowViolationError(message)

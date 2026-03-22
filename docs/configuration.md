@@ -103,7 +103,7 @@ Set `engine: llm` at the top level. Requires `policy:` pointing to a workflow YA
 ```yaml
 llm:
   intervention:
-    default_strategy: user_message_inject   # system_prompt_append | user_message_inject | hard_block
+    default_strategy: user_message_inject   # system_prompt_append | user_message_inject
     max_intervention_attempts: 3
     include_headers: true
 ```
@@ -125,7 +125,7 @@ Set `engine: fsm` at the top level. Requires `policy:` pointing to a workflow YA
 ```yaml
 fsm:
   intervention:
-    default_strategy: system_prompt_append   # system_prompt_append | user_message_inject | hard_block
+    default_strategy: system_prompt_append   # system_prompt_append | user_message_inject
     max_intervention_attempts: 3
     include_headers: true
 ```

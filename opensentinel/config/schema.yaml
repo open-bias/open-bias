@@ -116,7 +116,7 @@ llm:
 
   # Intervention settings (engine-specific overrides)
   intervention:
-    default_strategy: user_message_inject  # system_prompt_append | user_message_inject | hard_block
+    default_strategy: user_message_inject  # system_prompt_append | user_message_inject
     max_intervention_attempts: 3           # default: 3
     include_headers: true                  # default: true
 
@@ -135,7 +135,7 @@ fsm:
 
   # Intervention settings
   intervention:
-    default_strategy: system_prompt_append  # system_prompt_append | user_message_inject | hard_block
+    default_strategy: system_prompt_append  # system_prompt_append | user_message_inject
     max_intervention_attempts: 3            # default: 3
     include_headers: true                   # default: true
 
