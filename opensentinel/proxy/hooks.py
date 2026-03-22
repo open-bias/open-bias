@@ -175,6 +175,11 @@ class SentinelCallback(CustomLogger):
         # OpenTelemetry tracer for Open Sentinel events (lazy initialized)
         self._tracer = None
 
+        # Effective hook timeout — starts at the configured value; may be
+        # auto-adjusted upward after engine initialization to avoid racing
+        # the engine's own LLM timeouts (see _compute_hook_timeout).
+        self._effective_hook_timeout: float = self.settings.policy.hook_timeout_seconds
+
         logger.info("SentinelCallback initialized")
 
         if self.settings.policy.post_call_mode != "sync":
@@ -260,6 +265,9 @@ class SentinelCallback(CustomLogger):
             self._interceptor_initialized = True
             logger.info(f"Interceptor initialized with {len(checkers)} checkers")
 
+            # Recompute effective hook timeout now that the engine is available.
+            self._effective_hook_timeout = self._compute_hook_timeout()
+
         except Exception as e:
             logger.error(f"Failed to initialize interceptor: {e}")
             self._interceptor_initialized = True
@@ -310,6 +318,43 @@ class SentinelCallback(CustomLogger):
             self._policy_engine = None
 
         return self._policy_engine
+
+    def _compute_hook_timeout(self) -> float:
+        """Compute a hook timeout that won't race the engine's own LLM timeouts.
+
+        When the judge engine is configured, its per-model timeout plus a
+        safety buffer may exceed the configured hook_timeout_seconds.  In that
+        case we auto-adjust upward and log a warning so operators are aware.
+
+        For non-judge engines (or when no engine is initialized) the configured
+        value is returned unchanged.
+        """
+        configured = self.settings.policy.hook_timeout_seconds
+
+        engine = self._policy_engine
+        if engine is None:
+            return configured
+
+        # Use the engine's advertised timeout if it exposes one (must be numeric).
+        engine_timeout = getattr(engine, "timeout", None)
+        if not isinstance(engine_timeout, (int, float)):
+            engine_timeout = None
+        if engine_timeout is not None and engine_timeout > 0:
+            # Give the engine time to hit its own timeout, plus a buffer for
+            # retries and processing overhead.
+            needed = engine_timeout + 5.0
+            if needed > configured:
+                logger.warning(
+                    "hook_timeout_seconds (%.1fs) is shorter than engine timeout "
+                    "(%.1fs). Auto-adjusting to %.1fs to prevent premature "
+                    "cancellation.",
+                    configured,
+                    engine_timeout,
+                    needed,
+                )
+                return needed
+
+        return configured
 
     async def initialize(self) -> None:
         """
@@ -378,6 +423,9 @@ class SentinelCallback(CustomLogger):
                     self._interceptor_initialized = True
                     logger.info(f"Interceptor ready with {len(checkers)} checkers")
 
+            # Recompute the effective hook timeout now that the engine is known.
+            self._effective_hook_timeout = self._compute_hook_timeout()
+
     async def cleanup_session(self, session_id: str) -> None:
         """Clean up all state for a session (interceptor tasks + engine session)."""
         if self._interceptor is not None:
@@ -443,7 +491,7 @@ class SentinelCallback(CustomLogger):
         return await safe_hook(
             self._pre_call_impl,
             user_api_key_dict, cache, data, call_type,
-            timeout=self.settings.policy.hook_timeout_seconds,
+            timeout=self._effective_hook_timeout,
             fallback=data,
             hook_name="async_pre_call_hook",
             fail_open=self.settings.policy.fail_open,
@@ -545,7 +593,7 @@ class SentinelCallback(CustomLogger):
         return await safe_hook(
             self._post_call_success_impl,
             data, user_api_key_dict, response,
-            timeout=self.settings.policy.hook_timeout_seconds,
+            timeout=self._effective_hook_timeout,
             fallback=response,
             hook_name="async_post_call_success_hook",
             fail_open=self.settings.policy.fail_open,
@@ -669,7 +717,7 @@ class SentinelCallback(CustomLogger):
         return await safe_hook(
             self._post_call_failure_impl,
             request_data, user_api_key_dict, original_exception,
-            timeout=self.settings.policy.hook_timeout_seconds,
+            timeout=self._effective_hook_timeout,
             fallback=None,
             hook_name="async_post_call_failure_hook",
             fail_open=self.settings.policy.fail_open,
@@ -741,7 +789,7 @@ class SentinelCallback(CustomLogger):
         return await safe_hook(
             self._log_success_impl,
             kwargs, response_obj, start_time, end_time,
-            timeout=self.settings.policy.hook_timeout_seconds,
+            timeout=self._effective_hook_timeout,
             fallback=None,
             hook_name="async_log_success_event",
             fail_open=self.settings.policy.fail_open,
@@ -781,7 +829,7 @@ class SentinelCallback(CustomLogger):
         return await safe_hook(
             self._log_failure_impl,
             kwargs, response_obj, start_time, end_time,
-            timeout=self.settings.policy.hook_timeout_seconds,
+            timeout=self._effective_hook_timeout,
             fallback=None,
             hook_name="async_log_failure_event",
             fail_open=self.settings.policy.fail_open,

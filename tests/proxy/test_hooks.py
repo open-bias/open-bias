@@ -549,3 +549,206 @@ async def test_callback_initialize_idempotent(mock_settings):
 
     # Registry should only have been called once
     mock_create.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _compute_hook_timeout / _effective_hook_timeout tests
+# ---------------------------------------------------------------------------
+
+
+async def test_compute_hook_timeout_no_engine(mock_settings):
+    """Without an engine, effective timeout equals the configured value."""
+    from opensentinel.proxy.hooks import SentinelCallback
+
+    mock_settings.policy.hook_timeout_seconds = 30.0
+    mock_settings.get_policy_config.return_value = {"type": "judge", "config": {}}
+    mock_settings.policy.post_call_mode = "async"
+
+    cb = SentinelCallback(settings=mock_settings)
+    cb._policy_engine = None
+
+    assert cb._compute_hook_timeout() == 30.0
+    assert cb._effective_hook_timeout == 30.0  # set at __init__ before engine exists
+
+
+async def test_compute_hook_timeout_engine_without_timeout_attr(mock_settings):
+    """Engines that don't expose a 'timeout' attribute use the configured value."""
+    from opensentinel.proxy.hooks import SentinelCallback
+
+    mock_settings.policy.hook_timeout_seconds = 30.0
+    cb = SentinelCallback(settings=mock_settings)
+
+    engine = MagicMock(spec=[])  # no 'timeout' attribute at all
+    cb._policy_engine = engine
+
+    assert cb._compute_hook_timeout() == 30.0
+
+
+async def test_compute_hook_timeout_engine_timeout_within_configured(mock_settings):
+    """When engine timeout + buffer <= configured, no adjustment is made."""
+    from opensentinel.proxy.hooks import SentinelCallback
+
+    mock_settings.policy.hook_timeout_seconds = 30.0
+    cb = SentinelCallback(settings=mock_settings)
+
+    engine = MagicMock()
+    engine.timeout = 15.0  # 15 + 5 = 20 < 30 → no change
+    cb._policy_engine = engine
+
+    assert cb._compute_hook_timeout() == 30.0
+
+
+async def test_compute_hook_timeout_engine_timeout_exceeds_configured(mock_settings):
+    """When engine timeout + buffer > configured, effective timeout is auto-adjusted."""
+    from opensentinel.proxy.hooks import SentinelCallback
+
+    mock_settings.policy.hook_timeout_seconds = 10.0
+    cb = SentinelCallback(settings=mock_settings)
+
+    engine = MagicMock()
+    engine.timeout = 20.0  # 20 + 5 = 25 > 10 → adjust
+    cb._policy_engine = engine
+
+    assert cb._compute_hook_timeout() == 25.0
+
+
+async def test_compute_hook_timeout_logs_warning_when_adjusting(mock_settings, caplog):
+    """A warning is logged when the timeout is auto-adjusted upward."""
+    import logging
+    from opensentinel.proxy.hooks import SentinelCallback
+
+    mock_settings.policy.hook_timeout_seconds = 10.0
+    cb = SentinelCallback(settings=mock_settings)
+
+    engine = MagicMock()
+    engine.timeout = 20.0
+    cb._policy_engine = engine
+
+    with caplog.at_level(logging.WARNING, logger="opensentinel.proxy.hooks"):
+        result = cb._compute_hook_timeout()
+
+    assert result == 25.0
+    assert "Auto-adjusting" in caplog.text
+    assert "10.0" in caplog.text  # configured value mentioned
+    assert "20.0" in caplog.text  # engine timeout mentioned
+
+
+async def test_compute_hook_timeout_non_numeric_engine_timeout(mock_settings):
+    """Non-numeric engine timeout is ignored and configured value is used."""
+    from opensentinel.proxy.hooks import SentinelCallback
+
+    mock_settings.policy.hook_timeout_seconds = 30.0
+    cb = SentinelCallback(settings=mock_settings)
+
+    engine = MagicMock()
+    engine.timeout = "not-a-number"
+    cb._policy_engine = engine
+
+    assert cb._compute_hook_timeout() == 30.0
+
+
+async def test_effective_hook_timeout_updated_after_eager_init(mock_settings):
+    """After initialize(), _effective_hook_timeout reflects the engine configuration."""
+    from opensentinel.proxy.hooks import SentinelCallback
+
+    mock_settings.policy.hook_timeout_seconds = 10.0
+    mock_settings.get_policy_config.return_value = {
+        "type": "judge",
+        "config": {"models": [{"name": "primary", "model": "gpt-4o"}]},
+    }
+    mock_settings.policy.post_call_mode = "async"
+    mock_settings.policy.default_strategy = "user_message_inject"
+    mock_settings.policy.fail_action = "intervene"
+
+    mock_engine = MagicMock()
+    mock_engine.name = "mock-judge"
+    mock_engine.timeout = 20.0  # 20 + 5 = 25 > 10 → should adjust
+
+    cb = SentinelCallback(settings=mock_settings)
+    assert cb._effective_hook_timeout == 10.0  # pre-init: configured value
+
+    with patch(
+        "opensentinel.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        new=AsyncMock(return_value=mock_engine),
+    ):
+        await cb.initialize()
+
+    assert cb._effective_hook_timeout == 25.0  # post-init: auto-adjusted
+
+
+async def test_effective_hook_timeout_updated_after_lazy_init(mock_settings):
+    """After lazy _get_interceptor(), _effective_hook_timeout is updated."""
+    from opensentinel.proxy.hooks import SentinelCallback
+
+    mock_settings.policy.hook_timeout_seconds = 10.0
+    mock_settings.get_policy_config.return_value = {
+        "type": "judge",
+        "config": {"models": [{"name": "primary", "model": "gpt-4o"}]},
+    }
+    mock_settings.policy.post_call_mode = "async"
+    mock_settings.policy.default_strategy = "user_message_inject"
+    mock_settings.policy.fail_action = "intervene"
+
+    mock_engine = MagicMock()
+    mock_engine.name = "mock-judge"
+    mock_engine.timeout = 20.0  # triggers auto-adjust
+
+    cb = SentinelCallback(settings=mock_settings)
+    assert cb._effective_hook_timeout == 10.0
+
+    with patch(
+        "opensentinel.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        new=AsyncMock(return_value=mock_engine),
+    ):
+        await cb._get_interceptor()
+
+    assert cb._effective_hook_timeout == 25.0
+
+
+# ---------------------------------------------------------------------------
+# JudgePolicyEngine.timeout property tests
+# ---------------------------------------------------------------------------
+
+
+def test_judge_engine_timeout_no_client():
+    """Before initialization, judge engine timeout returns 0.0."""
+    from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
+
+    engine = JudgePolicyEngine()
+    assert engine.timeout == 0.0
+
+
+def test_judge_engine_timeout_single_model():
+    """Judge engine timeout returns the single model's timeout."""
+    from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
+    from opensentinel.policy.engines.judge.client import JudgeClient
+
+    engine = JudgePolicyEngine()
+    engine._client = JudgeClient()
+    engine._client.add_model("primary", model="gpt-4o", timeout=15.0)
+
+    assert engine.timeout == 15.0
+
+
+def test_judge_engine_timeout_multiple_models_returns_max():
+    """Judge engine timeout returns the maximum timeout across all models."""
+    from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
+    from opensentinel.policy.engines.judge.client import JudgeClient
+
+    engine = JudgePolicyEngine()
+    engine._client = JudgeClient()
+    engine._client.add_model("primary", model="gpt-4o", timeout=15.0)
+    engine._client.add_model("secondary", model="gpt-4o-mini", timeout=30.0)
+
+    assert engine.timeout == 30.0
+
+
+def test_judge_engine_timeout_empty_client():
+    """Judge engine with an empty client (no models) returns 0.0."""
+    from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
+    from opensentinel.policy.engines.judge.client import JudgeClient
+
+    engine = JudgePolicyEngine()
+    engine._client = JudgeClient()  # no models added
+
+    assert engine.timeout == 0.0
