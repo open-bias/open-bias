@@ -240,7 +240,10 @@ class SentinelTracer:
         ) as span:
             # Set input data using Langfuse-compatible attributes
             if input_data is not None:
-                input_json = self._safe_json(input_data)
+                if self.config.redact_content:
+                    input_json = "[REDACTED]"
+                else:
+                    input_json = self._safe_json(input_data)
                 span.set_attribute("input.value", input_json)
                 span.set_attribute("langfuse.span.input", input_json)
             
@@ -365,12 +368,18 @@ class SentinelTracer:
         with trace.use_span(span, end_on_exit=False) as current_span:
             # Set input (messages)
             if messages:
-                messages_json = self._safe_json(messages)
-                span.set_attribute("gen_ai.content.prompt", messages_json)
+                if self.config.redact_content:
+                    span.set_attribute("gen_ai.content.prompt", "[REDACTED]")
+                else:
+                    messages_json = self._safe_json(messages)
+                    span.set_attribute("gen_ai.content.prompt", messages_json)
 
             # Set output (response)
             if response_content:
-                span.set_attribute("gen_ai.content.completion", response_content)
+                if self.config.redact_content:
+                    span.set_attribute("gen_ai.content.completion", "[REDACTED]")
+                else:
+                    span.set_attribute("gen_ai.content.completion", response_content)
 
             # Add usage info with GenAI semantic conventions
             if usage:
