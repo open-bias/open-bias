@@ -264,18 +264,15 @@ class TestEmbeddingAvailability:
 
         classifier = StateClassifier(states)
 
-        with patch.dict("sys.modules", {"sentence_transformers": None}):
-            import importlib
-            # Patch the import to raise ImportError
-            original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
+        original_import = __import__
 
-            def mock_import(name, *args, **kwargs):
-                if name == "sentence_transformers":
-                    raise ImportError("No module named 'sentence_transformers'")
-                return original_import(name, *args, **kwargs)
+        def mock_import(name, *args, **kwargs):
+            if name == "sentence_transformers":
+                raise ImportError("No module named 'sentence_transformers'")
+            return original_import(name, *args, **kwargs)
 
-            with patch("builtins.__import__", side_effect=mock_import):
-                assert classifier.check_embedding_availability() is False
+        with patch("builtins.__import__", side_effect=mock_import):
+            assert classifier.check_embedding_availability() is False
 
     def test_check_embedding_available(self, states):
         """Returns True when sentence-transformers is importable."""
