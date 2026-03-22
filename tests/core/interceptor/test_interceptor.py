@@ -274,6 +274,26 @@ class TestSyncPreCall:
         # response_modification is response-time only; request must be returned unmodified
         assert result.modified_data is None
 
+    async def test_intervene_does_not_mutate_original_request_data(self):
+        """Intervention must not mutate the caller's original request_data dict."""
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            decision=Decision.INTERVENE,
+            message="Stay on topic",
+        )
+        interceptor = Interceptor([checker])
+        original_messages = [{"role": "user", "content": "hello"}]
+        req: dict[str, Any] = {"messages": original_messages, "model": "gpt-4"}
+        original_content = req["messages"][0]["content"]
+
+        result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
+
+        assert result.allowed is True
+        assert result.modified_data is not None
+        # Caller's original dict must be untouched
+        assert req["messages"] is original_messages
+        assert req["messages"][0]["content"] == original_content
+
 
 # ===========================================================================
 # Sync POST_CALL tests

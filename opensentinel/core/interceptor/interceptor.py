@@ -6,6 +6,7 @@ handles async checker task management, and applies interventions.
 """
 
 import asyncio
+import copy
 import logging
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -129,7 +130,7 @@ class Interceptor:
         self._sessions.touch(session_id)
         self._sessions.evict_stale()
 
-        modified_data = dict(request_data)
+        modified_data = copy.deepcopy(request_data)
         all_metadata: dict[str, Any] = {"results": []}
 
         # Step 1: Apply pending async results
