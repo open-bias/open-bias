@@ -274,22 +274,31 @@ class TestResponseExtraction:
 class TestConversationEvalTrigger:
     async def test_conversation_eval_on_interval(self, engine, judge_config, sample_request, sample_response):
         """Conversation eval should trigger every N turns."""
-        judge_config["conversation_eval_interval"] = 2
+        judge_config["conversation_eval_interval"] = 1
         await engine.initialize(judge_config)
-        engine._client.call_judge = AsyncMock(return_value=_passing_judge_response())
 
-        # Turn 1 - no conversation eval
-        await engine.evaluate_response("s1", sample_response, sample_request)
-        assert engine._client.call_judge.call_count == 1
+        passing_verdict = JudgeVerdict(
+            scores=[],
+            composite_score=5.0,
+            action=VerdictAction.PASS,
+            summary="OK",
+            judge_model="gpt-4o-mini",
+            latency_ms=10.0,
+            token_usage=0,
+            scope=EvaluationScope.TURN,
+        )
+        engine._evaluator.evaluate_turn = AsyncMock(return_value=passing_verdict)
+        engine._evaluator.evaluate_conversation = AsyncMock(return_value=passing_verdict)
 
-        # Turn 2 - conversation eval triggers (turn_count == 2, 2 % 2 == 0)
-        # But turn_count is incremented inside record_verdict, so after first eval turn_count=1
-        # Second eval: turn_count becomes 2, but _should_run checks before increment
-        # Actually the session records the verdict which increments turn_count
-        # Let's just verify multiple calls happen
+        # Turn 1: turn_count=0, effective_turn=1, 1%1==0 → conversation eval fires
         await engine.evaluate_response("s1", sample_response, sample_request)
-        # Should have at least 2 calls (turn eval + possibly conversation eval)
-        assert engine._client.call_judge.call_count >= 2
+        assert engine._evaluator.evaluate_turn.call_count == 1
+        assert engine._evaluator.evaluate_conversation.call_count == 1
+
+        # Turn 2: turn_count=1, effective_turn=2, 2%1==0 → conversation eval fires again
+        await engine.evaluate_response("s1", sample_response, sample_request)
+        assert engine._evaluator.evaluate_turn.call_count == 2
+        assert engine._evaluator.evaluate_conversation.call_count == 2
 
 
 class TestPerRuleCriteria:
