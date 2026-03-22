@@ -143,11 +143,11 @@ class LLMConstraintEvaluator:
             elif constraint.type == ConstraintType.RESPONSE:
                 # Active after trigger has occurred
                 if constraint.trigger in state_history:
-                    # Only active if target not yet reached
-                    trigger_idx = state_history.index(constraint.trigger)
+                    # Only active if target not yet reached after the LAST trigger occurrence
+                    trigger_idx = len(state_history) - 1 - state_history[::-1].index(constraint.trigger)
                     target_after = any(
                         s == constraint.target
-                        for s in state_history[trigger_idx:]
+                        for s in state_history[trigger_idx + 1:]
                     )
                     should_include = not target_after
 

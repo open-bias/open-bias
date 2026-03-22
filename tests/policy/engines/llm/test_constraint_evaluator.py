@@ -210,6 +210,117 @@ class TestBatching:
         assert mock_llm_client.complete_json.call_count >= 3
 
 
+class TestResponseConstraintSelection:
+    """Tests for RESPONSE constraint selection logic (Tasks 54 and 55)."""
+
+    @pytest.fixture
+    def response_workflow(self):
+        """Workflow with a RESPONSE constraint: after 'trigger_state', must reach 'target_state'."""
+        return WorkflowDefinition(
+            name="response-test-workflow",
+            states=[
+                {"name": "start", "is_initial": True},
+                {"name": "trigger_state"},
+                {"name": "target_state"},
+                {"name": "other_state"},
+            ],
+            transitions=[
+                {"from_state": "start", "to_state": "trigger_state"},
+                {"from_state": "trigger_state", "to_state": "target_state"},
+                {"from_state": "trigger_state", "to_state": "other_state"},
+                {"from_state": "other_state", "to_state": "trigger_state"},
+            ],
+            constraints=[
+                {
+                    "name": "must_reach_target",
+                    "type": "response",
+                    "trigger": "trigger_state",
+                    "target": "target_state",
+                    "message": "After trigger_state, target_state must follow.",
+                },
+            ],
+        )
+
+    def _make_session(self, states: list[str]) -> SessionContext:
+        """Build a session with the given ordered list of to_states as history."""
+        from opensentinel.policy.engines.llm.models import ConfidenceTier
+        session = SessionContext(
+            session_id="test",
+            workflow_name="response-test-workflow",
+            current_state=states[-1] if states else "start",
+        )
+        prev = "start"
+        for state in states:
+            session.record_transition(prev, state, 0.9, ConfidenceTier.CONFIDENT, 0.0)
+            prev = state
+        return session
+
+    def test_response_active_when_trigger_occurred_no_target(self, response_workflow, mock_llm_client):
+        """RESPONSE constraint is active when trigger has occurred and target has not."""
+        session = self._make_session(["trigger_state", "other_state"])
+        evaluator = LLMConstraintEvaluator(mock_llm_client, response_workflow)
+        active = evaluator._select_active_constraints(session)
+        assert any(c.name == "must_reach_target" for c in active)
+
+    def test_response_inactive_when_target_followed_trigger(self, response_workflow, mock_llm_client):
+        """RESPONSE constraint is inactive when target appeared after trigger."""
+        session = self._make_session(["trigger_state", "target_state"])
+        evaluator = LLMConstraintEvaluator(mock_llm_client, response_workflow)
+        active = evaluator._select_active_constraints(session)
+        assert not any(c.name == "must_reach_target" for c in active)
+
+    def test_response_active_when_trigger_fires_again_after_target(self, response_workflow, mock_llm_client):
+        """RESPONSE constraint is active when trigger fires again after a previous target — last trigger has no following target."""
+        # History: trigger → target → other → trigger  (last trigger has no target yet)
+        session = self._make_session(["trigger_state", "target_state", "other_state", "trigger_state"])
+        evaluator = LLMConstraintEvaluator(mock_llm_client, response_workflow)
+        active = evaluator._select_active_constraints(session)
+        assert any(c.name == "must_reach_target" for c in active)
+
+    def test_response_inactive_when_last_trigger_has_target(self, response_workflow, mock_llm_client):
+        """RESPONSE constraint is inactive when the last trigger occurrence is followed by a target."""
+        # History: trigger → other → trigger → target  (last trigger is satisfied)
+        session = self._make_session(["trigger_state", "other_state", "trigger_state", "target_state"])
+        evaluator = LLMConstraintEvaluator(mock_llm_client, response_workflow)
+        active = evaluator._select_active_constraints(session)
+        assert not any(c.name == "must_reach_target" for c in active)
+
+    def test_response_self_match_not_satisfied(self, mock_llm_client):
+        """RESPONSE constraint where trigger == target is never self-satisfied."""
+        from opensentinel.policy.engines.llm.models import ConfidenceTier
+        workflow = WorkflowDefinition(
+            name="self-match-workflow",
+            states=[
+                {"name": "start", "is_initial": True},
+                {"name": "loop_state"},
+            ],
+            transitions=[
+                {"from_state": "start", "to_state": "loop_state"},
+                {"from_state": "loop_state", "to_state": "loop_state"},
+            ],
+            constraints=[
+                {
+                    "name": "self_response",
+                    "type": "response",
+                    "trigger": "loop_state",
+                    "target": "loop_state",
+                    "message": "trigger == target edge case",
+                },
+            ],
+        )
+        session = SessionContext(
+            session_id="self-match-test",
+            workflow_name="self-match-workflow",
+            current_state="start",
+        )
+        session.record_transition("start", "loop_state", 0.9, ConfidenceTier.CONFIDENT, 0.0)
+
+        evaluator = LLMConstraintEvaluator(mock_llm_client, workflow)
+        active = evaluator._select_active_constraints(session)
+        # Constraint must remain active — the trigger itself doesn't count as the target
+        assert any(c.name == "self_response" for c in active)
+
+
 class TestErrorHandling:
     """Tests for error handling."""
 
