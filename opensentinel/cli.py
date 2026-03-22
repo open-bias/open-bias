@@ -11,6 +11,7 @@ Commands:
 """
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -101,7 +102,7 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
     if config is None:
         from pathlib import Path as _Path
         _yaml_candidates = [_Path("osentinel.yaml"), _Path("osentinel.yml")]
-        _env_path = __import__("os").environ.get("OSNTL_CONFIG")
+        _env_path = os.environ.get("OSNTL_CONFIG")
         if _env_path:
             _yaml_candidates.insert(0, _Path(_env_path))
         if not any(p.is_file() for p in _yaml_candidates):
@@ -465,7 +466,7 @@ def eval_cmd(config: Path | None, json_output: Path | None, verbose: bool, debug
             if candidate.is_file():
                 config_path = candidate
                 break
-        env_path = __import__("os").environ.get("OSNTL_CONFIG")
+        env_path = os.environ.get("OSNTL_CONFIG")
         if config_path is None and env_path:
             config_path = Path(env_path)
 
