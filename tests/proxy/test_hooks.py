@@ -754,3 +754,81 @@ def test_judge_engine_timeout_empty_client():
     engine._client = JudgeClient()  # no models added
 
     assert engine.timeout == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Duplicate trace entry guard tests
+# ---------------------------------------------------------------------------
+
+
+async def test_post_call_traces_once_when_both_hooks_fire(callback, mock_api_key):
+    """log_llm_call is called exactly once even if both hooks process the same data dict."""
+    from datetime import datetime, timezone
+
+    mock_tracer = MagicMock()
+    callback._tracer = mock_tracer
+
+    # No interceptor, so _post_call_success_impl goes straight to tracing
+    callback._get_interceptor = AsyncMock(return_value=None)
+    callback._interceptor_initialized = True
+
+    data: dict = {"messages": [{"role": "user", "content": "hi"}], "model": "gpt-4o"}
+    response = MagicMock()
+    response.model = "gpt-4o"
+    response.choices = []
+
+    # Simulate _post_call_success_impl running (the primary hook)
+    await callback._post_call_success_impl(data, mock_api_key, response)
+
+    # Verify the traced flag was set
+    assert data.get("metadata", {}).get("_opensentinel_traced") is True
+
+    # Simulate _log_success_impl running for the same request data
+    now = datetime.now(timezone.utc)
+    await callback._log_success_impl(data, response, now, now)
+
+    # log_llm_call should have been called exactly once (from _post_call_success_impl)
+    mock_tracer.log_llm_call.assert_called_once()
+
+
+async def test_post_call_guard_skips_tracing_if_already_traced(callback, mock_api_key):
+    """_post_call_success_impl does not call log_llm_call when _opensentinel_traced is set."""
+    mock_tracer = MagicMock()
+    callback._tracer = mock_tracer
+    callback._get_interceptor = AsyncMock(return_value=None)
+    callback._interceptor_initialized = True
+
+    # Pre-set the guard flag as if some other code path already traced this request
+    data: dict = {
+        "messages": [{"role": "user", "content": "hi"}],
+        "model": "gpt-4o",
+        "metadata": {"_opensentinel_traced": True},
+    }
+    response = MagicMock()
+    response.model = "gpt-4o"
+    response.choices = []
+
+    await callback._post_call_success_impl(data, mock_api_key, response)
+
+    mock_tracer.log_llm_call.assert_not_called()
+
+
+async def test_log_success_impl_guard_returns_early_if_traced(callback):
+    """_log_success_impl returns early when _opensentinel_traced flag is set."""
+    from datetime import datetime, timezone
+
+    mock_tracer = MagicMock()
+    callback._tracer = mock_tracer
+    callback._get_interceptor = AsyncMock(return_value=None)
+    callback._interceptor_initialized = True
+
+    kwargs: dict = {
+        "messages": [{"role": "user", "content": "hi"}],
+        "metadata": {"_opensentinel_traced": True},
+    }
+    now = datetime.now(timezone.utc)
+
+    # Should return without calling log_llm_call
+    await callback._log_success_impl(kwargs, MagicMock(), now, now)
+
+    mock_tracer.log_llm_call.assert_not_called()

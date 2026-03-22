@@ -159,6 +159,7 @@ tracing:
   type: otlp                    # otlp | langfuse | console | none
   endpoint: http://localhost:4317
   service_name: opensentinel
+  redact_content: false         # strip prompts/completions from spans (default: false)
 
   # Langfuse-specific (when type: langfuse)
   # langfuse_public_key: pk-...

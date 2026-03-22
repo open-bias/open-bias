@@ -240,7 +240,10 @@ class SentinelTracer:
         ) as span:
             # Set input data using Langfuse-compatible attributes
             if input_data is not None:
-                input_json = self._safe_json(input_data)
+                if self.config.redact_content:
+                    input_json = "[REDACTED]"
+                else:
+                    input_json = self._safe_json(input_data)
                 span.set_attribute("input.value", input_json)
                 span.set_attribute("langfuse.span.input", input_json)
             
@@ -296,31 +299,6 @@ class SentinelTracer:
 
             logger.info(f"Logged event '{name}' for session {session_id}")
 
-    def log_state_transition(
-        self,
-        session_id: str,
-        previous_state: str,
-        new_state: str,
-        confidence: float,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Log a workflow state transition."""
-        self.log_event(
-            session_id=session_id,
-            name="state_transition",
-            input_data={
-                "previous_state": previous_state,
-                "new_state": new_state,
-            },
-            output_data={
-                "confidence": confidence,
-            },
-            metadata={
-                "transition": f"{previous_state} -> {new_state}",
-                **(metadata or {}),
-            },
-        )
-
     def log_intervention(
         self,
         session_id: str,
@@ -337,116 +315,6 @@ class SentinelTracer:
                 **(context or {}),
             },
         )
-
-    def log_deviation(
-        self,
-        session_id: str,
-        constraint_name: str,
-        severity: str,
-        details: dict[str, Any] | None = None,
-    ) -> None:
-        """Log a workflow deviation/constraint violation."""
-        self.log_event(
-            session_id=session_id,
-            name="workflow_deviation",
-            input_data={
-                "constraint": constraint_name,
-                "severity": severity,
-            },
-            metadata={
-                "constraint_name": constraint_name,
-                "severity": severity,
-                **(details or {}),
-            },
-        )
-
-    def log_policy_evaluation(
-        self,
-        session_id: str,
-        engine_name: str,
-        decision: str,
-        hook_type: str,
-        input_data: Any | None = None,
-        output_data: Any | None = None,
-        violations: list[Any] | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """
-        Log a policy evaluation as an OTEL span with rich attributes.
-        
-        Args:
-            session_id: Session identifier
-            engine_name: Name of the policy engine (e.g., "nemo:guardrails")
-            decision: Policy decision (ALLOW, DENY, MODIFY, WARN)
-            hook_type: Which hook triggered this (pre_call, post_call, moderation)
-            input_data: Request/messages being evaluated
-            output_data: Policy evaluation result
-            violations: List of violation dicts with name, severity, message (from EngineResult.metadata)
-            metadata: Additional metadata
-        """
-        if not self._enabled or not self._tracer:
-            return
-
-        parent_span = self._get_or_create_session_span(session_id)
-        parent_ctx = trace.set_span_in_context(parent_span) if parent_span else None
-
-        span_name = f"policy_evaluation_{hook_type}" if hook_type else "policy_evaluation"
-        
-        span_attrs = {
-            "opensentinel.session_id": session_id,
-            "opensentinel.policy.engine": engine_name,
-            "opensentinel.policy.decision": decision,
-            "opensentinel.policy.hook": hook_type,
-        }
-
-        with self._tracer.start_as_current_span(
-            span_name,
-            context=parent_ctx,
-            attributes=span_attrs,
-        ) as span:
-            # Set input data (what was evaluated)
-            if input_data is not None:
-                input_json = self._safe_json(input_data)
-                span.set_attribute("input.value", input_json)
-                span.set_attribute("langfuse.span.input", input_json)
-            
-            # Set output data (evaluation result)
-            if output_data is not None:
-                output_json = self._safe_json(output_data)
-                span.set_attribute("output.value", output_json)
-                span.set_attribute("langfuse.span.output", output_json)
-            
-            # Add violations as structured data
-            if violations:
-                span.set_attribute("opensentinel.policy.violation_count", len(violations))
-                violation_names = [v.get("name", "unknown") if isinstance(v, dict) else getattr(v, "name", "unknown") for v in violations]
-                span.set_attribute("opensentinel.policy.violations", self._safe_json(violation_names))
-
-                # Add each violation as an event
-                for violation in violations:
-                    if isinstance(violation, dict):
-                        v_name = violation.get("name", "unknown")
-                        v_severity = violation.get("severity", "unknown")
-                        v_message = violation.get("message", "")
-                    else:
-                        v_name = getattr(violation, "name", "unknown")
-                        v_severity = getattr(violation, "severity", "unknown")
-                        v_message = getattr(violation, "message", "")
-                    span.add_event(
-                        f"violation:{v_name}",
-                        attributes={
-                            "severity": v_severity,
-                            "message": v_message,
-                        }
-                    )
-            
-            # Add metadata
-            if metadata:
-                span.set_attribute("langfuse.span.metadata", self._safe_json(metadata))
-                for key, value in metadata.items():
-                    span.set_attribute(f"opensentinel.metadata.{key}", str(value))
-
-            logger.debug(f"Logged policy evaluation for session {session_id} (decision={decision})")
 
     def log_llm_call(
         self,
@@ -500,12 +368,18 @@ class SentinelTracer:
         with trace.use_span(span, end_on_exit=False) as current_span:
             # Set input (messages)
             if messages:
-                messages_json = self._safe_json(messages)
-                span.set_attribute("gen_ai.content.prompt", messages_json)
+                if self.config.redact_content:
+                    span.set_attribute("gen_ai.content.prompt", "[REDACTED]")
+                else:
+                    messages_json = self._safe_json(messages)
+                    span.set_attribute("gen_ai.content.prompt", messages_json)
 
             # Set output (response)
             if response_content:
-                span.set_attribute("gen_ai.content.completion", response_content)
+                if self.config.redact_content:
+                    span.set_attribute("gen_ai.content.completion", "[REDACTED]")
+                else:
+                    span.set_attribute("gen_ai.content.completion", response_content)
 
             # Add usage info with GenAI semantic conventions
             if usage:

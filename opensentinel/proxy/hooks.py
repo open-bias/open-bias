@@ -614,8 +614,11 @@ class SentinelCallback(CustomLogger):
 
         interceptor = await self._get_interceptor()
 
-        # Log LLM call via OTEL BEFORE interceptor
-        if self.tracer:
+        # Log LLM call via OTEL BEFORE interceptor.
+        # Guard against duplicate entries: _opensentinel_traced is set after logging so that
+        # _log_success_impl (or any future caller) can detect that this request was already traced.
+        already_traced = data.get("metadata", {}).get("_opensentinel_traced", False)
+        if self.tracer and not already_traced:
             response_content = extract_response_content(response) or None
 
             usage_info = extract_usage_info(response)
@@ -634,6 +637,7 @@ class SentinelCallback(CustomLogger):
                 start_time=llm_start_time,
                 end_time=llm_end_time,
             )
+            data.setdefault("metadata", {})["_opensentinel_traced"] = True
 
         if interceptor:
             # Extract response content for tracing
@@ -819,6 +823,10 @@ class SentinelCallback(CustomLogger):
         # Evaluation is handled in `async_post_call_success_hook` which runs in the main flow.
 
         # LLM call tracing is handled in _post_call_success_impl to avoid duplicate trace entries.
+        # The _opensentinel_traced flag is set there after logging; any tracing added here MUST
+        # check that flag first to prevent duplicate OTEL spans.
+        if kwargs.get("metadata", {}).get("_opensentinel_traced"):
+            return
 
     async def async_log_failure_event(
         self,

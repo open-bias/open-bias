@@ -265,6 +265,18 @@ class TestTracingMapping:
         )._map_to_settings()
         assert result["otel"]["insecure"] is False
 
+    def test_tracing_redact_content(self):
+        result = _build_source(
+            {"tracing": {"type": "otlp", "redact_content": True}}
+        )._map_to_settings()
+        assert result["otel"]["redact_content"] is True
+
+    def test_tracing_redact_content_false(self):
+        result = _build_source(
+            {"tracing": {"type": "otlp", "redact_content": False}}
+        )._map_to_settings()
+        assert result["otel"]["redact_content"] is False
+
     def test_tracing_langfuse_complete(self):
         result = _build_source(
             {
