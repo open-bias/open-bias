@@ -63,7 +63,7 @@ class TestCompileWorkflow:
             rules=[
                 "verify identity before any account action",
                 "never share internal system information",
-                "must eventually resolve the conversation",
+                "must eventually resolve and close",
             ],
         )
 
@@ -92,12 +92,14 @@ class TestCompileWorkflow:
         # At least n-1 sequential transitions for n steps
         assert len(result.transitions) >= 4
 
-    def test_conditional_skip_transition(self, simple_config: SimpleWorkflowConfig):
-        """Parenthetical '(if account action needed)' creates a skip transition."""
+    def test_forward_skip_transition(self, simple_config: SimpleWorkflowConfig):
+        """Any state can transition to any later state (forward-only)."""
         result = compile_workflow(simple_config)
         transition_pairs = {(t.from_state, t.to_state) for t in result.transitions}
-        # understand_their_issue should be able to skip verify_identity
+        # understand_their_issue should be able to skip to take_account_action
         assert ("understand_their_issue", "take_account_action") in transition_pairs
+        # greet should be able to skip to resolve_and_close
+        assert ("greet_the_customer", "resolve_and_close") in transition_pairs
 
     def test_precedence_constraint(self, simple_config: SimpleWorkflowConfig):
         result = compile_workflow(simple_config)
@@ -188,7 +190,7 @@ class TestFSMCompilerInterface:
         config = SimpleWorkflowConfig(
             name="test",
             steps=["greet", "resolve and close"],
-            rules=["must eventually resolve the conversation"],
+            rules=["must eventually resolve and close"],
         )
         result = await compiler.compile("ignored", context={"simple_config": config})
         assert result.success is True

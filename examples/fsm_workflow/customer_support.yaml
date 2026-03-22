@@ -15,6 +15,7 @@ steps:
   - verify identity (if account action needed)
   - look up information
   - take account action (if account action needed)
+  - escalate to human (if escalation needed)
   - resolve and close
 
 rules:

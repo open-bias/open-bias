@@ -19,7 +19,6 @@ def sample_workflow():
     """Sample workflow for testing."""
     return WorkflowDefinition(
         name="test-workflow",
-        version="1.0",
         states=[
             {
                 "name": "greeting",

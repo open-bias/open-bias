@@ -163,29 +163,21 @@ def _infer_transitions(states: list[State], steps: list[str]) -> list[Transition
     """
     Build transitions from step ordering.
 
-    Sequential by default. Parenthetical hints like "(if X needed)" create
-    skip-ahead branches from the previous state to the state after.
+    Every state can transition to any later state (forward-only). Steps define
+    an ordering constraint — you can't go backward — but an agent may advance
+    multiple steps in a single turn. Policy constraints (PRECEDENCE, NEVER, etc.)
+    handle enforcement of required intermediate steps.
     """
     transitions: list[Transition] = []
-    for i in range(len(states) - 1):
-        transitions.append(
-            Transition(from_state=states[i].name, to_state=states[i + 1].name)
-        )
-
-    # Detect conditional steps via parenthetical hints and add skip transitions
-    for i, step in enumerate(steps):
-        match = _PAREN_HINT.search(step)
-        if match and i > 0 and i < len(states) - 1:
-            # Previous state can skip the conditional state
-            skip = Transition(
-                from_state=states[i - 1].name,
-                to_state=states[i + 1].name,
-                description=f"skip conditional: {step}",
-            )
-            # Avoid duplicate
-            existing = {(t.from_state, t.to_state) for t in transitions}
-            if (skip.from_state, skip.to_state) not in existing:
-                transitions.append(skip)
+    existing: set[tuple[str, str]] = set()
+    for i in range(len(states)):
+        for j in range(i + 1, len(states)):
+            pair = (states[i].name, states[j].name)
+            if pair not in existing:
+                transitions.append(
+                    Transition(from_state=states[i].name, to_state=states[j].name)
+                )
+                existing.add(pair)
 
     return transitions
 
