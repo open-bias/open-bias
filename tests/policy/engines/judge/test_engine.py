@@ -830,12 +830,13 @@ class TestInterventionEscalation:
         assert result["should_escalate"] is True
         assert "intervention_count_exceeded" in result["reason"]
 
-    def test_escalation_detected_on_non_worst_verdict(self):
-        """Escalation from a non-worst verdict is detected.
+    def test_no_escalation_metadata_when_already_block(self):
+        """Escalation metadata is NOT added when decision is already BLOCK.
 
         Scenario: conversation verdict is BLOCK (worst), turn verdict is
-        INTERVENE with a repeat criterion violation. Escalation should still
-        be detected because _build_result checks ALL non-PASS verdicts.
+        INTERVENE with a repeat criterion violation. Escalation conditions are
+        met, but the decision was already BLOCK — no actual upgrade occurred,
+        so escalation metadata would be misleading.
         """
         from opensentinel.policy.engines.judge.models import JudgeSessionContext
 
@@ -874,10 +875,58 @@ class TestInterventionEscalation:
 
         result = engine._build_result([conv_verdict, turn_verdict], session)
 
-        # Decision stays BLOCK (worst), but escalation metadata must be present
+        # Decision is BLOCK (from worst verdict), no escalation upgrade happened
+        assert result.decision == Decision.BLOCK
+        assert result.metadata.get("escalated") is not True
+        assert "escalation_reason" not in result.metadata
+
+    def test_escalation_from_non_worst_verdict_upgrades_decision(self):
+        """Escalation from a non-worst INTERVENE verdict upgrades to BLOCK.
+
+        Scenario: two INTERVENE verdicts, one has repeat criterion. The
+        escalation should upgrade the decision from INTERVENE to BLOCK and
+        include escalation metadata.
+        """
+        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+
+        session = JudgeSessionContext(session_id="esc-upgrade")
+        session.last_intervention_criteria = {"no_pii"}
+        session.intervention_count = 1
+
+        engine = JudgePolicyEngine()
+
+        # Conversation verdict: INTERVENE (worst by tie)
+        conv_verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(criterion="tone", score=2, max_score=5, reasoning="Rude"),
+            ],
+            composite_score=0.4,
+            action=VerdictAction.INTERVENE,
+            summary="Tone issue",
+            judge_model="test",
+            scope=EvaluationScope.CONVERSATION,
+            metadata={},
+        )
+
+        # Turn verdict: INTERVENE with repeat criterion "no_pii"
+        turn_verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(criterion="no_pii", score=1, max_score=5, reasoning="PII leaked"),
+            ],
+            composite_score=0.3,
+            action=VerdictAction.INTERVENE,
+            summary="PII violation",
+            judge_model="test",
+            scope=EvaluationScope.TURN,
+            metadata={"criterion_failures": ["no_pii"]},
+        )
+
+        result = engine._build_result([conv_verdict, turn_verdict], session)
+
+        # Decision upgraded from INTERVENE to BLOCK via escalation
         assert result.decision == Decision.BLOCK
         assert result.metadata.get("escalated") is True
-        assert "repeat" in result.metadata.get("escalation_reason", "").lower()
+        assert "repeat" in result.metadata.get("escalation_reason", "")
 
     def test_no_escalation_when_all_verdicts_pass(self):
         """No escalation when all verdicts are PASS."""

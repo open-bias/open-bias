@@ -591,14 +591,16 @@ class JudgePolicyEngine(PolicyEngine):
                 escalation_info = info
                 break
 
+        was_escalated = False
         if escalation_info["should_escalate"] and decision == Decision.INTERVENE:
             decision = Decision.BLOCK
+            was_escalated = True
 
         # message = guidance for INTERVENE, reason for BLOCK
         message: str | None = None
         if decision in (Decision.INTERVENE, Decision.BLOCK):
             message = self._build_violation_message(worst_verdict)
-            if escalation_info["should_escalate"]:
+            if was_escalated:
                 message = escalation_info["escalation_prefix"] + "\n" + message
 
         metadata: dict[str, Any] = {
@@ -620,7 +622,7 @@ class JudgePolicyEngine(PolicyEngine):
             ],
         }
 
-        if escalation_info["should_escalate"]:
+        if was_escalated:
             metadata["escalated"] = True
             metadata["escalation_reason"] = escalation_info["reason"]
 
