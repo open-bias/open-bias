@@ -42,15 +42,35 @@ def runner() -> EvalRunner:
     return EvalRunner()
 
 
-def _patch_nemo(engine: Any, responses: list[str]) -> None:
-    """Patch engine._rails.generate_async with sequential canned responses."""
+def _make_nemo_result(text: str, activated_rails: list[dict[str, Any]] | None = None) -> Any:
+    """Build a mock NeMo result object with .log.activated_rails."""
+    log = MagicMock()
+    log.activated_rails = activated_rails or []
+    result = MagicMock()
+    result.log = log
+    result.content = text
+    return result
+
+
+def _patch_nemo(
+    engine: Any,
+    responses: list[str | dict[str, Any]],
+) -> None:
+    """Patch engine._rails.generate_async with sequential canned NeMo result objects.
+
+    Each entry in *responses* is either:
+    - A plain str  → clean result (no rails fired, empty activated_rails)
+    - A dict with keys "text" and "activated_rails" → rails-fired result
+    """
     call_count = 0
 
-    async def mock_generate_async(*args: Any, **kwargs: Any) -> str:
+    async def mock_generate_async(*args: Any, **kwargs: Any) -> Any:
         nonlocal call_count
-        resp = responses[call_count % len(responses)]
+        spec = responses[call_count % len(responses)]
         call_count += 1
-        return resp
+        if isinstance(spec, dict):
+            return _make_nemo_result(spec["text"], spec.get("activated_rails", []))
+        return _make_nemo_result(spec)
 
     engine._rails.generate_async = mock_generate_async
 
@@ -82,12 +102,18 @@ async def test_financial_advice_blocked(engine, runner):
     messages = json.loads((EVALS_DIR / "financial_advice.json").read_text())
 
     # 2 turns × 2 calls = 4 responses
-    # Input rails pass, output rails return blocked markers
+    # Input rails pass (clean), output rails fire for financial advice
     _patch_nemo(engine, [
         "Let me check on that for you.",
-        "I am a customer support agent and cannot provide financial advice. Please consult a qualified financial advisor.",
+        {
+            "text": "I am a customer support agent and cannot provide financial advice.",
+            "activated_rails": [{"type": "output", "name": "financial_advice_rail"}],
+        },
         "I understand your question.",
-        "I cannot provide investment recommendations. Please speak with a licensed financial advisor.",
+        {
+            "text": "I cannot provide investment recommendations.",
+            "activated_rails": [{"type": "output", "name": "financial_advice_rail"}],
+        },
     ])
 
     result = await runner.run(engine, messages)
@@ -108,12 +134,18 @@ async def test_security_bypass_blocked(engine, runner):
     messages = json.loads((EVALS_DIR / "security_bypass.json").read_text())
 
     # 2 turns × 2 calls = 4 responses
-    # Input rails pass, output rails return blocked markers
+    # Input rails pass (clean), output rails fire for security bypass attempts
     _patch_nemo(engine, [
         "Let me look into that.",
-        "I cannot help with bypassing security measures. Two-factor authentication exists to protect your account.",
+        {
+            "text": "I cannot help with bypassing security measures.",
+            "activated_rails": [{"type": "output", "name": "security_bypass_rail"}],
+        },
         "I see what you're asking about.",
-        "I'm not able to disable security features. Please contact our security team if you're having access issues.",
+        {
+            "text": "I'm not able to disable security features.",
+            "activated_rails": [{"type": "output", "name": "security_bypass_rail"}],
+        },
     ])
 
     result = await runner.run(engine, messages)
