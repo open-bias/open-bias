@@ -80,6 +80,12 @@ class Interceptor:
                 self._sync_post_call.append(checker)
 
         # Intervention strategy
+        valid_strategies = {s.value for s in StrategyType}
+        if default_strategy not in valid_strategies:
+            raise ValueError(
+                f"Unknown default_strategy '{default_strategy}'. "
+                f"Valid values: {sorted(valid_strategies)}"
+            )
         self._default_strategy = default_strategy
         self._fail_action = fail_action
 
@@ -455,13 +461,6 @@ class Interceptor:
         result = dict(request_data)
         messages = result.get("messages", [])
         effective_strategy = strategy or self._default_strategy
-
-        valid_values = {s.value for s in StrategyType}
-        if effective_strategy not in valid_values:
-            logger.warning(
-                f"Unknown intervention strategy '{effective_strategy}', "
-                f"falling back to system_prompt_append"
-            )
 
         if effective_strategy == "hard_block":
             HardBlockStrategy.apply(message)

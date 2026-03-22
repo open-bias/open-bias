@@ -619,6 +619,20 @@ class TestInterceptorInit:
         assert pre.allowed is True
         assert post.allowed is True
 
+    def test_invalid_default_strategy_raises(self) -> None:
+        """Unknown default_strategy should raise ValueError at init time."""
+        with pytest.raises(ValueError, match="hard_blok"):
+            Interceptor([], default_strategy="hard_blok")
+
+    @pytest.mark.parametrize(
+        "strategy",
+        ["system_prompt_append", "user_message_inject", "response_modification", "hard_block"],
+    )
+    def test_valid_default_strategies_accepted(self, strategy: str) -> None:
+        """All StrategyType values should be accepted without error."""
+        interceptor = Interceptor([], default_strategy=strategy)
+        assert interceptor._default_strategy == strategy
+
 
 # ===========================================================================
 # Session TTL and LRU eviction tests
