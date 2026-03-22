@@ -656,6 +656,10 @@ class SentinelSettings(BaseSettings):
                 f"Policy configuration file not found: {policy_config_path}"
             )
 
+        # FSM engine is purely local — no LLM model or API keys required.
+        if self.policy.engine.type == "fsm":
+            return
+
         default_model = self.proxy.default_model
 
         if not default_model:

@@ -78,12 +78,44 @@ class TestConfigValidation:
     def test_default_config_is_judge_and_valid(self, monkeypatch):
         """Test that default configuration without any file uses judge engine and passes validation if API key and model present."""
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-        
+
         settings = SentinelSettings(
             proxy={"default_model": "gpt-4o-mini"},
             _env_file=None,
         )
         assert settings.policy.engine.type == "judge"
-        
+
         # Should not raise
         settings.validate()
+
+    def test_fsm_engine_passes_without_api_keys(self, monkeypatch):
+        """FSM engine is local-only and must not require any LLM API keys."""
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+        settings = SentinelSettings(
+            policy={"engine": {"type": "fsm"}},
+            _env_file=None,
+        )
+        assert settings.policy.engine.type == "fsm"
+
+        # Should not raise even with no keys or model
+        settings.validate()
+
+    def test_non_fsm_engine_still_requires_model(self):
+        """Non-FSM engines (e.g. judge) must still fail validation without a model/API key."""
+        settings = SentinelSettings(
+            policy={"engine": {"type": "judge"}},
+            openai_api_key=None,
+            anthropic_api_key=None,
+            google_api_key=None,
+            gemini_api_key=None,
+            openrouter_api_key=None,
+            _env_file=None,
+        )
+        assert settings.policy.engine.type == "judge"
+
+        with pytest.raises(ValueError, match="No LLM API keys detected"):
+            settings.validate()
