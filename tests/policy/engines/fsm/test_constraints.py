@@ -67,6 +67,7 @@ class TestConstraintTypes:
         assert evaluator.evaluate_all(session) == []
 
     def test_never_violated(self):
+        """NEVER fires when the proposed state matches the forbidden target."""
         constraints = [
             Constraint(
                 name="test",
@@ -76,9 +77,9 @@ class TestConstraintTypes:
             )
         ]
         evaluator = ConstraintEvaluator(constraints)
-        session = make_session(["start", "forbidden", "end"])
+        session = make_session(["start"])
 
-        violations = evaluator.evaluate_all(session)
+        violations = evaluator.evaluate_all(session, proposed_state="forbidden")
         assert len(violations) == 1
         assert violations[0].constraint_name == "test"
         assert violations[0].constraint_type == ConstraintType.NEVER
@@ -235,9 +236,9 @@ class TestConstraintTypes:
             ),
         ]
         evaluator = ConstraintEvaluator(constraints)
-        session = make_session(["start", "action", "bad"])
+        session = make_session(["start", "action"])
 
-        violations = evaluator.evaluate_all(session)
+        violations = evaluator.evaluate_all(session, proposed_state="bad")
         assert len(violations) == 2
 
     # --- Violation details ---
@@ -252,9 +253,9 @@ class TestConstraintTypes:
             )
         ]
         evaluator = ConstraintEvaluator(constraints)
-        session = make_session(["start", "forbidden"])
+        session = make_session(["start"])
 
-        violations = evaluator.evaluate_all(session)
+        violations = evaluator.evaluate_all(session, proposed_state="forbidden")
         assert len(violations) == 1
         v = violations[0]
         assert v.constraint_name == "test"
@@ -272,9 +273,9 @@ class TestConstraintTypes:
             )
         ]
         evaluator = ConstraintEvaluator(constraints)
-        session = make_session(["start", "forbidden"])
+        session = make_session(["start"])
 
-        violations = evaluator.evaluate_all(session)
+        violations = evaluator.evaluate_all(session, proposed_state="forbidden")
         assert len(violations) == 1
         assert "forbidden" in violations[0].message
 
@@ -379,3 +380,69 @@ class TestSessionBoundaryEvaluation:
         session = make_session(["start", "end"])
 
         assert evaluator.evaluate_session_boundary(session) == []
+
+
+class TestNeverNoPoisoning:
+    """NEVER constraints must not permanently poison session history."""
+
+    def test_never_does_not_fire_on_past_history(self):
+        """NEVER should not fire when forbidden state is only in history, not proposed."""
+        constraints = [
+            Constraint(name="no_forbidden", type=ConstraintType.NEVER, target="forbidden")
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        # Even if forbidden is in history, without proposing it again, no violation
+        session = make_session(["start", "forbidden", "safe"])
+
+        violations = evaluator.evaluate_all(session)
+        assert violations == []
+
+    def test_never_fires_only_on_proposed_state(self):
+        """NEVER fires when forbidden state is proposed, regardless of history."""
+        constraints = [
+            Constraint(name="no_forbidden", type=ConstraintType.NEVER, target="forbidden")
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start", "safe"])
+
+        violations = evaluator.evaluate_all(session, proposed_state="forbidden")
+        assert len(violations) == 1
+
+    def test_never_does_not_fire_on_unrelated_proposed_state(self):
+        """NEVER does not fire when a different state is proposed."""
+        constraints = [
+            Constraint(name="no_forbidden", type=ConstraintType.NEVER, target="forbidden")
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start"])
+
+        violations = evaluator.evaluate_all(session, proposed_state="safe")
+        assert violations == []
+
+    def test_never_no_permanent_poisoning(self):
+        """After a forbidden state was proposed and blocked, subsequent safe states pass."""
+        constraints = [
+            Constraint(name="no_forbidden", type=ConstraintType.NEVER, target="forbidden")
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+
+        # First: propose forbidden -> violation
+        session = make_session(["start"])
+        violations = evaluator.evaluate_all(session, proposed_state="forbidden")
+        assert len(violations) == 1
+
+        # Simulate: transition was blocked, session stays at "start"
+        # Now propose a safe state -> no violation
+        violations = evaluator.evaluate_all(session, proposed_state="safe")
+        assert violations == []
+
+    def test_never_without_proposed_state_always_satisfied(self):
+        """Without a proposed state, NEVER is always satisfied (nothing to check)."""
+        constraints = [
+            Constraint(name="no_forbidden", type=ConstraintType.NEVER, target="forbidden")
+        ]
+        evaluator = ConstraintEvaluator(constraints)
+        session = make_session(["start", "middle", "end"])
+
+        violations = evaluator.evaluate_all(session)
+        assert violations == []

@@ -209,6 +209,14 @@ class WorkflowStateMachine:
             if current == target_state:
                 return (TransitionResult.SAME_STATE, None)
 
+            # Terminal states reject all outgoing transitions
+            current_state_def = self._states.get(current)
+            if current_state_def and current_state_def.is_terminal:
+                return (
+                    TransitionResult.INVALID_TRANSITION,
+                    f"Cannot transition from terminal state '{current}'",
+                )
+
             # Check if transition is valid
             valid_transitions = self._transitions.get(current, [])
             matching = [t for t in valid_transitions if t.to_state == target_state]

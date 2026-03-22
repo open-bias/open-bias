@@ -103,6 +103,54 @@ class TestWorkflowStateMachine:
         assert len(session.history) == 1
 
 
+class TestTerminalStateEnforcement:
+    """Terminal states must reject all outgoing transitions."""
+
+    @pytest.fixture
+    def machine(self, simple_workflow):
+        return WorkflowStateMachine(simple_workflow)
+
+    async def test_terminal_state_rejects_transition(self, machine):
+        """Cannot transition out of a terminal state."""
+        await machine.get_or_create_session("s1")
+        await machine.transition("s1", "middle")
+        await machine.transition("s1", "end")
+
+        # "end" is terminal — any transition should be rejected
+        result, error = await machine.transition("s1", "start")
+
+        assert result == TransitionResult.INVALID_TRANSITION
+        assert "terminal" in error.lower()
+
+    async def test_terminal_state_same_state_allowed(self, machine):
+        """Same-state transition in terminal state returns SAME_STATE, not rejected."""
+        await machine.get_or_create_session("s1")
+        await machine.transition("s1", "middle")
+        await machine.transition("s1", "end")
+
+        result, _ = await machine.transition("s1", "end")
+
+        assert result == TransitionResult.SAME_STATE
+
+    async def test_terminal_state_preserves_history(self, machine):
+        """Rejected transition from terminal state does not alter history."""
+        await machine.get_or_create_session("s1")
+        await machine.transition("s1", "middle")
+        await machine.transition("s1", "end")
+
+        await machine.transition("s1", "start")
+
+        history = await machine.get_state_history("s1")
+        assert history == ["start", "middle", "end"]
+
+    async def test_non_terminal_state_allows_transition(self, machine):
+        """Non-terminal states continue to allow valid transitions."""
+        await machine.get_or_create_session("s1")
+
+        result, _ = await machine.transition("s1", "middle")
+        assert result == TransitionResult.SUCCESS
+
+
 class TestSessionState:
     """Tests for SessionState dataclass."""
 

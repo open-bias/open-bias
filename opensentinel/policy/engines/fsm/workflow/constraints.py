@@ -76,7 +76,7 @@ class ConstraintEvaluator:
             history = history + [proposed_state]
 
         for constraint in self.constraints:
-            result = self._evaluate_constraint(constraint, history)
+            result = self._evaluate_constraint(constraint, history, proposed_state)
 
             if result == EvaluationResult.VIOLATED:
                 violation = ConstraintViolation(
@@ -150,6 +150,7 @@ class ConstraintEvaluator:
         self,
         constraint: Constraint,
         history: list[str],
+        proposed_state: str | None = None,
     ) -> EvaluationResult:
         """Evaluate a single constraint."""
         match constraint.type:
@@ -157,7 +158,7 @@ class ConstraintEvaluator:
                 return self._eval_eventually(constraint.target, history)
 
             case ConstraintType.NEVER:
-                return self._eval_never(constraint.target, history)
+                return self._eval_never(constraint.target, proposed_state)
 
             case ConstraintType.RESPONSE:
                 return self._eval_response(
@@ -184,13 +185,13 @@ class ConstraintEvaluator:
         return EvaluationResult.PENDING
 
     def _eval_never(
-        self, target: str | None, history: list[str]
+        self, target: str | None, proposed_state: str | None
     ) -> EvaluationResult:
         """G(!target): Target state must never occur."""
         if not target:
             return EvaluationResult.PENDING
 
-        if target in history:
+        if proposed_state == target:
             return EvaluationResult.VIOLATED
 
         return EvaluationResult.SATISFIED

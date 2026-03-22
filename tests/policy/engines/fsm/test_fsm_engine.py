@@ -170,8 +170,8 @@ async def test_session_boundary_evaluation_at_terminal(engine, mocks):
     mocks["constraints"].return_value.evaluate_session_boundary.assert_called_once()
 
 
-async def test_invalid_transition_skips_constraint_evaluation(engine, mocks):
-    """Constraint violations should not be reported for rejected transitions."""
+async def test_invalid_transition_returns_intervene(engine, mocks):
+    """Invalid transitions produce INTERVENE to enforce FSM graph structure."""
     mock_workflow = MagicMock(name="test_workflow", states=[], constraints=[])
     mocks["parser"]().parse_dict.return_value = mock_workflow
     await engine.initialize({"workflow": {}})
@@ -183,15 +183,17 @@ async def test_invalid_transition_skips_constraint_evaluation(engine, mocks):
         state_name="invalid_state", confidence=0.9, method="test"
     )
 
+    # No constraint violations
+    mocks["constraints"].return_value.evaluate_all.return_value = []
+
     mocks["sm"].return_value.transition = AsyncMock(
         return_value=(TransitionResult.INVALID_TRANSITION, "No such transition")
     )
 
     result = await engine.evaluate_response("sid", "response", {})
 
-    assert result.decision == Decision.ALLOW
-    assert len(result.metadata["violations"]) == 0
-    mocks["constraints"].return_value.evaluate_all.assert_not_called()
+    assert result.decision == Decision.INTERVENE
+    assert result.message == "No such transition"
 
 
 async def test_multiple_violations_joined_in_message(engine, mocks):
@@ -226,3 +228,58 @@ async def test_multiple_violations_joined_in_message(engine, mocks):
 
     assert result.decision == Decision.INTERVENE
     assert result.message == "Violation 0\nViolation 1\nViolation 2"
+
+
+async def test_never_violation_skips_transition(engine, mocks):
+    """NEVER constraint violation prevents the state machine transition."""
+    mock_workflow = MagicMock(name="test_workflow", states=[], constraints=[])
+    mocks["parser"]().parse_dict.return_value = mock_workflow
+    await engine.initialize({"workflow": {}})
+
+    mock_session = MagicMock()
+    mocks["sm"].return_value.get_or_create_session = AsyncMock(return_value=mock_session)
+
+    mocks["classifier"].return_value.classify.return_value = StateClassificationResult(
+        state_name="forbidden", confidence=0.9, method="test"
+    )
+
+    # NEVER constraint violation
+    violation = MagicMock()
+    violation.constraint_name = "no_forbidden"
+    violation.message = "Forbidden state"
+    violation.constraint_type = ConstraintType.NEVER
+    violation.details = {}
+    mocks["constraints"].return_value.evaluate_all.return_value = [violation]
+
+    result = await engine.evaluate_response("sid", "response", {})
+
+    assert result.decision == Decision.INTERVENE
+    # Transition should NOT have been called
+    mocks["sm"].return_value.transition.assert_not_called()
+    assert result.metadata["transition_result"] == TransitionResult.CONSTRAINT_VIOLATED.value
+
+
+async def test_constraints_evaluated_before_transition(engine, mocks):
+    """Constraints are evaluated before the transition, not after."""
+    mock_workflow = MagicMock(name="test_workflow", states=[], constraints=[])
+    mocks["parser"]().parse_dict.return_value = mock_workflow
+    await engine.initialize({"workflow": {}})
+
+    mock_session = MagicMock()
+    mocks["sm"].return_value.get_or_create_session = AsyncMock(return_value=mock_session)
+
+    mocks["classifier"].return_value.classify.return_value = StateClassificationResult(
+        state_name="next", confidence=0.9, method="test"
+    )
+
+    # No violations
+    mocks["constraints"].return_value.evaluate_all.return_value = []
+    mocks["sm"].return_value.transition = AsyncMock(
+        return_value=(TransitionResult.SUCCESS, None)
+    )
+
+    await engine.evaluate_response("sid", "response", {})
+
+    # Constraints evaluated first, then transition
+    mocks["constraints"].return_value.evaluate_all.assert_called_once()
+    mocks["sm"].return_value.transition.assert_called_once()
