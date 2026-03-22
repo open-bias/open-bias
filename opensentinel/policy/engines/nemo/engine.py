@@ -31,18 +31,6 @@ from opensentinel.policy.registry import register_engine
 
 logger = logging.getLogger(__name__)
 
-# Markers that indicate NeMo blocked a request/response
-BLOCKED_MARKERS = [
-    "i cannot",
-    "i'm not able to",
-    "i am not able to",
-    "refuse to",
-    "[blocked]",
-    "i can't help with",
-    "i'm unable to",
-    "sorry, but i can't",
-]
-
 
 @register_engine("nemo")
 class NemoGuardrailsPolicyEngine(PolicyEngine):
@@ -243,16 +231,21 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
                 }
             )
 
-            # Check if the request was blocked
-            response_content = extract_response_content(result)
-
-            if self._is_blocked_response(response_content):
+            # Check if any input rails were activated
+            activations = self._check_rail_activations(result)
+            if activations:
                 return EngineResult(
                     decision=Decision.INTERVENE,
                     message="Request intercepted by NeMo input guardrails",
                     metadata={
-                        "nemo_response": response_content,
                         "session_id": session_id,
+                        "violations": [
+                            {
+                                "name": f"nemo_{a.get('type', 'input')}_blocked",
+                                "message": a.get("name", "NeMo input rail triggered"),
+                            }
+                            for a in activations
+                        ],
                     },
                 )
 
@@ -331,16 +324,21 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
                 }
             )
 
-            response_content = extract_response_content(result)
-
-            if self._is_blocked_response(response_content):
+            # Check if any output rails were activated
+            activations = self._check_rail_activations(result)
+            if activations:
                 return EngineResult(
                     decision=Decision.INTERVENE,
                     message="Response intercepted by NeMo output guardrails",
                     metadata={
                         "original_response": content[:200],
-                        "nemo_response": response_content[:200],
-                        "nemo_blocked": True,
+                        "violations": [
+                            {
+                                "name": f"nemo_{a.get('type', 'output')}_blocked",
+                                "message": a.get("name", "NeMo output rail triggered"),
+                            }
+                            for a in activations
+                        ],
                     },
                 )
 
@@ -363,13 +361,26 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
                 metadata={"error": str(e)},
             )
 
-    def _is_blocked_response(self, content: str) -> bool:
-        """Check if NeMo blocked the request/response."""
-        if not content:
-            return False
+    def _check_rail_activations(self, result: Any) -> list[dict[str, Any]]:
+        """
+        Inspect NeMo result for activated rails.
 
-        content_lower = content.lower()
-        return any(marker in content_lower for marker in BLOCKED_MARKERS)
+        Returns a list of activation dicts from result.log.activated_rails.
+        An empty list means no rails were triggered.
+
+        Handles older NeMo versions that return plain strings (no .log attribute)
+        by returning an empty list.
+        """
+        try:
+            log = getattr(result, "log", None)
+            if log is None:
+                return []
+            activated = getattr(log, "activated_rails", None)
+            if not activated:
+                return []
+            return list(activated)
+        except Exception:
+            return []
 
     def _check_for_modifications(
         self,
