@@ -241,6 +241,20 @@ class TestSessionManagement:
         await engine.shutdown()
         assert len(engine._sessions) == 0
 
+    async def test_shutdown_resets_initialized_flag(self, engine, judge_config):
+        await engine.initialize(judge_config)
+        assert engine._initialized
+        await engine.shutdown()
+        assert not engine._initialized
+
+    async def test_evaluate_response_raises_after_shutdown(
+        self, engine, judge_config, sample_request, sample_response
+    ):
+        await engine.initialize(judge_config)
+        await engine.shutdown()
+        with pytest.raises(RuntimeError, match="not initialized"):
+            await engine.evaluate_response("s1", sample_response, sample_request)
+
 
 class TestResponseExtraction:
     def test_extract_openai_format(self, engine):
