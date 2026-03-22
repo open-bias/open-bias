@@ -368,18 +368,19 @@ async def test_reset_session_evaluates_boundary_constraints(engine, mocks):
     violation.details = {}
     mocks["constraints"].return_value.evaluate_session_boundary.return_value = [violation]
 
-    await engine.reset_session("sid")
+    result = await engine.reset_session("sid")
 
     mocks["constraints"].return_value.evaluate_session_boundary.assert_called_once_with(
         mock_session,
     )
     mocks["sm"].return_value.reset_session.assert_called_once()
+    assert result == [violation]
 
 
 async def test_reset_session_skips_when_not_initialized(engine, mocks):
     """reset_session is a no-op when engine is not initialized."""
-    await engine.reset_session("sid")
-    # Should not crash, no session store calls
+    result = await engine.reset_session("sid")
+    assert result == []
 
 
 async def test_reset_session_skips_boundary_when_no_session(engine, mocks):
@@ -391,9 +392,10 @@ async def test_reset_session_skips_boundary_when_no_session(engine, mocks):
     mocks["sm"].return_value.get_session = AsyncMock(return_value=None)
     mocks["sm"].return_value.reset_session = AsyncMock()
 
-    await engine.reset_session("sid")
+    result = await engine.reset_session("sid")
 
     mocks["constraints"].return_value.evaluate_session_boundary.assert_not_called()
+    assert result == []
 
 
 async def test_eviction_callback_wired_on_initialize(engine, mocks):
