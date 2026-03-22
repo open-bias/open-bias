@@ -145,9 +145,11 @@ Configure under the `tracing:` section. Tracing uses OpenTelemetry spans.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `tracing.enabled` | bool | `false` | Enable or disable tracing entirely |
 | `tracing.type` | string | `otlp` | Exporter type: `otlp`, `langfuse`, `console`, `none` |
 | `tracing.endpoint` | string | `http://localhost:4317` | OTLP endpoint URL |
 | `tracing.service_name` | string | `opensentinel` | Service name in traces |
+| `tracing.redact_content` | bool | `false` | Strip prompts and completions from trace spans |
 
 ### Langfuse
 
