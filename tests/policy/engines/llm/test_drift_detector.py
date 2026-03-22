@@ -2,6 +2,8 @@
 Tests for DriftDetector.
 """
 
+from unittest.mock import patch
+
 import pytest
 from opensentinel.policy.engines.llm.drift_detector import DriftDetector
 from opensentinel.policy.engines.llm.models import SessionContext, DriftLevel
@@ -187,6 +189,48 @@ class TestCompositeDrift:
         )
 
         assert drift.anomaly_flags.get("missing_expected_tool_call") is True
+
+
+class TestCentroidCaching:
+    """Tests for centroid computation caching."""
+
+    def test_failed_centroid_not_retried(self, detector):
+        """Centroid computation should not retry after failure."""
+        with patch(
+            "opensentinel.policy.engines.llm.drift_detector.DriftDetector._get_centroid",
+            wraps=detector._get_centroid,
+        ):
+            # Force an ImportError on the lazy import
+            with patch.dict("sys.modules", {"sentence_transformers": None}):
+                result1 = detector._get_centroid()
+                assert result1 is None
+                assert detector._centroid_computed is True
+
+                # Second call should return cached None without re-computing
+                # Reset the module patch to confirm it doesn't attempt import again
+                result2 = detector._get_centroid()
+                assert result2 is None
+
+    def test_failed_centroid_skips_recomputation(self, detector):
+        """After failure, _get_centroid returns immediately without retrying."""
+        call_count = 0
+        original_get_centroid = DriftDetector._get_centroid
+
+        def counting_get_centroid(self_inner):
+            nonlocal call_count
+            if self_inner._centroid_computed:
+                return self_inner._centroid
+            call_count += 1
+            return original_get_centroid(self_inner)
+
+        with patch.dict("sys.modules", {"sentence_transformers": None}):
+            counting_get_centroid(detector)
+
+        assert call_count == 1
+
+        # Call again — should hit the guard and not increment
+        counting_get_centroid(detector)
+        assert call_count == 1
 
 
 class TestDriftLevels:

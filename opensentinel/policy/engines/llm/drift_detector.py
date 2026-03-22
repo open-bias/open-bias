@@ -51,6 +51,7 @@ class DriftDetector:
         
         # On-policy centroid embedding (lazy loaded)
         self._centroid = None
+        self._centroid_computed: bool = False
         self._model = None
 
     @property
@@ -105,9 +106,9 @@ class DriftDetector:
         
         Computes average embedding of all state descriptions and exemplars.
         """
-        if self._centroid is not None:
+        if self._centroid_computed:
             return self._centroid
-        
+
         try:
             import numpy as np
             from sentence_transformers import SentenceTransformer
@@ -140,7 +141,8 @@ class DriftDetector:
         except Exception as e:
             logger.error(f"Failed to compute centroid: {e}")
             self._centroid = None
-        
+
+        self._centroid_computed = True
         return self._centroid
 
     def compute_temporal_drift(
