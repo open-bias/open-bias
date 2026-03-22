@@ -289,3 +289,12 @@ async def test_multiple_rail_activations_produce_multiple_violations(engine, moc
     assert result.decision == Decision.INTERVENE
     violations = result.metadata.get("violations", [])
     assert len(violations) == 2
+
+
+async def test_get_session_state_returns_none(engine):
+    """NeMo is stateless — get_session_state should always return None."""
+    await engine.initialize({"config_path": "dummy"})
+
+    result = await engine.get_session_state("any-session-id")
+
+    assert result is None

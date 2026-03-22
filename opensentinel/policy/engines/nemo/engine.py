@@ -249,17 +249,6 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
                     },
                 )
 
-            # Check if messages were modified (NeMo may sanitize or modify input)
-            modified = self._check_for_modifications(result, messages)
-            if modified:
-                return EngineResult(
-                    decision=Decision.INTERVENE,
-                    modified_messages=modified,
-                    metadata={
-                        "modification_type": "nemo_input_sanitization",
-                    },
-                )
-
             return EngineResult(
                 decision=Decision.ALLOW,
                 metadata={"nemo_processed": True},
@@ -382,31 +371,9 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         except Exception:
             return []
 
-    def _check_for_modifications(
-        self,
-        result: Any,
-        original_messages: list[dict[str, Any]],
-    ) -> list[dict[str, Any]] | None:
-        """
-        Check if NeMo modified the messages.
-
-        Returns modified messages if changes detected, None otherwise.
-        """
-        # NeMo result objects vary across versions; not all expose a `messages`
-        # attribute.  This duck-type check covers versions that do.
-        if hasattr(result, "messages") and result.messages != original_messages:
-            return result.messages
-
-        return None
-
     async def get_session_state(self, session_id: str) -> dict[str, Any] | None:
         """Get current session state for debugging/tracing."""
-        return {
-            "engine": "nemo",
-            "session_id": session_id,
-            "initialized": self._initialized,
-            "enabled_rails": self._enabled_rails,
-        }
+        return None
 
     async def reset_session(self, session_id: str) -> None:
         """Reset session state."""
