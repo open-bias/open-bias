@@ -598,10 +598,11 @@ class JudgePolicyEngine(PolicyEngine):
             "violations": [
                 {
                     "name": f"judge_{v.scope.value}_{v.action.value}",
+                    "message": v.summary,
+                    "severity": v.action.value,
                     "composite_score": v.composite_score,
                     "judge_model": v.judge_model,
                     "scope": v.scope.value,
-                    "summary": v.summary,
                 }
                 for v in verdicts
                 if v.action != VerdictAction.PASS
