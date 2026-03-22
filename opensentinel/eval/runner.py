@@ -117,7 +117,7 @@ class EvalRunner:
                             "message": {
                                 "role": "assistant",
                                 "content": assistant_msg.get("content", ""),
-                                "tool_calls": assistant_msg.get("tool_calls", []),
+                                "tool_calls": assistant_msg.get("tool_calls"),
                             },
                         }
                     ],

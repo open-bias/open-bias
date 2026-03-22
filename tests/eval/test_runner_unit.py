@@ -188,6 +188,29 @@ class TestEvalRunnerRun:
         response_data = call_args.kwargs["response_data"]
         assert response_data["choices"][0]["message"]["content"] == "my answer"
 
+    async def test_tool_calls_absent_yields_none(self, runner):
+        engine = _mock_engine()
+        messages = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "no tools here"},
+        ]
+        await runner.run(engine, messages)
+        call_args = engine.evaluate_response.call_args
+        response_data = call_args.kwargs["response_data"]
+        assert response_data["choices"][0]["message"]["tool_calls"] is None
+
+    async def test_tool_calls_present_passed_through(self, runner):
+        tool_calls = [{"id": "call_1", "type": "function", "function": {"name": "search", "arguments": "{}"}}]
+        engine = _mock_engine()
+        messages = [
+            {"role": "user", "content": "search for something"},
+            {"role": "assistant", "content": "", "tool_calls": tool_calls},
+        ]
+        await runner.run(engine, messages)
+        call_args = engine.evaluate_response.call_args
+        response_data = call_args.kwargs["response_data"]
+        assert response_data["choices"][0]["message"]["tool_calls"] == tool_calls
+
     async def test_multiple_turns(self, runner):
         engine = _mock_engine()
         messages = [
