@@ -193,9 +193,10 @@ class JudgeEvaluator:
         metadata_block = format_metadata_block(metadata or {})
         session_block = format_session_context_block(session_context)
 
-        # Count non-system turns
+        # Count non-system, non-tool turns (matches format_conversation_block numbering)
         turn_count = sum(
-            1 for m in full_conversation if m.get("role") != "system"
+            1 for m in full_conversation
+            if m.get("role") not in ("system", "tool")
         )
 
         system_prompt = (

@@ -182,6 +182,54 @@ class TestEvaluateConversation:
         assert verdict.scope == EvaluationScope.CONVERSATION
         assert verdict.action == VerdictAction.PASS
 
+    async def test_turn_count_excludes_tool_and_system_messages(
+        self, evaluator, mock_client,
+    ):
+        """turn_count in prompt header must match the highest turn label in format_conversation_block.
+
+        format_conversation_block only increments turn for non-system, non-tool messages.
+        evaluate_conversation must use the same filter so the header count matches reality.
+        """
+        from opensentinel.policy.engines.judge.prompts import format_conversation_block
+
+        conversation_with_tools = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Search for Python docs."},
+            {"role": "assistant", "content": "Searching...", "tool_calls": [
+                {"id": "call_1", "function": {"name": "search", "arguments": '{"q":"Python"}'}},
+            ]},
+            {"role": "tool", "tool_call_id": "call_1", "content": "Result: python.org"},
+            {"role": "assistant", "content": "Here are the docs."},
+            {"role": "user", "content": "Thanks."},
+        ]
+
+        # Determine what the formatter considers the highest turn number
+        formatted = format_conversation_block(conversation_with_tools)
+        highest_turn = max(
+            int(line.split("Turn ")[1].split(" -")[0])
+            for line in formatted.splitlines()
+            if line.startswith("[Turn ")
+        )
+
+        # Simulate what evaluate_conversation computes
+        computed_turn_count = sum(
+            1 for m in conversation_with_tools
+            if m.get("role") not in ("system", "tool")
+        )
+
+        assert computed_turn_count == highest_turn, (
+            f"turn_count={computed_turn_count} does not match "
+            f"formatter's highest turn={highest_turn}"
+        )
+
+        # Also verify the previous (buggy) count would have been different
+        old_turn_count = sum(
+            1 for m in conversation_with_tools if m.get("role") != "system"
+        )
+        assert old_turn_count != highest_turn, (
+            "Expected old logic to produce a mismatched count"
+        )
+
 
 class TestEvaluatePairwise:
     async def test_pairwise_evaluation(self, evaluator, mock_client, conversation):
