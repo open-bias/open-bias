@@ -34,6 +34,7 @@ from opensentinel.policy.engines.llm.drift_detector import DriftDetector
 from opensentinel.policy.engines.llm.constraint_evaluator import LLMConstraintEvaluator
 from opensentinel.policy.engines.llm.intervention import InterventionHandler
 from opensentinel.policy.engines.fsm.workflow.parser import WorkflowParser
+from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
 from opensentinel.core.utils import extract_response_content, extract_tool_call_names
 
 logger = logging.getLogger(__name__)
