@@ -347,6 +347,18 @@ class Interceptor:
                 try:
                     result = task.result()
                     results.append(result)
+                except asyncio.CancelledError:
+                    logger.warning("Async checker task was cancelled")
+                    results.append(
+                        _PendingResult(
+                            checker_name="async_task_cancelled",
+                            result=EngineResult(
+                                decision=Decision.ALLOW,
+                                message="Async task cancelled",
+                                metadata={},
+                            ),
+                        )
+                    )
                 except Exception as e:
                     logger.error(f"Async checker task failed: {e}")
                     results.append(

@@ -583,6 +583,30 @@ class TestAsyncEdgeCases:
 
         assert result.allowed is True
 
+    async def test_cancelled_async_task_fails_open(self):
+        """Cancelled async task is handled gracefully — next PRE_CALL is allowed."""
+        slow_checker = _mock_checker(
+            name="cancellable",
+            phase=CheckPhase.POST_CALL,
+            mode=CheckerMode.ASYNC,
+            delay=5.0,
+        )
+        interceptor = Interceptor([slow_checker])
+
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
+
+        # Manually cancel the task to simulate eviction/cap behaviour
+        tasks = interceptor._sessions.get(SESSION) or []
+        assert len(tasks) == 1
+        tasks[0].cancel()
+        # Allow the cancellation to propagate
+        await asyncio.sleep(0)
+
+        # Next PRE_CALL should collect the cancelled task and fail-open
+        result = await interceptor.run_pre_call(SESSION, _request(), "req-002")
+
+        assert result.allowed is True
+
 
 # ===========================================================================
 # Interceptor init categorization
