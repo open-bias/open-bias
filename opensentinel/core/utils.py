@@ -63,9 +63,9 @@ def extract_tool_calls(response_data: Any) -> list[dict[str, Any]]:
         choices = response_data.get("choices", [])
         if choices:
             message = choices[0].get("message", {})
-            raw_calls = message.get("tool_calls", [])
+            raw_calls = message.get("tool_calls") or []
         else:
-            raw_calls = response_data.get("tool_calls", [])
+            raw_calls = response_data.get("tool_calls") or []
 
         for tc in raw_calls:
             if isinstance(tc, dict):

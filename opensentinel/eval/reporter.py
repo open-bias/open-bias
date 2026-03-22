@@ -38,7 +38,9 @@ def print_report(results: list[EvalResult], verbose: bool = False) -> None:
         name = Path(result.scenario_path).name if result.scenario_path else "unknown"
         turns = str(len(result.turns))
         violations = sum(
-            len(t.response_eval.metadata.get("violations", [])) for t in result.turns
+            len(t.request_eval.metadata.get("violations", []))
+            + len(t.response_eval.metadata.get("violations", []))
+            for t in result.turns
         )
         status = (
             "[red]error[/]"
@@ -87,13 +89,20 @@ def export_json(results: list[EvalResult]) -> dict[str, Any]:
     for result in results:
         turns: list[dict[str, Any]] = []
         for turn in result.turns:
+            _blocking = (Decision.INTERVENE, Decision.BLOCK)
             turns.append(
                 {
                     "turn_index": turn.turn_index,
                     "request_decision": turn.request_eval.decision.value,
                     "response_decision": turn.response_eval.decision.value,
-                    "violations": turn.response_eval.metadata.get("violations", []),
-                    "intervention_needed": turn.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK),
+                    "violations": (
+                        turn.request_eval.metadata.get("violations", [])
+                        + turn.response_eval.metadata.get("violations", [])
+                    ),
+                    "intervention_needed": (
+                        turn.request_eval.decision in _blocking
+                        or turn.response_eval.decision in _blocking
+                    ),
                 }
             )
 

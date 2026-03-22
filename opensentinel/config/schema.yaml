@@ -164,3 +164,15 @@ tracing:
   # langfuse_public_key: pk-...
   # langfuse_secret_key: sk-...
   # langfuse_host: https://cloud.langfuse.com
+
+# ---------------------------------------------------------------------------
+# Eval — osentinel eval
+# ---------------------------------------------------------------------------
+# Used by `osentinel eval` to run offline scenario-based evaluation.
+# The engine under test is determined by the top-level `engine` key.
+eval:
+  # Glob patterns for scenario JSON files, resolved relative to this config file.
+  # Each matched file must be a valid scenario (see docs/eval.md for schema).
+  scenarios:
+    - ./eval/scenarios/*.json     # single directory
+    # - ./eval/scenarios/**/*.json  # recursive glob

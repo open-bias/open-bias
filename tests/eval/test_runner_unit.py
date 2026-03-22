@@ -188,6 +188,29 @@ class TestEvalRunnerRun:
         response_data = call_args.kwargs["response_data"]
         assert response_data["choices"][0]["message"]["content"] == "my answer"
 
+    async def test_tool_calls_absent_yields_none(self, runner):
+        engine = _mock_engine()
+        messages = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "no tools here"},
+        ]
+        await runner.run(engine, messages)
+        call_args = engine.evaluate_response.call_args
+        response_data = call_args.kwargs["response_data"]
+        assert response_data["choices"][0]["message"]["tool_calls"] is None
+
+    async def test_tool_calls_present_passed_through(self, runner):
+        tool_calls = [{"id": "call_1", "type": "function", "function": {"name": "search", "arguments": "{}"}}]
+        engine = _mock_engine()
+        messages = [
+            {"role": "user", "content": "search for something"},
+            {"role": "assistant", "content": "", "tool_calls": tool_calls},
+        ]
+        await runner.run(engine, messages)
+        call_args = engine.evaluate_response.call_args
+        response_data = call_args.kwargs["response_data"]
+        assert response_data["choices"][0]["message"]["tool_calls"] == tool_calls
+
     async def test_multiple_turns(self, runner):
         engine = _mock_engine()
         messages = [
@@ -243,3 +266,50 @@ class TestEvalRunnerRunSuite:
         engine = _mock_engine()
         results = await runner.run_suite(engine, [f])
         assert results[0].scenario_path == str(f)
+
+    async def test_run_suite_bad_json_records_error(self, runner, tmp_path):
+        bad = tmp_path / "bad.json"
+        bad.write_text("{not valid json}")
+        engine = _mock_engine()
+        results = await runner.run_suite(engine, [bad])
+        assert len(results) == 1
+        assert results[0].error is not None
+        assert results[0].scenario_path == str(bad)
+        assert results[0].turns == []
+        assert results[0].engine_type == "mock"
+
+    async def test_run_suite_permission_error_records_error(self, runner, tmp_path):
+        no_access = tmp_path / "noaccess.json"
+        no_access.write_text("[]")
+        no_access.chmod(0o000)
+        engine = _mock_engine()
+        try:
+            results = await runner.run_suite(engine, [no_access])
+            assert len(results) == 1
+            assert results[0].error is not None
+            assert results[0].scenario_path == str(no_access)
+            assert results[0].turns == []
+        finally:
+            no_access.chmod(0o644)
+
+    async def test_run_suite_bad_file_does_not_lose_good_results(self, runner, tmp_path):
+        good_messages = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]
+        good = tmp_path / "good.json"
+        good.write_text(json.dumps(good_messages))
+        bad = tmp_path / "bad.json"
+        bad.write_text("{not valid json}")
+
+        engine = _mock_engine()
+        results = await runner.run_suite(engine, [good, bad, good])
+
+        assert len(results) == 3
+        assert results[0].error is None
+        assert results[0].scenario_path == str(good)
+        assert len(results[0].turns) == 1
+        assert results[1].error is not None
+        assert results[1].scenario_path == str(bad)
+        assert results[2].error is None
+        assert results[2].scenario_path == str(good)

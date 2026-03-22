@@ -117,7 +117,7 @@ class EvalRunner:
                             "message": {
                                 "role": "assistant",
                                 "content": assistant_msg.get("content", ""),
-                                "tool_calls": assistant_msg.get("tool_calls", []),
+                                "tool_calls": assistant_msg.get("tool_calls"),
                             },
                         }
                     ],
@@ -170,9 +170,19 @@ class EvalRunner:
         results: list[EvalResult] = []
 
         for path in scenario_paths:
-            messages = json.loads(path.read_text())
-            result = await self.run(engine, messages)
-            result.scenario_path = str(path)
+            try:
+                messages = json.loads(path.read_text())
+                result = await self.run(engine, messages)
+                result.scenario_path = str(path)
+            except Exception as e:
+                logger.exception("Error loading scenario %s: %s", path, e)
+                result = EvalResult(
+                    scenario_path=str(path),
+                    session_id="",
+                    turns=[],
+                    engine_type=engine.engine_type,
+                    error=str(e),
+                )
             results.append(result)
 
         return results
