@@ -67,7 +67,7 @@ judge:
   # LLM model for the judge (overrides global `model`).
   model: anthropic/claude-sonnet-4-5
 
-  # What happens when a policy violation is detected: block | intervene (default: block)
+  # What happens when a policy violation is detected: block | intervene (default: intervene)
   fail_action: block
 
   # Pre-call evaluation (evaluate requests BEFORE the LLM call)
