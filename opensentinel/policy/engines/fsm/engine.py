@@ -14,10 +14,7 @@ if TYPE_CHECKING:
     from opensentinel.policy.compiler.protocol import PolicyCompiler
 
 from opensentinel.policy.engines.fsm.classifier import StateClassifier
-from opensentinel.policy.engines.fsm.workflow.constraints import (
-    ConstraintEvaluator,
-    ConstraintViolation,
-)
+from opensentinel.policy.engines.fsm.workflow.constraints import ConstraintEvaluator
 from opensentinel.policy.engines.fsm.workflow.parser import WorkflowParser
 from opensentinel.policy.engines.fsm.workflow.schema import ConstraintType, WorkflowDefinition
 from opensentinel.policy.engines.fsm.workflow.state_machine import (
@@ -349,17 +346,12 @@ class FSMPolicyEngine(StatefulPolicyEngine):
             "last_updated": session.last_updated.isoformat(),
         }
 
-    async def reset_session(self, session_id: str) -> list[ConstraintViolation]:
-        """Reset session state, evaluating boundary constraints first.
-
-        Returns:
-            List of boundary constraint violations found before reset.
-        """
+    async def reset_session(self, session_id: str) -> None:
+        """Reset session state, evaluating boundary constraints first."""
         if not self._initialized:
-            return []
+            return
 
         # Evaluate session-boundary constraints before reset
-        boundary_violations: list[ConstraintViolation] = []
         session = await self._state_machine.get_session(session_id)
         if session:
             boundary_violations = self._constraint_evaluator.evaluate_session_boundary(
@@ -373,7 +365,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
 
         await self._state_machine.reset_session(session_id)
         logger.debug(f"Session {session_id} reset")
-        return boundary_violations
 
     def get_compiler(
         self,

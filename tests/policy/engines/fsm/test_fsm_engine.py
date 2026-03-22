@@ -351,8 +351,8 @@ async def test_transition_called_with_expected_from_state(engine, mocks):
     )
 
 
-async def test_reset_session_returns_boundary_violations(engine, mocks):
-    """Task 83: reset_session returns boundary violations."""
+async def test_reset_session_evaluates_boundary_constraints(engine, mocks):
+    """Task 83: reset_session evaluates boundary constraints before reset."""
     mock_workflow = MagicMock(name="test_workflow", states=[], constraints=[])
     mocks["parser"]().parse_dict.return_value = mock_workflow
     await engine.initialize({"workflow": {}})
@@ -368,36 +368,22 @@ async def test_reset_session_returns_boundary_violations(engine, mocks):
     violation.details = {}
     mocks["constraints"].return_value.evaluate_session_boundary.return_value = [violation]
 
-    result = await engine.reset_session("sid")
+    await engine.reset_session("sid")
 
-    assert len(result) == 1
-    assert result[0].constraint_name == "must_resolve"
-
-
-async def test_reset_session_returns_empty_when_no_violations(engine, mocks):
-    """reset_session returns empty list when no boundary violations."""
-    mock_workflow = MagicMock(name="test_workflow", states=[], constraints=[])
-    mocks["parser"]().parse_dict.return_value = mock_workflow
-    await engine.initialize({"workflow": {}})
-
-    mock_session = MagicMock()
-    mocks["sm"].return_value.get_session = AsyncMock(return_value=mock_session)
-    mocks["sm"].return_value.reset_session = AsyncMock()
-    mocks["constraints"].return_value.evaluate_session_boundary.return_value = []
-
-    result = await engine.reset_session("sid")
-
-    assert result == []
+    mocks["constraints"].return_value.evaluate_session_boundary.assert_called_once_with(
+        mock_session,
+    )
+    mocks["sm"].return_value.reset_session.assert_called_once()
 
 
-async def test_reset_session_returns_empty_when_not_initialized(engine, mocks):
-    """reset_session returns empty list when engine is not initialized."""
-    result = await engine.reset_session("sid")
-    assert result == []
+async def test_reset_session_skips_when_not_initialized(engine, mocks):
+    """reset_session is a no-op when engine is not initialized."""
+    await engine.reset_session("sid")
+    # Should not crash, no session store calls
 
 
-async def test_reset_session_returns_empty_when_no_session(engine, mocks):
-    """reset_session returns empty list when session doesn't exist."""
+async def test_reset_session_skips_boundary_when_no_session(engine, mocks):
+    """reset_session skips boundary eval when session doesn't exist."""
     mock_workflow = MagicMock(name="test_workflow", states=[], constraints=[])
     mocks["parser"]().parse_dict.return_value = mock_workflow
     await engine.initialize({"workflow": {}})
@@ -405,9 +391,9 @@ async def test_reset_session_returns_empty_when_no_session(engine, mocks):
     mocks["sm"].return_value.get_session = AsyncMock(return_value=None)
     mocks["sm"].return_value.reset_session = AsyncMock()
 
-    result = await engine.reset_session("sid")
+    await engine.reset_session("sid")
 
-    assert result == []
+    mocks["constraints"].return_value.evaluate_session_boundary.assert_not_called()
 
 
 async def test_eviction_callback_wired_on_initialize(engine, mocks):
