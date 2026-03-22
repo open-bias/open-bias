@@ -44,11 +44,13 @@ constraints:
 """
 
 from typing import Any
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from enum import Enum
 
 class SimpleWorkflowConfig(BaseModel):
     """Human-authored workflow config with plain English steps and rules."""
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     steps: list[str]
@@ -88,6 +90,8 @@ class State(BaseModel):
     the agent is in that state based on LLM output.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = None
 
@@ -117,6 +121,8 @@ class Transition(BaseModel):
     Transitions define valid state progressions.
     If no transitions are defined FROM a state, any state can follow.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     from_state: str
     to_state: str
@@ -155,6 +161,8 @@ class Constraint(BaseModel):
             message="You must verify identity before account actions.",
         )
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = None
@@ -195,6 +203,8 @@ class WorkflowDefinition(BaseModel):
     - Transitions: Valid state progressions
     - Constraints: Temporal invariants that must hold
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = None

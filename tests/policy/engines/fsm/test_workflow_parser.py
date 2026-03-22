@@ -25,7 +25,6 @@ class TestWorkflowParser:
         """Test parsing internal format YAML from string."""
         yaml_content = """
 name: test-workflow
-mode: guide
 states:
   - name: start
     is_initial: true
@@ -40,7 +39,6 @@ states:
         """Test parsing simple format YAML — auto-compiled to internal."""
         yaml_content = """
 name: test-simple
-mode: enforce
 steps:
   - greet the customer
   - resolve and close

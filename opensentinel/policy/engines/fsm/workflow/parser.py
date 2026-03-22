@@ -121,6 +121,12 @@ class WorkflowParser:
     def _load(data: dict) -> WorkflowDefinition:
         """Detect format and load accordingly."""
         if "steps" in data:
+            if "states" in data:
+                logger.warning(
+                    "Workflow '%s' has both 'steps' and 'states'; "
+                    "using 'steps' (simple format). Remove 'states' to silence this warning.",
+                    data.get("name", "<unknown>"),
+                )
             config = SimpleWorkflowConfig.model_validate(data)
             return compile_workflow(config)
         return WorkflowDefinition.model_validate(data)
