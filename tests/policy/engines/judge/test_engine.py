@@ -158,7 +158,12 @@ class TestEvaluateResponse:
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
         assert result.decision in (Decision.BLOCK, Decision.INTERVENE)
-        assert len(result.metadata.get("violations", [])) > 0
+        violations = result.metadata.get("violations", [])
+        assert len(violations) > 0
+        for v in violations:
+            assert "name" in v
+            assert "message" in v
+            assert "severity" in v
 
     async def test_judge_metadata_in_result(self, engine, judge_config, sample_request, sample_response):
         await engine.initialize(judge_config)
