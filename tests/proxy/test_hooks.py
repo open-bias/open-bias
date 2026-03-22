@@ -481,8 +481,8 @@ async def test_callback_initialize_sets_engine_on_success(mock_settings):
         "config": {"models": [{"name": "primary", "model": "gpt-4o"}]},
     }
     mock_settings.policy.post_call_mode = "async"
-    mock_settings.policy.default_strategy = "pass"
-    mock_settings.policy.fail_action = "pass"
+    mock_settings.policy.default_strategy = "user_message_inject"
+    mock_settings.policy.fail_action = "intervene"
 
     cb = SentinelCallback(settings=mock_settings)
 
@@ -535,8 +535,8 @@ async def test_callback_initialize_idempotent(mock_settings):
         "config": {"models": [{"name": "primary", "model": "gpt-4o"}]},
     }
     mock_settings.policy.post_call_mode = "async"
-    mock_settings.policy.default_strategy = "pass"
-    mock_settings.policy.fail_action = "pass"
+    mock_settings.policy.default_strategy = "user_message_inject"
+    mock_settings.policy.fail_action = "intervene"
 
     cb = SentinelCallback(settings=mock_settings)
 

@@ -186,6 +186,19 @@ class SentinelCallback(CustomLogger):
                 self.settings.policy.post_call_mode,
             )
 
+    @staticmethod
+    def _should_skip_engine(engine_type: str, engine_config: dict) -> bool:
+        """Return True when the engine type has no meaningful config and should be skipped."""
+        if engine_type == "fsm" and not engine_config.get("config_path") and not engine_config.get("workflow"):
+            return True
+        if engine_type == "nemo" and not engine_config.get("config_path"):
+            return True
+        if engine_type == "llm" and not engine_config.get("config_path") and not engine_config.get("workflow"):
+            return True
+        if engine_type == "judge" and not engine_config.get("models"):
+            return True
+        return False
+
     async def _get_interceptor(self) -> Interceptor | None:
         """Lazy-load interceptor with configured checkers."""
         if self._interceptor_initialized:
@@ -276,23 +289,8 @@ class SentinelCallback(CustomLogger):
             engine_config = policy_config.get("config", {})
 
             # Only initialize if we have configuration
-            if engine_type == "fsm" and not engine_config.get("config_path") and not engine_config.get("workflow"):
-                logger.debug("No config_path configured, skipping policy engine")
-                self._policy_engine_initialized = True
-                return None
-
-            if engine_type == "nemo" and not engine_config.get("config_path"):
-                logger.debug("No NeMo config_path configured, skipping policy engine")
-                self._policy_engine_initialized = True
-                return None
-
-            if engine_type == "llm" and not engine_config.get("config_path") and not engine_config.get("workflow"):
-                logger.debug("No config_path or workflow for LLM engine, skipping")
-                self._policy_engine_initialized = True
-                return None
-
-            if engine_type == "judge" and not engine_config.get("models"):
-                logger.debug("No judge models configured, skipping policy engine")
+            if self._should_skip_engine(engine_type, engine_config):
+                logger.debug(f"No config for engine '{engine_type}', skipping policy engine")
                 self._policy_engine_initialized = True
                 return None
 
@@ -333,17 +331,7 @@ class SentinelCallback(CustomLogger):
                 engine_config = policy_config.get("config", {})
 
                 # Skip engines with no meaningful config (same logic as lazy path)
-                skip = False
-                if engine_type == "fsm" and not engine_config.get("config_path") and not engine_config.get("workflow"):
-                    skip = True
-                elif engine_type == "nemo" and not engine_config.get("config_path"):
-                    skip = True
-                elif engine_type == "llm" and not engine_config.get("config_path") and not engine_config.get("workflow"):
-                    skip = True
-                elif engine_type == "judge" and not engine_config.get("models"):
-                    skip = True
-
-                if skip:
+                if self._should_skip_engine(engine_type, engine_config):
                     logger.debug(f"No config for engine '{engine_type}', skipping policy engine at startup")
                     self._policy_engine_initialized = True
                     self._policy_engine = None
@@ -359,7 +347,36 @@ class SentinelCallback(CustomLogger):
                     logger.info(f"Policy engine ready: {self._policy_engine.name}")
 
             if not self._interceptor_initialized:
-                await self._initialize_interceptor()
+                # Build the interceptor directly so errors propagate (no try/except).
+                # _initialize_interceptor() swallows errors for the lazy path; we want
+                # config failures to surface immediately during eager startup.
+                policy_engine = self._policy_engine
+                if not policy_engine:
+                    self._interceptor_initialized = True
+                else:
+                    checkers: list[PolicyEngineChecker] = [
+                        PolicyEngineChecker(
+                            engine=policy_engine,
+                            phase=CheckPhase.PRE_CALL,
+                            mode=CheckerMode.SYNC,
+                        ),
+                        PolicyEngineChecker(
+                            engine=policy_engine,
+                            phase=CheckPhase.POST_CALL,
+                            mode=(
+                                CheckerMode.SYNC
+                                if self.settings.policy.post_call_mode == "sync"
+                                else CheckerMode.ASYNC
+                            ),
+                        ),
+                    ]
+                    self._interceptor = Interceptor(
+                        checkers,
+                        default_strategy=self.settings.policy.default_strategy,
+                        fail_action=self.settings.policy.fail_action,
+                    )
+                    self._interceptor_initialized = True
+                    logger.info(f"Interceptor ready with {len(checkers)} checkers")
 
     async def cleanup_session(self, session_id: str) -> None:
         """Clean up all state for a session (interceptor tasks + engine session)."""
