@@ -170,7 +170,9 @@ class JudgeSessionContext:
         if verdict.action != VerdictAction.PASS:
             failed = verdict.metadata.get("criterion_failures", [])
             if failed:
-                self.last_intervention_criteria = list(failed)
+                self.last_intervention_criteria.extend(
+                    c for c in failed if c not in self.last_intervention_criteria
+                )
                 for criterion in failed:
                     self.criterion_intervention_counts[criterion] = (
                         self.criterion_intervention_counts.get(criterion, 0) + 1

@@ -274,6 +274,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         # 4. Record verdicts to session after result is built
         session.turn_count += 1
+        session.last_intervention_criteria = []
         for v in verdicts:
             session.record_verdict(v)
         if result.decision == Decision.INTERVENE:
