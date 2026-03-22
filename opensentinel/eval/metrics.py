@@ -13,13 +13,21 @@ class EvalMetrics:
     """Aggregate metrics across eval results."""
 
     total_turns: int = 0
+    # Counts decisions per evaluation phase (request + response), so a single turn
+    # with both phases evaluating ALLOW contributes {"allow": 2}.
     decisions: dict[str, int] = field(default_factory=dict)
     violation_count: int = 0
     intervention_count: int = 0
 
 
 def compute_metrics(results: list[EvalResult]) -> EvalMetrics:
-    """Compute aggregate metrics from a list of eval results."""
+    """Compute aggregate metrics from a list of eval results.
+
+    Decisions, violations, and interventions are counted per evaluation phase.
+    Each turn has two phases (request and response), so a single ALLOW turn
+    contributes two entries to ``decisions`` (e.g. ``{"allow": 2}``).
+    Violations and interventions follow the same per-phase semantics.
+    """
     metrics = EvalMetrics()
 
     for result in results:
