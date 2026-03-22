@@ -85,20 +85,13 @@ class JudgePolicyEngine(PolicyEngine):
 
     @property
     def timeout(self) -> float:
-        """Maximum per-call timeout across all configured judge models.
+        """Worst-case wall-clock time for a judge evaluation, including retries.
 
         Used by SentinelCallback to ensure the hook timeout never races
         the judge's own LLM timeout.  Returns 0.0 when no models are
         configured (e.g. before initialize() is called).
         """
-        if self._client is None:
-            return 0.0
-        timeouts = [
-            client.timeout
-            for client in self._client._clients.values()
-            if hasattr(client, "timeout")
-        ]
-        return max(timeouts, default=0.0)
+        return self._client.timeout if self._client is not None else 0.0
 
     async def initialize(self, config: dict[str, Any]) -> None:
         """Initialize the judge engine with configuration.

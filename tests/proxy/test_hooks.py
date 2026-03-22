@@ -719,28 +719,30 @@ def test_judge_engine_timeout_no_client():
 
 
 def test_judge_engine_timeout_single_model():
-    """Judge engine timeout returns the single model's timeout."""
+    """Judge engine timeout accounts for retries: timeout * (max_retries + 1)."""
     from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
     from opensentinel.policy.engines.judge.client import JudgeClient
 
     engine = JudgePolicyEngine()
     engine._client = JudgeClient()
-    engine._client.add_model("primary", model="gpt-4o", timeout=15.0)
+    engine._client.add_model("primary", model="gpt-4o", timeout=15.0, max_retries=2)
 
-    assert engine.timeout == 15.0
+    # worst-case = 15.0 * (2 + 1) = 45.0
+    assert engine.timeout == 45.0
 
 
 def test_judge_engine_timeout_multiple_models_returns_max():
-    """Judge engine timeout returns the maximum timeout across all models."""
+    """Judge engine timeout returns the max worst-case across all models."""
     from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
     from opensentinel.policy.engines.judge.client import JudgeClient
 
     engine = JudgePolicyEngine()
     engine._client = JudgeClient()
-    engine._client.add_model("primary", model="gpt-4o", timeout=15.0)
-    engine._client.add_model("secondary", model="gpt-4o-mini", timeout=30.0)
+    engine._client.add_model("primary", model="gpt-4o", timeout=15.0, max_retries=2)
+    engine._client.add_model("secondary", model="gpt-4o-mini", timeout=30.0, max_retries=2)
 
-    assert engine.timeout == 30.0
+    # max(15*3, 30*3) = max(45, 90) = 90.0
+    assert engine.timeout == 90.0
 
 
 def test_judge_engine_timeout_empty_client():

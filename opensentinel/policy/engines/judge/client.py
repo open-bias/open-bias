@@ -52,6 +52,15 @@ class JudgeClient:
         logger.debug(f"Judge model registered: {name} ({model})")
 
     @property
+    def timeout(self) -> float:
+        """Maximum wall-clock time a single evaluation could take, including retries."""
+        worst_cases = [
+            client.timeout * (client.max_retries + 1)
+            for client in self._clients.values()
+        ]
+        return max(worst_cases, default=0.0)
+
+    @property
     def model_names(self) -> list[str]:
         """List of registered model names."""
         return list(self._clients.keys())
