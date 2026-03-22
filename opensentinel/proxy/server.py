@@ -137,6 +137,19 @@ class SentinelProxy:
             except Exception as e:
                 logger.error(f"Error during shutdown: {e}")
 
+            # Remove callback from litellm.callbacks to prevent accumulation
+            if isinstance(litellm.callbacks, list):
+                try:
+                    litellm.callbacks.remove(self._callback)
+                except ValueError:
+                    pass
+
+            # Remove from logging callback manager's async success list
+            if isinstance(litellm._async_success_callback, list) and self._callback in litellm._async_success_callback:
+                litellm._async_success_callback.remove(self._callback)
+
+            self._callback = None
+
     def _create_router(self) -> Router:
         """Create LiteLLM Router with model configuration and callbacks."""
         model_list = self.settings.get_model_list()

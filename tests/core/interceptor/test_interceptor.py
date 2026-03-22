@@ -756,15 +756,27 @@ class TestSessionEviction:
 
     async def test_max_sessions_eviction(self):
         """When max_sessions is exceeded, oldest sessions are evicted."""
-        interceptor = Interceptor([], max_sessions=2)
+        async_checker = _mock_checker(
+            name="evict_cap",
+            phase=CheckPhase.POST_CALL,
+            mode=CheckerMode.ASYNC,
+            delay=0.01,
+        )
+        interceptor = Interceptor([async_checker], max_sessions=2)
 
-        await interceptor.run_pre_call("session-1", _request(), REQUEST_ID)
-        await interceptor.run_pre_call("session-2", _request(), REQUEST_ID)
-        await interceptor.run_pre_call("session-3", _request(), REQUEST_ID)
+        await interceptor.run_post_call("session-1", _request(), {"r": 1}, REQUEST_ID)
+        await asyncio.sleep(0.05)
+        await interceptor.run_post_call("session-2", _request(), {"r": 2}, REQUEST_ID)
+        await asyncio.sleep(0.05)
+        await interceptor.run_post_call("session-3", _request(), {"r": 3}, REQUEST_ID)
+        await asyncio.sleep(0.05)
 
-        # touch-only sessions (no tasks) are tracked in timestamps but not data,
-        # so hard-cap doesn't apply. Verify newest session is tracked.
-        assert "session-3" in interceptor._sessions._timestamps
+        # Hard cap is 2 — oldest session should have been evicted
+        assert "session-1" not in interceptor._sessions
+        assert "session-2" in interceptor._sessions
+        assert "session-3" in interceptor._sessions
+
+        await interceptor.shutdown()
 
     async def test_cleanup_session_removes_timestamp(self):
         """cleanup_session removes both tasks and timestamp."""

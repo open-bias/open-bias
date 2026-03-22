@@ -298,3 +298,201 @@ async def test_get_session_state_returns_none(engine):
     result = await engine.get_session_state("any-session-id")
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Parameterized edge-case coverage for _check_rail_activations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "activated_rails, expected_len",
+    [
+        pytest.param([{"type": "input", "name": ""}], 1, id="empty-string-name"),
+        pytest.param([{"type": "input", "name": None}], 1, id="none-name"),
+        pytest.param([{"type": "input"}], 1, id="missing-name-key"),
+        pytest.param([{"name": "block something"}], 1, id="missing-type-key"),
+        pytest.param([{"type": "dialog"}], 1, id="only-type-no-name"),
+        pytest.param([{}], 1, id="empty-dict"),
+        pytest.param(None, 0, id="none-activated-rails"),
+        pytest.param([], 0, id="empty-list"),
+    ],
+)
+async def test_check_rail_activations_edge_cases(activated_rails, expected_len):
+    """_check_rail_activations handles malformed activation dicts gracefully."""
+    engine = NemoGuardrailsPolicyEngine()
+    result = _make_result(activated_rails=activated_rails)
+    activations = engine._check_rail_activations(result)
+    assert len(activations) == expected_len
+
+
+@pytest.mark.parametrize(
+    "activated_rails",
+    [
+        pytest.param(
+            [{"type": "input", "name": "block jailbreak", "score": 0.95}],
+            id="extra-score-key",
+        ),
+        pytest.param(
+            [{"type": "output", "name": "pii filter", "model": "bert-base", "latency_ms": 12}],
+            id="extra-model-and-latency-keys",
+        ),
+        pytest.param(
+            [{"type": "execution", "name": "sandbox escape", "custom": {"nested": True}}],
+            id="extra-nested-dict-key",
+        ),
+    ],
+)
+async def test_check_rail_activations_extra_keys(activated_rails):
+    """Activation dicts with unexpected extra keys are passed through."""
+    engine = NemoGuardrailsPolicyEngine()
+    result = _make_result(activated_rails=activated_rails)
+    activations = engine._check_rail_activations(result)
+    assert len(activations) == 1
+    assert activations[0] is activated_rails[0]
+
+
+async def test_check_rail_activations_log_is_none():
+    """Result whose .log attribute is None should return empty list."""
+    engine = NemoGuardrailsPolicyEngine()
+    result = MagicMock(spec=["log"])
+    result.log = None
+    assert engine._check_rail_activations(result) == []
+
+
+# ---------------------------------------------------------------------------
+# Parameterized evaluate_request / evaluate_response with varied block patterns
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "rail_type, rail_name, expected_violation_name",
+    [
+        pytest.param("input", "block jailbreak", "nemo_input_blocked", id="input-jailbreak"),
+        pytest.param("dialog", "topic guard", "nemo_dialog_blocked", id="dialog-topic-guard"),
+        pytest.param("execution", "sandbox escape", "nemo_execution_blocked", id="execution-rail"),
+        pytest.param("custom_type", "org policy", "nemo_custom_type_blocked", id="custom-type"),
+    ],
+)
+async def test_evaluate_request_varied_rail_types(
+    engine, mock_rails, rail_type, rail_name, expected_violation_name
+):
+    """evaluate_request produces correct violation name for varied rail types."""
+    await engine.initialize({"config_path": "dummy"})
+
+    mock_rails.generate_async.return_value = _make_result(
+        activated_rails=[{"type": rail_type, "name": rail_name}]
+    )
+
+    result = await engine.evaluate_request(
+        session_id="s1",
+        request_data={"messages": [{"role": "user", "content": "test"}]},
+    )
+
+    assert result.decision == Decision.INTERVENE
+    violations = result.metadata["violations"]
+    assert violations[0]["name"] == expected_violation_name
+    assert violations[0]["message"] == rail_name
+
+
+@pytest.mark.parametrize(
+    "rail_type, rail_name, expected_violation_name",
+    [
+        pytest.param("output", "block unsafe content", "nemo_output_blocked", id="output-unsafe"),
+        pytest.param("dialog", "off-topic", "nemo_dialog_blocked", id="dialog-off-topic"),
+        pytest.param("retrieval", "hallucination", "nemo_retrieval_blocked", id="retrieval-rail"),
+    ],
+)
+async def test_evaluate_response_varied_rail_types(
+    engine, mock_rails, rail_type, rail_name, expected_violation_name
+):
+    """evaluate_response produces correct violation name for varied rail types."""
+    await engine.initialize({"config_path": "dummy"})
+
+    mock_rails.generate_async.return_value = _make_result(
+        activated_rails=[{"type": rail_type, "name": rail_name}]
+    )
+
+    result = await engine.evaluate_response(
+        session_id="s1",
+        response_data="some response",
+        request_data={"messages": [{"role": "user", "content": "q"}]},
+    )
+
+    assert result.decision == Decision.INTERVENE
+    violations = result.metadata["violations"]
+    assert violations[0]["name"] == expected_violation_name
+    assert violations[0]["message"] == rail_name
+
+
+@pytest.mark.parametrize(
+    "activation, expected_msg",
+    [
+        pytest.param(
+            {"type": "input"},
+            "NeMo input rail triggered",
+            id="missing-name-uses-fallback-message",
+        ),
+        pytest.param(
+            {"type": "input", "name": ""},
+            "",
+            id="empty-name-kept-as-is",
+        ),
+        pytest.param(
+            {"name": "some rail"},
+            "some rail",
+            id="missing-type-falls-back-to-input",
+        ),
+        pytest.param(
+            {},
+            "NeMo input rail triggered",
+            id="empty-dict-uses-all-fallbacks",
+        ),
+    ],
+)
+async def test_evaluate_request_violation_fallback_values(
+    engine, mock_rails, activation, expected_msg
+):
+    """Verify fallback values when activation dict is missing keys."""
+    await engine.initialize({"config_path": "dummy"})
+
+    mock_rails.generate_async.return_value = _make_result(activated_rails=[activation])
+
+    result = await engine.evaluate_request(
+        session_id="s1",
+        request_data={"messages": [{"role": "user", "content": "x"}]},
+    )
+
+    assert result.decision == Decision.INTERVENE
+    violations = result.metadata["violations"]
+    assert violations[0]["message"] == expected_msg
+
+
+# ---------------------------------------------------------------------------
+# Parameterized false-positive resilience
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("The character says 'I cannot believe it'", id="fiction-dialogue"),
+        pytest.param("I'm sorry, but that movie was terrible!", id="apology-phrase"),
+        pytest.param("block of cheese on the counter", id="word-block-in-context"),
+        pytest.param("unsafe at any speed is a great book", id="word-unsafe-in-context"),
+        pytest.param("", id="empty-string"),
+        pytest.param("jailbreak your phone to install custom firmware", id="jailbreak-benign"),
+        pytest.param("The policy was updated yesterday.", id="word-policy-in-context"),
+    ],
+)
+async def test_plain_string_result_no_false_positive_varied(engine, mock_rails, text):
+    """Plain string results (older NeMo) with varied text should never trigger blocks."""
+    await engine.initialize({"config_path": "dummy"})
+    mock_rails.generate_async.return_value = text
+
+    result = await engine.evaluate_request(
+        session_id="s1",
+        request_data={"messages": [{"role": "user", "content": "hello"}]},
+    )
+
+    assert result.decision == Decision.ALLOW

@@ -27,6 +27,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import datetime
@@ -537,10 +538,15 @@ class SentinelCallback(CustomLogger):
                 cm = nullcontext()
 
             with cm as span:
+                request_id = str(uuid.uuid4())
+                if "metadata" not in data:
+                    data["metadata"] = {}
+                data["metadata"]["_opensentinel_request_id"] = request_id
+
                 result = await interceptor.run_pre_call(
                     session_id=session_id,
                     request_data=data,
-                    user_request_id=str(id(data)),
+                    user_request_id=request_id,
                 )
 
                 # Set output on span
@@ -660,11 +666,16 @@ class SentinelCallback(CustomLogger):
                 cm = nullcontext()
 
             with cm as span:
+                request_id = (
+                    data.get("metadata", {}).get("_opensentinel_request_id")
+                    or str(uuid.uuid4())
+                )
+
                 result = await interceptor.run_post_call(
                     session_id=session_id,
                     request_data=data,
                     response_data=response,
-                    user_request_id=str(id(data)),
+                    user_request_id=request_id,
                 )
 
                 # Set output on span

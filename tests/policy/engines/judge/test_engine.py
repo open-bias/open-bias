@@ -92,6 +92,28 @@ def _failing_judge_response():
     }
 
 
+def _passing_safety_response():
+    return {
+        "scores": [
+            {"criterion": "no_harmful_content", "score": 1, "reasoning": "Safe content", "evidence": [], "confidence": 0.95},
+            {"criterion": "no_pii_leak", "score": 1, "reasoning": "No PII", "evidence": [], "confidence": 0.95},
+            {"criterion": "no_unauthorized_actions", "score": 1, "reasoning": "No unauthorized actions", "evidence": [], "confidence": 0.95},
+        ],
+        "summary": "Request is safe.",
+    }
+
+
+def _failing_safety_response():
+    return {
+        "scores": [
+            {"criterion": "no_harmful_content", "score": 0, "reasoning": "Contains harmful content", "evidence": ["harmful phrase"], "confidence": 0.9},
+            {"criterion": "no_pii_leak", "score": 1, "reasoning": "No PII", "evidence": [], "confidence": 0.9},
+            {"criterion": "no_unauthorized_actions", "score": 0, "reasoning": "Suggests unauthorized actions", "evidence": ["bad action"], "confidence": 0.9},
+        ],
+        "summary": "Request contains harmful content and unauthorized actions.",
+    }
+
+
 class TestRegistration:
     def test_engine_registered(self):
         engine = PolicyEngineRegistry.create("judge")
@@ -137,6 +159,32 @@ class TestEvaluateRequest:
         result = await engine.evaluate_request("s1", sample_request)
         assert result.decision == Decision.ALLOW
 
+    async def test_pre_call_enabled_evaluates_request(self, engine, sample_request):
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "pre_call_enabled": True,
+        }
+        await engine.initialize(config)
+        engine._client.call_judge = AsyncMock(return_value=_passing_safety_response())
+
+        result = await engine.evaluate_request("s1", sample_request)
+
+        assert result.decision == Decision.ALLOW
+        engine._client.call_judge.assert_called_once()
+
+    async def test_pre_call_enabled_failing_request(self, engine, sample_request):
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "pre_call_enabled": True,
+        }
+        await engine.initialize(config)
+        engine._client.call_judge = AsyncMock(return_value=_failing_safety_response())
+
+        result = await engine.evaluate_request("s1", sample_request)
+
+        assert result.decision == Decision.INTERVENE
+        violations = result.metadata.get("violations", [])
+        assert len(violations) > 0
 
 
 class TestEvaluateResponse:
@@ -157,7 +205,7 @@ class TestEvaluateResponse:
         engine._client.call_judge = AsyncMock(return_value=_failing_judge_response())
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision in (Decision.BLOCK, Decision.INTERVENE)
+        assert result.decision == Decision.INTERVENE
         violations = result.metadata.get("violations", [])
         assert len(violations) > 0
         for v in violations:
@@ -274,22 +322,31 @@ class TestResponseExtraction:
 class TestConversationEvalTrigger:
     async def test_conversation_eval_on_interval(self, engine, judge_config, sample_request, sample_response):
         """Conversation eval should trigger every N turns."""
-        judge_config["conversation_eval_interval"] = 2
+        judge_config["conversation_eval_interval"] = 1
         await engine.initialize(judge_config)
-        engine._client.call_judge = AsyncMock(return_value=_passing_judge_response())
 
-        # Turn 1 - no conversation eval
-        await engine.evaluate_response("s1", sample_response, sample_request)
-        assert engine._client.call_judge.call_count == 1
+        passing_verdict = JudgeVerdict(
+            scores=[],
+            composite_score=5.0,
+            action=VerdictAction.PASS,
+            summary="OK",
+            judge_model="gpt-4o-mini",
+            latency_ms=10.0,
+            token_usage=0,
+            scope=EvaluationScope.TURN,
+        )
+        engine._evaluator.evaluate_turn = AsyncMock(return_value=passing_verdict)
+        engine._evaluator.evaluate_conversation = AsyncMock(return_value=passing_verdict)
 
-        # Turn 2 - conversation eval triggers (turn_count == 2, 2 % 2 == 0)
-        # But turn_count is incremented inside record_verdict, so after first eval turn_count=1
-        # Second eval: turn_count becomes 2, but _should_run checks before increment
-        # Actually the session records the verdict which increments turn_count
-        # Let's just verify multiple calls happen
+        # Turn 1: turn_count=0, effective_turn=1, 1%1==0 → conversation eval fires
         await engine.evaluate_response("s1", sample_response, sample_request)
-        # Should have at least 2 calls (turn eval + possibly conversation eval)
-        assert engine._client.call_judge.call_count >= 2
+        assert engine._evaluator.evaluate_turn.call_count == 1
+        assert engine._evaluator.evaluate_conversation.call_count == 1
+
+        # Turn 2: turn_count=1, effective_turn=2, 2%1==0 → conversation eval fires again
+        await engine.evaluate_response("s1", sample_response, sample_request)
+        assert engine._evaluator.evaluate_turn.call_count == 2
+        assert engine._evaluator.evaluate_conversation.call_count == 2
 
 
 class TestPerRuleCriteria:

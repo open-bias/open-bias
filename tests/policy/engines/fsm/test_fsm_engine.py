@@ -435,3 +435,180 @@ async def test_initialize_warns_when_embeddings_unavailable(engine, mocks, caplo
         "sentence-transformers not installed" in record.message
         for record in caplog.records
     )
+
+
+# ---------------------------------------------------------------------------
+# Integration tests — real components, no mocks fixture
+# ---------------------------------------------------------------------------
+
+class TestFSMIntegration:
+    """End-to-end tests using real WorkflowStateMachine, ConstraintEvaluator,
+    and StateClassifier (pattern-based classification, no embeddings)."""
+
+    WORKFLOW = {
+        "name": "support-flow",
+        "states": [
+            {
+                "name": "greeting",
+                "is_initial": True,
+                "classification": {"patterns": [r"\bhello\b", r"\bwelcome\b"]},
+            },
+            {
+                "name": "identify_issue",
+                "classification": {"patterns": [r"\bissue\b", r"\bproblem\b"]},
+            },
+            {
+                "name": "resolution",
+                "is_terminal": True,
+                "classification": {"patterns": [r"\bresolved\b", r"\bfixed\b"]},
+            },
+            {
+                "name": "data_leak",
+                "classification": {"patterns": [r"\binternal_dump\b"]},
+            },
+        ],
+        "transitions": [
+            {"from_state": "greeting", "to_state": "identify_issue"},
+            {"from_state": "identify_issue", "to_state": "resolution"},
+            {"from_state": "greeting", "to_state": "resolution"},
+        ],
+        "constraints": [
+            {
+                "name": "no_data_leak",
+                "type": "never",
+                "target": "data_leak",
+                "message": "Data leak state must never be entered.",
+            },
+        ],
+    }
+
+    @staticmethod
+    def _response(content: str) -> dict:
+        """Build a minimal OpenAI-style response dict."""
+        return {"choices": [{"message": {"content": content}}]}
+
+    @staticmethod
+    def _tool_response(tool_name: str) -> dict:
+        """Build a response with a tool call."""
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": "",
+                        "tool_calls": [
+                            {"function": {"name": tool_name}},
+                        ],
+                    },
+                }
+            ],
+        }
+
+    async def _init_engine(self) -> FSMPolicyEngine:
+        engine = FSMPolicyEngine()
+        await engine.initialize({"workflow": self.WORKFLOW})
+        return engine
+
+    async def test_happy_path_transitions_and_allows(self):
+        """Response classified via pattern → state transitions → ALLOW."""
+        engine = await self._init_engine()
+        sid = "integration-1"
+
+        # Step 1: greeting → identify_issue (pattern: "issue")
+        result = await engine.evaluate_response(
+            sid, self._response("I have an issue with my account"), {}
+        )
+        assert result.decision == Decision.ALLOW
+        assert result.metadata["current_state"] == "identify_issue"
+        assert result.metadata["previous_state"] == "greeting"
+
+        # Step 2: identify_issue → resolution (pattern: "resolved")
+        result = await engine.evaluate_response(
+            sid, self._response("Your ticket has been resolved"), {}
+        )
+        assert result.decision == Decision.ALLOW
+        assert result.metadata["current_state"] == "resolution"
+
+    async def test_never_constraint_triggers_intervene(self):
+        """Transitioning to a NEVER-constrained state returns INTERVENE and
+        blocks the transition."""
+        engine = await self._init_engine()
+        sid = "integration-2"
+
+        # Attempt a response that classifies as the forbidden data_leak state
+        result = await engine.evaluate_response(
+            sid, self._response("Here is the internal_dump of the system"), {}
+        )
+        assert result.decision == Decision.INTERVENE
+        assert "Data leak" in (result.message or "")
+        assert result.metadata["transition_result"] == "constraint_violated"
+        # State should remain at greeting (transition blocked)
+        assert result.metadata["current_state"] == "greeting"
+
+    async def test_invalid_transition_returns_intervene(self):
+        """Attempting a transition not in the graph returns INTERVENE."""
+        engine = await self._init_engine()
+        sid = "integration-3"
+
+        # Move to identify_issue first
+        result = await engine.evaluate_response(
+            sid, self._response("I have a problem"), {}
+        )
+        assert result.decision == Decision.ALLOW
+        assert result.metadata["current_state"] == "identify_issue"
+
+        # Now try to go back to greeting — no such transition defined
+        result = await engine.evaluate_response(
+            sid, self._response("hello again, welcome back"), {}
+        )
+        assert result.decision == Decision.INTERVENE
+        assert result.metadata["transition_result"] == "invalid_transition"
+
+    async def test_tool_call_classification(self):
+        """Tool-call based classification works end-to-end."""
+        # Add a tool_calls hint to identify_issue
+        workflow = {
+            **self.WORKFLOW,
+            "states": [
+                {
+                    "name": "greeting",
+                    "is_initial": True,
+                    "classification": {"patterns": [r"\bhello\b"]},
+                },
+                {
+                    "name": "identify_issue",
+                    "classification": {"tool_calls": ["lookup_ticket"]},
+                },
+                {
+                    "name": "resolution",
+                    "is_terminal": True,
+                    "classification": {"patterns": [r"\bresolved\b"]},
+                },
+            ],
+            "transitions": [
+                {"from_state": "greeting", "to_state": "identify_issue"},
+                {"from_state": "identify_issue", "to_state": "resolution"},
+            ],
+            "constraints": [],
+        }
+        engine = FSMPolicyEngine()
+        await engine.initialize({"workflow": workflow})
+
+        result = await engine.evaluate_response(
+            "integration-4", self._tool_response("lookup_ticket"), {}
+        )
+        assert result.decision == Decision.ALLOW
+        assert result.metadata["current_state"] == "identify_issue"
+        assert result.metadata["classification_method"] == "tool_call"
+
+    async def test_same_state_stays_allow(self):
+        """Classifying to the same state is a no-op ALLOW."""
+        engine = await self._init_engine()
+        sid = "integration-5"
+
+        # Classify as greeting while already in greeting
+        result = await engine.evaluate_response(
+            sid, self._response("hello there"), {}
+        )
+        assert result.decision == Decision.ALLOW
+        assert result.metadata["transition_result"] == "same_state"
+        assert result.metadata["current_state"] == "greeting"

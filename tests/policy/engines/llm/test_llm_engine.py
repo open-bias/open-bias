@@ -129,7 +129,7 @@ class TestEvaluateResponse:
             {"messages": []},
         )
         
-        assert result.decision in [Decision.ALLOW, Decision.INTERVENE]
+        assert result.decision == Decision.ALLOW
         assert "state" in result.metadata
 
 
