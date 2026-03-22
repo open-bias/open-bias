@@ -159,8 +159,12 @@ class DriftDetector:
         Returns:
             Normalized drift score (0.0-1.0)
         """
-        if not expected or not actual:
+        if not expected and not actual:
             return 0.0
+        if not actual:
+            return 0.0
+        if not expected:
+            return 0.5
         
         # Pad shorter sequence
         max_len = max(len(expected), len(actual))

@@ -13,7 +13,6 @@ def sample_workflow():
     """Sample workflow for testing."""
     return WorkflowDefinition(
         name="test-workflow",
-        version="1.0",
         states=[
             {
                 "name": "greeting",
@@ -81,10 +80,10 @@ class TestTemporalDrift:
         assert 0.0 < drift < 1.0
 
     def test_empty_sequences(self, detector):
-        """Empty sequences should have zero drift."""
+        """Empty sequences should have zero drift unless only expected is empty."""
         assert detector.compute_temporal_drift([], []) == 0.0
         assert detector.compute_temporal_drift(["a"], []) == 0.0
-        assert detector.compute_temporal_drift([], ["a"]) == 0.0
+        assert detector.compute_temporal_drift([], ["a"]) == 0.5
 
     def test_decay_weighting(self, detector):
         """Recent deviations should be weighted more heavily."""
