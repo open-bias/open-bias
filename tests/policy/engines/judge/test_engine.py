@@ -964,6 +964,74 @@ class TestRubricIsolation:
         assert fresh.get("agent_behavior") is not None
 
 
+class TestInterventionCountBehavior:
+    """Tests for intervention_count increment semantics."""
+
+    async def test_block_verdict_does_not_increment_intervention_count(
+        self, engine, judge_config, sample_request, sample_response
+    ):
+        """BLOCK decisions must not increment intervention_count.
+
+        intervention_count is used by _check_escalation to upgrade future
+        INTERVENE decisions to BLOCK. If BLOCK verdicts also inflate the
+        counter, sessions that already received a block will prematurely
+        escalate subsequent INTERVENE decisions.
+        """
+        from opensentinel.policy.protocols import EngineResult
+        await engine.initialize(judge_config)
+        engine._client.call_judge = AsyncMock(return_value=_failing_judge_response())
+
+        # Patch _build_result to always return BLOCK
+        original_build = engine._build_result
+        engine._build_result = lambda verdicts, session: EngineResult(
+            decision=Decision.BLOCK,
+            message="blocked",
+            metadata={"judge": {"verdicts": [], "session_turn": 0}, "violations": []},
+        )
+
+        result = await engine.evaluate_response("s1", sample_response, sample_request)
+        assert result.decision == Decision.BLOCK
+
+        session = engine._sessions.get("s1")
+        assert session is not None
+        assert session.intervention_count == 0
+
+    async def test_intervene_verdict_increments_intervention_count(
+        self, engine, judge_config, sample_request, sample_response
+    ):
+        """INTERVENE decisions must increment intervention_count."""
+        from opensentinel.policy.protocols import EngineResult
+        await engine.initialize(judge_config)
+        engine._client.call_judge = AsyncMock(return_value=_failing_judge_response())
+
+        engine._build_result = lambda verdicts, session: EngineResult(
+            decision=Decision.INTERVENE,
+            message="intervene",
+            metadata={"judge": {"verdicts": [], "session_turn": 0}, "violations": []},
+        )
+
+        result = await engine.evaluate_response("s1", sample_response, sample_request)
+        assert result.decision == Decision.INTERVENE
+
+        session = engine._sessions.get("s1")
+        assert session is not None
+        assert session.intervention_count == 1
+
+    async def test_allow_verdict_does_not_increment_intervention_count(
+        self, engine, judge_config, sample_request, sample_response
+    ):
+        """ALLOW decisions must not increment intervention_count."""
+        await engine.initialize(judge_config)
+        engine._client.call_judge = AsyncMock(return_value=_passing_judge_response())
+
+        result = await engine.evaluate_response("s1", sample_response, sample_request)
+        assert result.decision == Decision.ALLOW
+
+        session = engine._sessions.get("s1")
+        assert session is not None
+        assert session.intervention_count == 0
+
+
 class TestValidateConfig:
     """Tests for JudgePolicyEngine.validate_config() classmethod."""
 

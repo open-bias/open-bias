@@ -274,12 +274,9 @@ class JudgePolicyEngine(PolicyEngine):
 
         # 4. Record verdicts to session after result is built
         session.turn_count += 1
-        any_failed = False
         for v in verdicts:
             session.record_verdict(v)
-            if v.action != VerdictAction.PASS:
-                any_failed = True
-        if any_failed:
+        if result.decision == Decision.INTERVENE:
             session.intervention_count += 1
 
         return result
