@@ -286,6 +286,49 @@ class TestSelfCorrection:
         assert result is not None
 
 
+class TestCriticalBypassMaxAttempts:
+    """Tests for critical violations bypassing max intervention attempts cap."""
+
+    def test_critical_bypasses_max_attempts(self, engine, session, nominal_drift):
+        """Critical violations should intervene even after max attempts exceeded."""
+        # Exhaust the max intervention attempts (default 3)
+        engine._intervention_counts[session.session_id] = 3
+
+        violations = [
+            ConstraintEvaluation(
+                constraint_id="test",
+                violated=True,
+                confidence=0.95,
+                evidence="Critical security breach",
+                severity="critical",
+            )
+        ]
+
+        result = engine.decide(session, violations, nominal_drift)
+
+        # Critical violation must NOT be suppressed by max-attempts cap
+        assert result is not None
+        assert isinstance(result, str)
+
+    def test_non_critical_blocked_by_max_attempts(self, engine, session, nominal_drift):
+        """Non-critical violations should still be blocked after max attempts."""
+        engine._intervention_counts[session.session_id] = 3
+
+        violations = [
+            ConstraintEvaluation(
+                constraint_id="test",
+                violated=True,
+                confidence=0.9,
+                evidence="Minor issue",
+                severity="warning",
+            )
+        ]
+
+        result = engine.decide(session, violations, nominal_drift)
+
+        assert result is None
+
+
 class TestEscalation:
     """Tests for escalation checks."""
 

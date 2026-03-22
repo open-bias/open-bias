@@ -62,20 +62,20 @@ class InterventionHandler:
         Returns:
             Message template string if intervention needed, None otherwise
         """
-        # Check max intervention attempts
+        # Check for critical violations that bypass cooldown and max-attempts cap
+        has_critical = any(
+            v.severity == "critical" and v.violated
+            for v in violations
+        )
+
+        # Check max intervention attempts (critical violations always pass through)
         session_count = self._intervention_counts.get(session.session_id, 0)
-        if session_count >= self.max_intervention_attempts:
+        if not has_critical and session_count >= self.max_intervention_attempts:
             logger.warning(
                 f"Session {session.session_id} exceeded max intervention attempts "
                 f"({session_count}/{self.max_intervention_attempts})"
             )
             return None
-
-        # Check for critical violations that bypass cooldown
-        has_critical = any(
-            v.severity == "critical" and v.violated
-            for v in violations
-        )
 
         # Cooldown check (skip if critical)
         if not has_critical:
