@@ -135,7 +135,7 @@ class Interceptor:
 
         # Step 1: Apply pending async results
         pending_results = self._collect_completed_async(session_id)
-        for pending in pending_results:
+        for processed_count, pending in enumerate(pending_results, start=1):
             result = pending.result
             decision = self._effective_decision(result.decision)
             all_metadata["results"].append(
@@ -147,7 +147,10 @@ class Interceptor:
                     f"Request blocked by async checker '{pending.checker_name}': "
                     f"{result.message}"
                 )
-                self._confirm_collected(session_id)
+                # Only confirm tasks up to and including the blocking one.
+                # Any remaining completed-but-unprocessed tasks stay in the
+                # session so they are picked up on the next request.
+                self._confirm_collected(session_id, count=processed_count)
                 return InterceptionResult(
                     allowed=False,
                     message=result.message,
@@ -377,21 +380,38 @@ class Interceptor:
 
         return results
 
-    def _confirm_collected(self, session_id: str) -> None:
-        """Remove previously collected async tasks after successful processing."""
-        completed_tasks = self._last_collected.pop(session_id, None)
+    def _confirm_collected(self, session_id: str, count: int | None = None) -> None:
+        """Remove previously collected async tasks after successful processing.
+
+        Args:
+            session_id: Session to confirm for.
+            count: Number of tasks to confirm from the front of the collected list.
+                   If None, confirm all collected tasks. Use a specific count when
+                   processing was interrupted early (e.g., BLOCK) so that unprocessed
+                   completed tasks remain in the session for the next request.
+        """
+        completed_tasks = self._last_collected.get(session_id)
         if completed_tasks is None:
             return
+
+        tasks_to_remove = completed_tasks if count is None else completed_tasks[:count]
+        remaining_collected = [] if count is None else completed_tasks[count:]
+
+        if remaining_collected:
+            # Keep unprocessed completed tasks for next request
+            self._last_collected[session_id] = remaining_collected
+        else:
+            self._last_collected.pop(session_id, None)
 
         tasks = self._sessions.get(session_id)
         if tasks is None:
             return
 
-        completed_set = set(id(t) for t in completed_tasks)
-        still_running = [t for t in tasks if id(t) not in completed_set]
+        remove_set = set(id(t) for t in tasks_to_remove)
+        still_pending = [t for t in tasks if id(t) not in remove_set]
 
-        if still_running:
-            tasks[:] = still_running
+        if still_pending:
+            tasks[:] = still_pending
         else:
             self._sessions.remove(session_id)
 

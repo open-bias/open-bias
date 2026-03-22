@@ -494,6 +494,70 @@ class TestAsyncCheckerLifecycle:
         assert result.allowed is False
         assert "violation detected async" in (result.message or "")
 
+    async def test_early_block_preserves_unprocessed_async_results(self):
+        """
+        When a BLOCK result causes an early return, async results that completed
+        but had not yet been iterated must remain in the session and be picked up
+        on the next request.
+
+        Setup: three async checkers complete — A=ALLOW, B=BLOCK, C=INTERVENE.
+        On request 2: B triggers the early BLOCK return. C's result must not be
+        discarded; it should be applied on request 3.
+        """
+        # Use pre-call async checkers so they are all launched from request 1
+        # and complete before request 2. We need three distinct tasks to be
+        # queued and complete in order A → B → C.
+        #
+        # Strategy: start them via POST_CALL on request 1, let them complete,
+        # then verify the cascade across requests 2 and 3.
+
+        # Checker A: ALLOW — processed first, confirmed
+        checker_a = _mock_checker(
+            name="checker_a",
+            phase=CheckPhase.POST_CALL,
+            mode=CheckerMode.ASYNC,
+            decision=Decision.ALLOW,
+            delay=0.01,
+        )
+        # Checker B: BLOCK — causes early return on request 2
+        checker_b = _mock_checker(
+            name="checker_b",
+            phase=CheckPhase.POST_CALL,
+            mode=CheckerMode.ASYNC,
+            decision=Decision.BLOCK,
+            message="blocked by B",
+            delay=0.01,
+        )
+        # Checker C: INTERVENE — must survive the BLOCK and be applied on request 3
+        checker_c = _mock_checker(
+            name="checker_c",
+            phase=CheckPhase.POST_CALL,
+            mode=CheckerMode.ASYNC,
+            decision=Decision.INTERVENE,
+            message="intervention from C",
+            delay=0.01,
+        )
+
+        interceptor = Interceptor([checker_a, checker_b, checker_c])
+
+        # Request 1: fire all three async checkers
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
+        # Wait for all three to complete
+        await asyncio.sleep(0.1)
+
+        # Request 2: A=ALLOW processed, B=BLOCK causes early return.
+        # C's result must remain in session.
+        result2 = await interceptor.run_pre_call(SESSION, _request(), "req-002")
+        assert result2.allowed is False
+        assert "blocked by B" in (result2.message or "")
+
+        # Request 3: C's INTERVENE result should be applied.
+        result3 = await interceptor.run_pre_call(SESSION, _request(), "req-003")
+        assert result3.allowed is True
+        assert result3.modified_data is not None
+        contents = [m["content"] for m in result3.modified_data["messages"]]
+        assert any("intervention from C" in c for c in contents)
+
 
 # ===========================================================================
 # Async edge cases
