@@ -71,6 +71,39 @@ class TestExportJson:
         assert data["summary"]["total_turns"] == 2
         assert data["summary"]["intervention_count"] == 1
 
+    def test_request_block_marks_intervention_needed(self):
+        """request_eval BLOCK should set intervention_needed=True even when response is ALLOW."""
+        turn = make_turn(0, decision=Decision.ALLOW, request_decision=Decision.BLOCK)
+        data = export_json([make_result(turns=[turn])])
+        assert data["scenarios"][0]["turns"][0]["intervention_needed"] is True
+
+    def test_request_violations_included_in_violations(self):
+        """Violations from request_eval must appear in the violations list."""
+        request_violations = [{"name": "input_rail", "message": "blocked input"}]
+        turn = make_turn(0, decision=Decision.ALLOW, request_decision=Decision.BLOCK,
+                         request_violations=request_violations)
+        data = export_json([make_result(turns=[turn])])
+        t = data["scenarios"][0]["turns"][0]
+        assert len(t["violations"]) == 1
+        assert t["violations"][0]["name"] == "input_rail"
+
+    def test_combined_violations_from_both_evals(self):
+        """Violations from both request_eval and response_eval are merged."""
+        request_violations = [{"name": "input_rail"}]
+        response_violations = [{"name": "output_policy"}]
+        turn = make_turn(
+            0,
+            decision=Decision.INTERVENE,
+            violations=response_violations,
+            request_decision=Decision.BLOCK,
+            request_violations=request_violations,
+        )
+        data = export_json([make_result(turns=[turn])])
+        t = data["scenarios"][0]["turns"][0]
+        assert len(t["violations"]) == 2
+        names = {v["name"] for v in t["violations"]}
+        assert names == {"input_rail", "output_policy"}
+
 
 # ---------------------------------------------------------------------------
 # print_report
