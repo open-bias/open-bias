@@ -95,6 +95,50 @@ class TestNoIntervention:
         result = engine.decide(session, violations, warning_drift)
         assert result is None
 
+    def test_cooldown_blocks_at_exact_boundary(self, engine, session):
+        """Cooldown should block when turns_since == cooldown_turns."""
+        session.turn_count = 4
+        session.last_intervention_turn = 2  # Exactly 2 turns since last (== cooldown_turns)
+
+        violations = [
+            ConstraintEvaluation(
+                constraint_id="test",
+                violated=True,
+                confidence=0.9,
+                evidence="Minor issue",
+                severity="warning",
+            )
+        ]
+
+        warning_drift = DriftScores(
+            temporal=0.4, semantic=0.4, composite=0.4, level=DriftLevel.WARNING
+        )
+
+        result = engine.decide(session, violations, warning_drift)
+        assert result is None
+
+    def test_cooldown_expires_after_boundary(self, engine, session):
+        """Cooldown should expire when turns_since > cooldown_turns."""
+        session.turn_count = 5
+        session.last_intervention_turn = 2  # 3 turns since last (> cooldown_turns=2)
+
+        violations = [
+            ConstraintEvaluation(
+                constraint_id="test",
+                violated=True,
+                confidence=0.9,
+                evidence="Minor issue",
+                severity="warning",
+            )
+        ]
+
+        warning_drift = DriftScores(
+            temporal=0.4, semantic=0.4, composite=0.4, level=DriftLevel.WARNING
+        )
+
+        result = engine.decide(session, violations, warning_drift)
+        assert result is not None
+
 
 class TestViolationIntervention:
     """Tests for violation-triggered interventions."""

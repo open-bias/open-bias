@@ -80,7 +80,7 @@ class InterventionHandler:
         # Cooldown check (skip if critical)
         if not has_critical:
             turns_since_intervention = session.turn_count - session.last_intervention_turn
-            if turns_since_intervention < self.cooldown_turns:
+            if turns_since_intervention <= self.cooldown_turns:
                 logger.debug(
                     f"Cooldown active: {turns_since_intervention}/{self.cooldown_turns} turns"
                 )
