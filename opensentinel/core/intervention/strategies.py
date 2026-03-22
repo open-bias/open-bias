@@ -14,6 +14,10 @@ Strategies define HOW to modify LLM requests or responses when deviation is dete
 3. RESPONSE_MODIFICATION: Modify the current LLM response (response)
    - Strips tool calls, replaces content, or appends warnings
    - Used by sync POST_CALL checkers for real-time enforcement
+
+4. HARD_BLOCK: Raise WorkflowViolationError to halt execution (request)
+   - Most aggressive — LLM call never happens
+   - Used when policy requires immediate rejection
 """
 
 import logging
@@ -204,6 +208,14 @@ class ResponseModificationStrategy:
                 choices[0]["message"].pop("tool_calls", None)
 
 
+class WorkflowViolationError(Exception):
+    """Exception raised when a workflow violation blocks a request."""
+
+    def __init__(self, message: str, context: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.context = context or {}
+
+
 class HardBlockStrategy:
     """
     Immediately block the request by raising WorkflowViolationError.
@@ -216,11 +228,3 @@ class HardBlockStrategy:
     def apply(message: str) -> None:
         """Raise WorkflowViolationError to block the request."""
         raise WorkflowViolationError(message)
-
-
-class WorkflowViolationError(Exception):
-    """Exception raised when a workflow violation blocks a request."""
-
-    def __init__(self, message: str, context: dict[str, Any] | None = None):
-        super().__init__(message)
-        self.context = context or {}

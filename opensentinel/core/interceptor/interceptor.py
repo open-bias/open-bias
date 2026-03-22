@@ -465,8 +465,7 @@ class Interceptor:
 
         if effective_strategy == "hard_block":
             HardBlockStrategy.apply(message)
-
-        if effective_strategy == "user_message_inject":
+        elif effective_strategy == "user_message_inject":
             result["messages"] = UserMessageInjectStrategy.merge(messages, message)
         else:
             result["messages"] = SystemPromptAppendStrategy.merge(messages, message)
