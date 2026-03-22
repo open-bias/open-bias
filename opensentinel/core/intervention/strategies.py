@@ -89,7 +89,7 @@ class UserMessageInjectStrategy:
 
     @staticmethod
     def merge(messages: list[dict[str, Any]], value: str) -> list[dict[str, Any]]:
-        messages = list(messages)
+        messages = [dict(m) for m in messages]
         guidance = {"role": "user", "content": f"[System Note]: {value}"}
 
         last_user_idx = None

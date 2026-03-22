@@ -376,7 +376,7 @@ class Interceptor:
                     )
 
         # Store completed tasks for later removal by _confirm_collected
-        self._last_collected[session_id] = completed_tasks
+        self._last_collected.setdefault(session_id, []).extend(completed_tasks)
 
         return results
 
