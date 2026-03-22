@@ -456,6 +456,8 @@ class YamlConfigSource(PydanticBaseSettingsSource):
                 otel["langfuse_secret_key"] = tracing_cfg["langfuse_secret_key"]
             if "langfuse_host" in tracing_cfg:
                 otel["langfuse_host"] = tracing_cfg["langfuse_host"]
+            if "redact_content" in tracing_cfg:
+                otel["redact_content"] = tracing_cfg["redact_content"]
 
         return result
 
