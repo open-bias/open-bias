@@ -548,6 +548,8 @@ class JudgeEvaluator:
         weighted_sum = 0.0
 
         for score in scores:
+            if score.confidence == 0.0:
+                continue
             criterion = criteria_map.get(score.criterion)
             weight = criterion.weight if criterion else 1.0
             weighted_sum += score.normalized * weight

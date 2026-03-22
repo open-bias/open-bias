@@ -129,7 +129,7 @@ class TestEvaluateTurn:
         assert verdict.action == VerdictAction.INTERVENE
 
     async def test_missing_criterion_filled(self, evaluator, mock_client, simple_rubric, conversation):
-        """Missing criteria should be filled with min score."""
+        """Missing criteria should be filled with min score but excluded from composite."""
         mock_client.call_judge.return_value = {
             "scores": [
                 {"criterion": "quality", "score": 5, "reasoning": "Good", "evidence": [], "confidence": 0.9},
@@ -149,6 +149,9 @@ class TestEvaluateTurn:
         safety_score = next(s for s in verdict.scores if s.criterion == "safety")
         assert safety_score.score == 1  # min_score for LIKERT_5
         assert safety_score.confidence == 0.0
+        # Synthetic fill should not drag down composite; only quality (1.0) contributes
+        assert verdict.composite_score == 1.0
+        assert verdict.action == VerdictAction.PASS
 
 
 class TestEvaluateConversation:
@@ -250,6 +253,40 @@ class TestCompositeScoring:
 
     def test_empty_scores(self, evaluator):
         assert evaluator._compute_composite([], []) == 0.0
+
+    def test_zero_confidence_fills_excluded(self, evaluator):
+        """Synthetic fills (confidence=0.0) should not drag down composite score."""
+        from opensentinel.policy.engines.judge.models import JudgeScore
+
+        scores = [
+            JudgeScore(criterion="a", score=5, max_score=5, reasoning="ok", confidence=0.9),  # normalized 1.0
+            JudgeScore(criterion="b", score=5, max_score=5, reasoning="ok", confidence=0.9),  # normalized 1.0
+            JudgeScore(criterion="c", score=1, max_score=5, reasoning="fill", confidence=0.0),  # synthetic fill
+            JudgeScore(criterion="d", score=1, max_score=5, reasoning="fill", confidence=0.0),  # synthetic fill
+        ]
+        criteria = [
+            RubricCriterion(name="a", description="", weight=1.0),
+            RubricCriterion(name="b", description="", weight=1.0),
+            RubricCriterion(name="c", description="", weight=1.0),
+            RubricCriterion(name="d", description="", weight=1.0),
+        ]
+        # Only a and b should contribute; composite should be 1.0, not 0.5
+        composite = evaluator._compute_composite(scores, criteria)
+        assert composite == 1.0
+
+    def test_all_zero_confidence_returns_zero(self, evaluator):
+        """If all scores have confidence=0.0, composite should be 0.0 (not division by zero)."""
+        from opensentinel.policy.engines.judge.models import JudgeScore
+
+        scores = [
+            JudgeScore(criterion="a", score=1, max_score=5, reasoning="fill", confidence=0.0),
+            JudgeScore(criterion="b", score=1, max_score=5, reasoning="fill", confidence=0.0),
+        ]
+        criteria = [
+            RubricCriterion(name="a", description="", weight=1.0),
+            RubricCriterion(name="b", description="", weight=1.0),
+        ]
+        assert evaluator._compute_composite(scores, criteria) == 0.0
 
 
 class TestActionMapping:
