@@ -182,11 +182,17 @@ class SentinelProxy:
         return yaml.dump(config, default_flow_style=False)
 
     async def initialize(self) -> None:
-        """Initialize the proxy (register hooks)."""
+        """Initialize the proxy (register hooks).
+
+        Eagerly initializes the policy engine so bad configuration is caught
+        here rather than silently swallowed on the first request.
+        """
         self._setup_logging()
         self._log_policy_config()
         self._register_hooks()
         self.router = self._create_router()
+        # Fail fast on bad engine config — raises if initialization fails
+        await self._callback.initialize()
 
     def _log_policy_config(self) -> None:
         """Log active policy engine configuration."""

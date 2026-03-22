@@ -313,6 +313,54 @@ class SentinelCallback(CustomLogger):
 
         return self._policy_engine
 
+    async def initialize(self) -> None:
+        """
+        Eagerly initialize the policy engine and interceptor.
+
+        Called at startup by SentinelProxy.initialize() so that configuration
+        errors surface immediately rather than being silently swallowed on the
+        first request.  Unlike the lazy path, this method does NOT catch
+        exceptions — callers receive the error directly.
+        """
+        async with self._init_lock:
+            if not self._policy_engine_initialized:
+                # Bypass the try/except in _initialize_policy_engine by calling
+                # the registry directly here, then setting state explicitly.
+                from opensentinel.policy.registry import PolicyEngineRegistry
+
+                policy_config = self.settings.get_policy_config()
+                engine_type = policy_config.get("type", "judge")
+                engine_config = policy_config.get("config", {})
+
+                # Skip engines with no meaningful config (same logic as lazy path)
+                skip = False
+                if engine_type == "fsm" and not engine_config.get("config_path") and not engine_config.get("workflow"):
+                    skip = True
+                elif engine_type == "nemo" and not engine_config.get("config_path"):
+                    skip = True
+                elif engine_type == "llm" and not engine_config.get("config_path") and not engine_config.get("workflow"):
+                    skip = True
+                elif engine_type == "judge" and not engine_config.get("models"):
+                    skip = True
+
+                if skip:
+                    logger.debug(f"No config for engine '{engine_type}', skipping policy engine at startup")
+                    self._policy_engine_initialized = True
+                    self._policy_engine = None
+                else:
+                    logger.info(f"Eagerly initializing policy engine at startup: {engine_type}")
+                    # Raises on failure — no try/except intentionally
+                    self._policy_engine = await PolicyEngineRegistry.create_and_initialize(
+                        engine_type, engine_config
+                    )
+                    if hasattr(self._policy_engine, "set_tracer") and self.tracer:
+                        self._policy_engine.set_tracer(self.tracer)
+                    self._policy_engine_initialized = True
+                    logger.info(f"Policy engine ready: {self._policy_engine.name}")
+
+            if not self._interceptor_initialized:
+                await self._initialize_interceptor()
+
     async def cleanup_session(self, session_id: str) -> None:
         """Clean up all state for a session (interceptor tasks + engine session)."""
         if self._interceptor is not None:

@@ -442,3 +442,110 @@ async def test_log_failure_event_exception_is_swallowed(callback):
         {"messages": []}, MagicMock(), now, now
     )
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Eager startup initialization tests: SentinelCallback.initialize()
+# ---------------------------------------------------------------------------
+
+
+async def test_callback_initialize_raises_on_bad_engine_config(mock_settings):
+    """initialize() raises immediately when the engine fails to initialize."""
+    from opensentinel.proxy.hooks import SentinelCallback
+
+    # Simulate a judge engine with models configured (non-skip path)
+    mock_settings.get_policy_config.return_value = {
+        "type": "judge",
+        "config": {"models": [{"name": "primary", "model": "gpt-4o"}]},
+    }
+
+    cb = SentinelCallback(settings=mock_settings)
+
+    with patch(
+        "opensentinel.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        new=AsyncMock(side_effect=ValueError("bad model config")),
+    ):
+        with pytest.raises(ValueError, match="bad model config"):
+            await cb.initialize()
+
+
+async def test_callback_initialize_sets_engine_on_success(mock_settings):
+    """initialize() eagerly sets the policy engine when config is valid."""
+    from opensentinel.proxy.hooks import SentinelCallback
+
+    mock_engine = MagicMock()
+    mock_engine.name = "mock-judge"
+
+    mock_settings.get_policy_config.return_value = {
+        "type": "judge",
+        "config": {"models": [{"name": "primary", "model": "gpt-4o"}]},
+    }
+    mock_settings.policy.post_call_mode = "async"
+    mock_settings.policy.default_strategy = "pass"
+    mock_settings.policy.fail_action = "pass"
+
+    cb = SentinelCallback(settings=mock_settings)
+
+    with patch(
+        "opensentinel.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        new=AsyncMock(return_value=mock_engine),
+    ):
+        await cb.initialize()
+
+    assert cb._policy_engine is mock_engine
+    assert cb._policy_engine_initialized is True
+    assert cb._interceptor_initialized is True
+
+
+async def test_callback_initialize_skips_unconfigured_engine(mock_settings):
+    """initialize() skips the engine and stays None when no config is provided."""
+    from opensentinel.proxy.hooks import SentinelCallback
+
+    # Judge engine with no models — should be skipped
+    mock_settings.get_policy_config.return_value = {
+        "type": "judge",
+        "config": {},
+    }
+    mock_settings.policy.post_call_mode = "async"
+    mock_settings.policy.default_strategy = "pass"
+    mock_settings.policy.fail_action = "pass"
+
+    cb = SentinelCallback(settings=mock_settings)
+
+    with patch(
+        "opensentinel.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        new=AsyncMock(),
+    ) as mock_create:
+        await cb.initialize()
+
+    mock_create.assert_not_called()
+    assert cb._policy_engine is None
+    assert cb._policy_engine_initialized is True
+
+
+async def test_callback_initialize_idempotent(mock_settings):
+    """Calling initialize() twice does not re-initialize the engine."""
+    from opensentinel.proxy.hooks import SentinelCallback
+
+    mock_engine = MagicMock()
+    mock_engine.name = "mock-judge"
+
+    mock_settings.get_policy_config.return_value = {
+        "type": "judge",
+        "config": {"models": [{"name": "primary", "model": "gpt-4o"}]},
+    }
+    mock_settings.policy.post_call_mode = "async"
+    mock_settings.policy.default_strategy = "pass"
+    mock_settings.policy.fail_action = "pass"
+
+    cb = SentinelCallback(settings=mock_settings)
+
+    with patch(
+        "opensentinel.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        new=AsyncMock(return_value=mock_engine),
+    ) as mock_create:
+        await cb.initialize()
+        await cb.initialize()  # second call should be a no-op
+
+    # Registry should only have been called once
+    mock_create.assert_called_once()
