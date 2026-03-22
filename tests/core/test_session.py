@@ -175,6 +175,81 @@ class TestSessionStoreOnEvict:
         assert evicted == []
 
 
+class TestSessionStoreStaleGetEviction:
+    def test_get_returns_none_for_stale_entry(self) -> None:
+        store: SessionStore[str] = SessionStore(ttl=10, max_sessions=100)
+        base = time.monotonic()
+
+        with patch("opensentinel.core.session.time") as mock_time:
+            mock_time.monotonic.return_value = base
+            store.put("s1", "v1")
+
+            mock_time.monotonic.return_value = base + 15
+            assert store.get("s1") is None
+
+    def test_get_evicts_stale_entry(self) -> None:
+        store: SessionStore[str] = SessionStore(ttl=10, max_sessions=100)
+        base = time.monotonic()
+
+        with patch("opensentinel.core.session.time") as mock_time:
+            mock_time.monotonic.return_value = base
+            store.put("s1", "v1")
+
+            mock_time.monotonic.return_value = base + 15
+            store.get("s1")
+            assert len(store) == 0
+
+    def test_get_fires_on_evict_for_stale_entry(self) -> None:
+        evicted: list[tuple[str, str]] = []
+        store: SessionStore[str] = SessionStore(
+            ttl=10, max_sessions=100, on_evict=lambda k, v: evicted.append((k, v))
+        )
+        base = time.monotonic()
+
+        with patch("opensentinel.core.session.time") as mock_time:
+            mock_time.monotonic.return_value = base
+            store.put("s1", "v1")
+
+            mock_time.monotonic.return_value = base + 15
+            store.get("s1")
+
+        assert evicted == [("s1", "v1")]
+
+    def test_get_returns_fresh_entry(self) -> None:
+        store: SessionStore[str] = SessionStore(ttl=10, max_sessions=100)
+        base = time.monotonic()
+
+        with patch("opensentinel.core.session.time") as mock_time:
+            mock_time.monotonic.return_value = base
+            store.put("s1", "v1")
+
+            mock_time.monotonic.return_value = base + 5
+            assert store.get("s1") == "v1"
+
+    def test_contains_returns_false_for_stale_entry(self) -> None:
+        store: SessionStore[str] = SessionStore(ttl=10, max_sessions=100)
+        base = time.monotonic()
+
+        with patch("opensentinel.core.session.time") as mock_time:
+            mock_time.monotonic.return_value = base
+            store.put("s1", "v1")
+
+            mock_time.monotonic.return_value = base + 15
+            assert "s1" not in store
+
+    def test_contains_evicts_stale_entry(self) -> None:
+        store: SessionStore[str] = SessionStore(ttl=10, max_sessions=100)
+        base = time.monotonic()
+
+        with patch("opensentinel.core.session.time") as mock_time:
+            mock_time.monotonic.return_value = base
+            store.put("s1", "v1")
+
+            mock_time.monotonic.return_value = base + 15
+            _ = "s1" in store
+            assert len(store) == 0
+
+
 class TestSessionStoreLRUOrdering:
     def test_put_maintains_lru_order(self) -> None:
         store: SessionStore[str] = SessionStore(ttl=3600, max_sessions=100)

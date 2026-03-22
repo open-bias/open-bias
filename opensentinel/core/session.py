@@ -55,8 +55,14 @@ class SessionStore(Generic[V]):
             self._data.move_to_end(key)
 
     def get(self, key: str) -> V | None:
-        """Return the value for *key*, or ``None`` if absent."""
-        return self._data.get(key)
+        """Return the value for *key*, or ``None`` if absent or stale."""
+        if key not in self._data:
+            return None
+        ts = self._timestamps.get(key)
+        if ts is not None and time.monotonic() - ts > self._ttl:
+            self._evict_one(key)
+            return None
+        return self._data[key]
 
     def put(self, key: str, value: V) -> None:
         """Insert or replace *key*, touch it, then auto-evict stale entries."""
@@ -100,6 +106,10 @@ class SessionStore(Generic[V]):
         return evicted
 
     def __contains__(self, key: str) -> bool:
+        ts = self._timestamps.get(key)
+        if ts is not None and time.monotonic() - ts > self._ttl:
+            self._evict_one(key)
+            return False
         return key in self._data
 
     def keys(self) -> KeysView[str]:
