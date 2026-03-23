@@ -199,14 +199,40 @@ class Callback(CustomLogger):
             return await self._initialize_evaluators()
 
     async def _initialize_evaluators(self) -> Interceptor | None:
-        """Create evaluator engines and build the Interceptor. Must be called under _init_lock."""
+        """Create evaluator engines and build the Interceptor (fail-open). Must be called under _init_lock."""
         try:
-            from openbias.policy.registry import PolicyEngineRegistry
+            self._interceptor = self._build_evaluators_and_interceptor(
+                *(await self._create_evaluator_engines())
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize evaluators: {e}", exc_info=True)
+            # _create_evaluator_engines already shuts down partially-created
+            # engines on failure, so just reset state here.
+            self._evaluators = []
+            self._interceptor = None
 
-            pre_call_evaluators: list[PolicyEngine] = []
-            post_call_evaluators: list[PolicyEngine] = []
-            all_evaluators: list[PolicyEngine] = []
+        self._interceptor_initialized = True
+        self._effective_hook_timeout = self._compute_hook_timeout()
+        return self._interceptor
 
+    async def _create_evaluator_engines(
+        self,
+    ) -> tuple[list[PolicyEngine], list[PolicyEngine], list[PolicyEngine]]:
+        """Instantiate evaluator engines from settings. Returns (all, pre_call, post_call).
+
+        Engines are collected into local lists so that ``self._evaluators``
+        is only assigned after all engines succeed (via ``_build_evaluators_and_interceptor``).
+
+        If the Nth engine fails, all previously created engines are shut down
+        before the exception propagates, preventing orphaned engine instances.
+        """
+        from openbias.policy.registry import PolicyEngineRegistry
+
+        pre_call_evaluators: list[PolicyEngine] = []
+        post_call_evaluators: list[PolicyEngine] = []
+        all_evaluators: list[PolicyEngine] = []
+
+        try:
             for ev_config in self.settings.evaluators:
                 logger.info(
                     f"Initializing evaluator '{ev_config.name}' "
@@ -224,35 +250,41 @@ class Callback(CustomLogger):
                     pre_call_evaluators.append(engine)
                 else:
                     post_call_evaluators.append(engine)
+        except Exception:
+            # Shut down engines created before the failure
+            for engine in all_evaluators:
+                try:
+                    await engine.shutdown()
+                except Exception as shutdown_err:
+                    logger.error(f"Error shutting down evaluator during cleanup: {shutdown_err}")
+            raise
 
-            self._evaluators = all_evaluators
+        return all_evaluators, pre_call_evaluators, post_call_evaluators
 
-            if not all_evaluators:
-                self._interceptor_initialized = True
-                return None
+    def _build_evaluators_and_interceptor(
+        self,
+        all_evaluators: list[PolicyEngine],
+        pre_call_evaluators: list[PolicyEngine],
+        post_call_evaluators: list[PolicyEngine],
+    ) -> Interceptor | None:
+        """Assign evaluators and build the Interceptor. Returns None when no evaluators exist."""
+        self._evaluators = all_evaluators
 
-            self._interceptor = Interceptor(
-                pre_call_evaluators=pre_call_evaluators,
-                post_call_evaluators=post_call_evaluators,
-                mode=self.settings.mode,
-                default_strategy=self.settings.strategy,
-                fail_action=self.settings.fail_action,
-                max_intervention_attempts=self.settings.max_intervention_attempts,
-                session_ttl=self.settings.session_ttl,
-                max_sessions=self.settings.max_sessions,
-            )
-            self._interceptor_initialized = True
-            logger.info("Interceptor initialized with %d evaluator(s)", len(all_evaluators))
+        if not all_evaluators:
+            return None
 
-            # Recompute effective hook timeout now that engines are available.
-            self._effective_hook_timeout = self._compute_hook_timeout()
-
-        except Exception as e:
-            logger.error(f"Failed to initialize evaluators: {e}", exc_info=True)
-            self._interceptor_initialized = True
-            self._interceptor = None
-
-        return self._interceptor
+        interceptor = Interceptor(
+            pre_call_evaluators=pre_call_evaluators,
+            post_call_evaluators=post_call_evaluators,
+            mode=self.settings.mode,
+            default_strategy=self.settings.strategy,
+            fail_action=self.settings.fail_action,
+            max_intervention_attempts=self.settings.max_intervention_attempts,
+            session_ttl=self.settings.session_ttl,
+            max_sessions=self.settings.max_sessions,
+        )
+        logger.info("Interceptor initialized with %d evaluator(s)", len(all_evaluators))
+        return interceptor
 
     def _compute_hook_timeout(self) -> float:
         """Compute a hook timeout that won't race any engine's own LLM timeouts.
@@ -310,47 +342,11 @@ class Callback(CustomLogger):
         """
         async with self._init_lock:
             if not self._interceptor_initialized:
-                from openbias.policy.registry import PolicyEngineRegistry
-
-                pre_call_evaluators: list[PolicyEngine] = []
-                post_call_evaluators: list[PolicyEngine] = []
-                all_evaluators: list[PolicyEngine] = []
-
-                for ev_config in self.settings.evaluators:
-                    logger.info(
-                        f"Eagerly initializing evaluator '{ev_config.name}' "
-                        f"(type={ev_config.type}, phase={ev_config.phase})"
-                    )
-                    # Raises on failure — no try/except intentionally
-                    engine = await PolicyEngineRegistry.create_and_initialize(
-                        ev_config.type, ev_config.config
-                    )
-                    if hasattr(engine, "set_tracer") and self.tracer:
-                        engine.set_tracer(self.tracer)
-
-                    all_evaluators.append(engine)
-                    if ev_config.phase == "pre_call":
-                        pre_call_evaluators.append(engine)
-                    else:
-                        post_call_evaluators.append(engine)
-
-                self._evaluators = all_evaluators
-
-                if not all_evaluators:
-                    self._interceptor_initialized = True
-                else:
-                    self._interceptor = Interceptor(
-                        pre_call_evaluators=pre_call_evaluators,
-                        post_call_evaluators=post_call_evaluators,
-                        mode=self.settings.mode,
-                        default_strategy=self.settings.strategy,
-                        fail_action=self.settings.fail_action,
-                        max_intervention_attempts=self.settings.max_intervention_attempts,
-                        session_ttl=self.settings.session_ttl,
-                        max_sessions=self.settings.max_sessions,
-                    )
-                    self._interceptor_initialized = True
-                    logger.info("Interceptor ready with %d evaluator(s)", len(all_evaluators))
+                # Raises on failure — no try/except intentionally
+                self._interceptor = self._build_evaluators_and_interceptor(
+                    *(await self._create_evaluator_engines())
+                )
+                self._interceptor_initialized = True
 
             # Recompute the effective hook timeout now that engines are known.
             self._effective_hook_timeout = self._compute_hook_timeout()
