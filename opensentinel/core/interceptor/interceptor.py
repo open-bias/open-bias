@@ -57,7 +57,7 @@ class Interceptor:
         self,
         checkers: list[PolicyEngineChecker],
         default_strategy: str = "user_message_inject",
-        fail_action: Literal["intervene", "block"] = "intervene",
+        fail_action: Literal["intervene", "block", "shadow"] = "intervene",
         session_ttl: int | None = None,
         max_sessions: int | None = None,
         max_async_tasks_per_session: int | None = None,
@@ -325,7 +325,11 @@ class Interceptor:
         )
 
     def _effective_decision(self, decision: Decision) -> Decision:
-        """Upgrade INTERVENE → BLOCK when fail_action is 'block'."""
+        """Map engine decision based on fail_action policy."""
+        if self._fail_action == "shadow":
+            if decision != Decision.ALLOW:
+                logger.info("Shadow mode: downgrading %s to allow", decision.value)
+            return Decision.ALLOW
         if decision == Decision.INTERVENE and self._fail_action == "block":
             return Decision.BLOCK
         return decision

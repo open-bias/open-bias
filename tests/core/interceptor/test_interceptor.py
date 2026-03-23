@@ -999,3 +999,67 @@ class TestFailAction:
 
         assert result.allowed is False
         assert "async violation" in (result.message or "")
+
+    async def test_fail_action_shadow_downgrades_block_pre_call(self):
+        """fail_action='shadow' downgrades BLOCK to ALLOW on PRE_CALL."""
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            decision=Decision.BLOCK,
+            message="blocked",
+        )
+        interceptor = Interceptor([checker], fail_action="shadow")
+
+        result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+
+        assert result.allowed is True
+        assert result.message is None
+
+    async def test_fail_action_shadow_downgrades_intervene_pre_call(self):
+        """fail_action='shadow' downgrades INTERVENE to ALLOW — no modifications."""
+        checker = _mock_checker(
+            phase=CheckPhase.PRE_CALL,
+            decision=Decision.INTERVENE,
+            message="Stay on topic",
+        )
+        interceptor = Interceptor([checker], fail_action="shadow")
+
+        result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+
+        assert result.allowed is True
+        assert result.modified_data is None
+
+    async def test_fail_action_shadow_downgrades_block_post_call(self):
+        """fail_action='shadow' downgrades BLOCK to ALLOW on POST_CALL."""
+        checker = _mock_checker(
+            phase=CheckPhase.POST_CALL,
+            decision=Decision.BLOCK,
+            message="blocked",
+        )
+        interceptor = Interceptor([checker], fail_action="shadow")
+
+        result = await interceptor.run_post_call(
+            SESSION, _request(), {"answer": "bad"}, REQUEST_ID
+        )
+
+        assert result.allowed is True
+        assert result.message is None
+
+    async def test_fail_action_shadow_downgrades_async_intervene(self):
+        """fail_action='shadow' downgrades async INTERVENE — no modification on next request."""
+        async_checker = _mock_checker(
+            name="async_guide",
+            phase=CheckPhase.POST_CALL,
+            mode=CheckerMode.ASYNC,
+            decision=Decision.INTERVENE,
+            message="async violation",
+            delay=0.01,
+        )
+        interceptor = Interceptor([async_checker], fail_action="shadow")
+
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
+        await asyncio.sleep(0.05)
+
+        result = await interceptor.run_pre_call(SESSION, _request(), "req-002")
+
+        assert result.allowed is True
+        assert result.modified_data is None

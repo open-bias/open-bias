@@ -149,6 +149,12 @@ class TestFailAction:
         result = source._map_to_settings()
         assert result["policy"]["fail_action"] == "intervene"
 
+    def test_fail_action_shadow_maps_from_yaml(self):
+        """fail_action: shadow maps correctly."""
+        source = self._build_source({"fail_action": "shadow"})
+        result = source._map_to_settings()
+        assert result["policy"]["fail_action"] == "shadow"
+
 
 class TestFailOpen:
     """Tests for fail_open configuration mapping."""

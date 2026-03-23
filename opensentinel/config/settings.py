@@ -169,7 +169,8 @@ class PolicyConfig(BaseModel):
     # What happens when a policy violation is detected.
     # "intervene": modify the next request to steer the agent (default)
     # "block": reject the request outright
-    fail_action: Literal["intervene", "block"] = "intervene"
+    # "shadow": log findings but take no action
+    fail_action: Literal["intervene", "block", "shadow"] = "intervene"
 
     # Fallback behavior when engine evaluation fails
     # True = allow request on error (fail open)
