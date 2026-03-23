@@ -1,26 +1,11 @@
 """
 Core types for the interceptor system.
 
-Defines the enums and dataclasses used throughout the interceptor module.
+Defines the dataclasses used throughout the interceptor module.
 """
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any
-
-
-class CheckPhase(Enum):
-    """When a checker runs in the request lifecycle."""
-
-    PRE_CALL = "pre_call"    # Before LLM call
-    POST_CALL = "post_call"  # After LLM call
-
-
-class CheckerMode(Enum):
-    """How a checker executes."""
-
-    SYNC = "sync"    # Blocking, must complete before proceeding
-    ASYNC = "async"  # Background, results applied on next request
 
 
 @dataclass
