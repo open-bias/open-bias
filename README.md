@@ -83,7 +83,7 @@ Every hook is wrapped in `safe_hook()` with a configurable timeout (default 30s)
 
 ```
 ┌─────────────┐    ┌───────────────────────────────────────────┐    ┌─────────────┐
-│  Your App   │───▶│              OPEN BIAS                │───▶│ LLM Provider│
+│  Your App   │───▶│              OPEN BIAS                    │───▶│ LLM Provider│
 │             │    │     ┌─────────┐    ┌─────────────┐        │    │             │
 │             │◀───│     │ Hooks   │───▶│ Interceptor │        │◀───│             │
 └─────────────┘    │     │safe_hook│    │ ┌─────────┐ │        │    └─────────────┘
@@ -200,7 +200,7 @@ All hooks are wrapped in `safe_hook()` with configurable timeout (default 30s). 
 
 ## Status
 
-v0.2.1 -- alpha. The proxy layer, four policy engines (judge, FSM, LLM, NeMo), policy compiler, CLI tooling, and OpenTelemetry tracing all work. YAML-first configuration with auto-detection of models and API keys. API surface may change. Session state is in-memory only (not persistent across restarts).
+v0.3.0 -- alpha. The proxy layer, four policy engines (judge, FSM, LLM, NeMo), policy compiler, CLI tooling, and OpenTelemetry tracing all work. YAML-first configuration with auto-detection of models and API keys. API surface may change. Session state is in-memory only (not persistent across restarts).
 
 Missing: persistent session storage, dashboard UI, pre-built policy library, rate limiting. These are planned but not built.
 
