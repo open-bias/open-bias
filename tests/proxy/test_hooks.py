@@ -169,8 +169,15 @@ async def test_safe_hook_fail_closed_success_still_works():
 def mock_settings():
     """Create mock Settings for testing."""
     settings = MagicMock()
-    settings.policy.fail_open = True
-    settings.policy.hook_timeout_seconds = 0.1  # Aggressive timeout for tests
+    settings.fail_open = True
+    settings.hook_timeout_seconds = 0.1  # Aggressive timeout for tests
+    settings.mode = "async"
+    settings.strategy = "user_message_inject"
+    settings.fail_action = "intervene"
+    settings.max_intervention_attempts = 3
+    settings.session_ttl = 3600
+    settings.max_sessions = 10000
+    settings.evaluators = []
     settings.otel.enabled = False
     settings.debug = False
     return settings
@@ -237,7 +244,6 @@ async def test_post_call_hook_timeout_returns_original_response(
     slow_interceptor = AsyncMock()
     slow_interceptor.run_post_call = slow_post_call
     callback._get_interceptor = AsyncMock(return_value=slow_interceptor)
-    callback._get_policy_engine = AsyncMock(return_value=None)
     callback._interceptor_initialized = True
 
     result = await callback.async_post_call_success_hook(
@@ -303,7 +309,6 @@ async def test_post_call_hook_block_raises_workflow_violation(
         )
     )
     callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
-    callback._get_policy_engine = AsyncMock(return_value=None)
     callback._interceptor_initialized = True
 
     with pytest.raises(WorkflowViolationError, match="dangerous tool call blocked"):
@@ -449,15 +454,15 @@ async def test_log_failure_event_exception_is_swallowed(callback):
 # ---------------------------------------------------------------------------
 
 
-async def test_callback_initialize_raises_on_bad_engine_config(mock_settings):
-    """initialize() raises immediately when the engine fails to initialize."""
+async def test_callback_initialize_raises_on_bad_evaluator_config(mock_settings):
+    """initialize() raises immediately when an evaluator fails to initialize."""
     from openbias.proxy.hooks import Callback
+    from openbias.config.settings import EvaluatorConfig
 
-    # Simulate a judge engine with models configured (non-skip path)
-    mock_settings.get_policy_config.return_value = {
-        "type": "judge",
-        "config": {"models": [{"name": "primary", "model": "gpt-4o"}]},
-    }
+    mock_settings.evaluators = [
+        EvaluatorConfig(name="bad-judge", type="judge", phase="post_call",
+                        config={"models": [{"name": "primary", "model": "gpt-4o"}]}),
+    ]
 
     cb = Callback(settings=mock_settings)
 
@@ -469,20 +474,18 @@ async def test_callback_initialize_raises_on_bad_engine_config(mock_settings):
             await cb.initialize()
 
 
-async def test_callback_initialize_sets_engine_on_success(mock_settings):
-    """initialize() eagerly sets the policy engine when config is valid."""
+async def test_callback_initialize_sets_evaluators_on_success(mock_settings):
+    """initialize() eagerly sets evaluators when config is valid."""
     from openbias.proxy.hooks import Callback
+    from openbias.config.settings import EvaluatorConfig
 
     mock_engine = MagicMock()
     mock_engine.name = "mock-judge"
 
-    mock_settings.get_policy_config.return_value = {
-        "type": "judge",
-        "config": {"models": [{"name": "primary", "model": "gpt-4o"}]},
-    }
-    mock_settings.policy.post_call_mode = "async"
-    mock_settings.policy.default_strategy = "user_message_inject"
-    mock_settings.policy.fail_action = "intervene"
+    mock_settings.evaluators = [
+        EvaluatorConfig(name="my-judge", type="judge", phase="post_call",
+                        config={"models": [{"name": "primary", "model": "gpt-4o"}]}),
+    ]
 
     cb = Callback(settings=mock_settings)
 
@@ -492,23 +495,16 @@ async def test_callback_initialize_sets_engine_on_success(mock_settings):
     ):
         await cb.initialize()
 
-    assert cb._policy_engine is mock_engine
-    assert cb._policy_engine_initialized is True
+    assert cb._evaluators == [mock_engine]
     assert cb._interceptor_initialized is True
+    assert cb._interceptor is not None
 
 
-async def test_callback_initialize_skips_unconfigured_engine(mock_settings):
-    """initialize() skips the engine and stays None when no config is provided."""
+async def test_callback_initialize_no_evaluators(mock_settings):
+    """initialize() with no evaluators configured results in no interceptor."""
     from openbias.proxy.hooks import Callback
 
-    # Judge engine with no models — should be skipped
-    mock_settings.get_policy_config.return_value = {
-        "type": "judge",
-        "config": {},
-    }
-    mock_settings.policy.post_call_mode = "async"
-    mock_settings.policy.default_strategy = "pass"
-    mock_settings.policy.fail_action = "pass"
+    mock_settings.evaluators = []
 
     cb = Callback(settings=mock_settings)
 
@@ -519,24 +515,23 @@ async def test_callback_initialize_skips_unconfigured_engine(mock_settings):
         await cb.initialize()
 
     mock_create.assert_not_called()
-    assert cb._policy_engine is None
-    assert cb._policy_engine_initialized is True
+    assert cb._evaluators == []
+    assert cb._interceptor_initialized is True
+    assert cb._interceptor is None
 
 
 async def test_callback_initialize_idempotent(mock_settings):
-    """Calling initialize() twice does not re-initialize the engine."""
+    """Calling initialize() twice does not re-initialize evaluators."""
     from openbias.proxy.hooks import Callback
+    from openbias.config.settings import EvaluatorConfig
 
     mock_engine = MagicMock()
     mock_engine.name = "mock-judge"
 
-    mock_settings.get_policy_config.return_value = {
-        "type": "judge",
-        "config": {"models": [{"name": "primary", "model": "gpt-4o"}]},
-    }
-    mock_settings.policy.post_call_mode = "async"
-    mock_settings.policy.default_strategy = "user_message_inject"
-    mock_settings.policy.fail_action = "intervene"
+    mock_settings.evaluators = [
+        EvaluatorConfig(name="my-judge", type="judge", phase="post_call",
+                        config={"models": [{"name": "primary", "model": "gpt-4o"}]}),
+    ]
 
     cb = Callback(settings=mock_settings)
 
@@ -556,30 +551,28 @@ async def test_callback_initialize_idempotent(mock_settings):
 # ---------------------------------------------------------------------------
 
 
-async def test_compute_hook_timeout_no_engine(mock_settings):
-    """Without an engine, effective timeout equals the configured value."""
+async def test_compute_hook_timeout_no_evaluators(mock_settings):
+    """Without evaluators, effective timeout equals the configured value."""
     from openbias.proxy.hooks import Callback
 
-    mock_settings.policy.hook_timeout_seconds = 30.0
-    mock_settings.get_policy_config.return_value = {"type": "judge", "config": {}}
-    mock_settings.policy.post_call_mode = "async"
+    mock_settings.hook_timeout_seconds = 30.0
 
     cb = Callback(settings=mock_settings)
-    cb._policy_engine = None
+    cb._evaluators = []
 
     assert cb._compute_hook_timeout() == 30.0
-    assert cb._effective_hook_timeout == 30.0  # set at __init__ before engine exists
+    assert cb._effective_hook_timeout == 30.0  # set at __init__ before engines exist
 
 
 async def test_compute_hook_timeout_engine_without_timeout_attr(mock_settings):
     """Engines that don't expose a 'timeout' attribute use the configured value."""
     from openbias.proxy.hooks import Callback
 
-    mock_settings.policy.hook_timeout_seconds = 30.0
+    mock_settings.hook_timeout_seconds = 30.0
     cb = Callback(settings=mock_settings)
 
     engine = MagicMock(spec=[])  # no 'timeout' attribute at all
-    cb._policy_engine = engine
+    cb._evaluators = [engine]
 
     assert cb._compute_hook_timeout() == 30.0
 
@@ -588,12 +581,12 @@ async def test_compute_hook_timeout_engine_timeout_within_configured(mock_settin
     """When engine timeout + buffer <= configured, no adjustment is made."""
     from openbias.proxy.hooks import Callback
 
-    mock_settings.policy.hook_timeout_seconds = 30.0
+    mock_settings.hook_timeout_seconds = 30.0
     cb = Callback(settings=mock_settings)
 
     engine = MagicMock()
     engine.timeout = 15.0  # 15 + 5 = 20 < 30 → no change
-    cb._policy_engine = engine
+    cb._evaluators = [engine]
 
     assert cb._compute_hook_timeout() == 30.0
 
@@ -602,12 +595,12 @@ async def test_compute_hook_timeout_engine_timeout_exceeds_configured(mock_setti
     """When engine timeout + buffer > configured, effective timeout is auto-adjusted."""
     from openbias.proxy.hooks import Callback
 
-    mock_settings.policy.hook_timeout_seconds = 10.0
+    mock_settings.hook_timeout_seconds = 10.0
     cb = Callback(settings=mock_settings)
 
     engine = MagicMock()
     engine.timeout = 20.0  # 20 + 5 = 25 > 10 → adjust
-    cb._policy_engine = engine
+    cb._evaluators = [engine]
 
     assert cb._compute_hook_timeout() == 25.0
 
@@ -617,12 +610,12 @@ async def test_compute_hook_timeout_logs_warning_when_adjusting(mock_settings, c
     import logging
     from openbias.proxy.hooks import Callback
 
-    mock_settings.policy.hook_timeout_seconds = 10.0
+    mock_settings.hook_timeout_seconds = 10.0
     cb = Callback(settings=mock_settings)
 
     engine = MagicMock()
     engine.timeout = 20.0
-    cb._policy_engine = engine
+    cb._evaluators = [engine]
 
     with caplog.at_level(logging.WARNING, logger="openbias.proxy.hooks"):
         result = cb._compute_hook_timeout()
@@ -637,12 +630,28 @@ async def test_compute_hook_timeout_non_numeric_engine_timeout(mock_settings):
     """Non-numeric engine timeout is ignored and configured value is used."""
     from openbias.proxy.hooks import Callback
 
-    mock_settings.policy.hook_timeout_seconds = 30.0
+    mock_settings.hook_timeout_seconds = 30.0
     cb = Callback(settings=mock_settings)
 
     engine = MagicMock()
     engine.timeout = "not-a-number"
-    cb._policy_engine = engine
+    cb._evaluators = [engine]
+
+    assert cb._compute_hook_timeout() == 30.0
+
+
+async def test_compute_hook_timeout_takes_max_across_evaluators(mock_settings):
+    """When multiple evaluators exist, timeout is based on the maximum."""
+    from openbias.proxy.hooks import Callback
+
+    mock_settings.hook_timeout_seconds = 10.0
+    cb = Callback(settings=mock_settings)
+
+    engine1 = MagicMock()
+    engine1.timeout = 15.0  # 15 + 5 = 20
+    engine2 = MagicMock()
+    engine2.timeout = 25.0  # 25 + 5 = 30  (max)
+    cb._evaluators = [engine1, engine2]
 
     assert cb._compute_hook_timeout() == 30.0
 
@@ -650,15 +659,13 @@ async def test_compute_hook_timeout_non_numeric_engine_timeout(mock_settings):
 async def test_effective_hook_timeout_updated_after_eager_init(mock_settings):
     """After initialize(), _effective_hook_timeout reflects the engine configuration."""
     from openbias.proxy.hooks import Callback
+    from openbias.config.settings import EvaluatorConfig
 
-    mock_settings.policy.hook_timeout_seconds = 10.0
-    mock_settings.get_policy_config.return_value = {
-        "type": "judge",
-        "config": {"models": [{"name": "primary", "model": "gpt-4o"}]},
-    }
-    mock_settings.policy.post_call_mode = "async"
-    mock_settings.policy.default_strategy = "user_message_inject"
-    mock_settings.policy.fail_action = "intervene"
+    mock_settings.hook_timeout_seconds = 10.0
+    mock_settings.evaluators = [
+        EvaluatorConfig(name="my-judge", type="judge", phase="post_call",
+                        config={"models": [{"name": "primary", "model": "gpt-4o"}]}),
+    ]
 
     mock_engine = MagicMock()
     mock_engine.name = "mock-judge"
@@ -679,15 +686,13 @@ async def test_effective_hook_timeout_updated_after_eager_init(mock_settings):
 async def test_effective_hook_timeout_updated_after_lazy_init(mock_settings):
     """After lazy _get_interceptor(), _effective_hook_timeout is updated."""
     from openbias.proxy.hooks import Callback
+    from openbias.config.settings import EvaluatorConfig
 
-    mock_settings.policy.hook_timeout_seconds = 10.0
-    mock_settings.get_policy_config.return_value = {
-        "type": "judge",
-        "config": {"models": [{"name": "primary", "model": "gpt-4o"}]},
-    }
-    mock_settings.policy.post_call_mode = "async"
-    mock_settings.policy.default_strategy = "user_message_inject"
-    mock_settings.policy.fail_action = "intervene"
+    mock_settings.hook_timeout_seconds = 10.0
+    mock_settings.evaluators = [
+        EvaluatorConfig(name="my-judge", type="judge", phase="post_call",
+                        config={"models": [{"name": "primary", "model": "gpt-4o"}]}),
+    ]
 
     mock_engine = MagicMock()
     mock_engine.name = "mock-judge"
@@ -885,7 +890,6 @@ async def test_post_call_reuses_uuid_from_pre_call(callback, mock_api_key):
         return_value=InterceptionResult(allowed=True)
     )
     callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
-    callback._get_policy_engine = AsyncMock(return_value=None)
     callback._interceptor_initialized = True
 
     await callback.async_post_call_success_hook(data, mock_api_key, response)
@@ -911,7 +915,6 @@ async def test_post_call_generates_fallback_uuid_when_missing(callback, mock_api
         return_value=InterceptionResult(allowed=True)
     )
     callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
-    callback._get_policy_engine = AsyncMock(return_value=None)
     callback._interceptor_initialized = True
 
     await callback.async_post_call_success_hook(data, mock_api_key, response)
@@ -934,7 +937,7 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
     """Full chain: settings.fail_action='block' → Interceptor upgrades INTERVENE → hook returns Exception.
 
     Verifies the complete path:
-    1. mock_settings.policy.fail_action = "block"
+    1. settings.fail_action = "block"
     2. Hook creates Interceptor with fail_action="block"
     3. Sync PRE_CALL checker returns Decision.INTERVENE
     4. Interceptor._effective_decision upgrades INTERVENE → BLOCK
@@ -947,11 +950,15 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
 
     # Build settings with fail_action="block"
     settings = MagicMock()
-    settings.policy.fail_open = True
-    settings.policy.hook_timeout_seconds = 5.0
-    settings.policy.fail_action = "block"
-    settings.policy.default_strategy = "user_message_inject"
-    settings.policy.post_call_mode = "async"
+    settings.fail_open = True
+    settings.hook_timeout_seconds = 5.0
+    settings.fail_action = "block"
+    settings.strategy = "user_message_inject"
+    settings.mode = "async"
+    settings.max_intervention_attempts = 3
+    settings.session_ttl = 3600
+    settings.max_sessions = 10000
+    settings.evaluators = []
     settings.otel.enabled = False
     settings.debug = False
 
@@ -970,7 +977,8 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
 
     # Build a real Interceptor with fail_action="block"
     interceptor = Interceptor(
-        engines=[mock_engine],
+        pre_call_evaluators=[mock_engine],
+        post_call_evaluators=[],
         default_strategy="user_message_inject",
         fail_action="block",
     )
@@ -986,3 +994,86 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
     # The hook should return an Exception (block), not modified data
     assert isinstance(result, Exception), f"Expected Exception, got {type(result)}: {result}"
     assert "please be more careful" in str(result)
+
+
+# ---------------------------------------------------------------------------
+# Multi-evaluator phase partitioning tests
+# ---------------------------------------------------------------------------
+
+
+async def test_initialize_partitions_evaluators_by_phase(mock_settings):
+    """initialize() correctly partitions evaluators into pre_call and post_call."""
+    from openbias.proxy.hooks import Callback
+    from openbias.config.settings import EvaluatorConfig
+
+    mock_pre_engine = MagicMock()
+    mock_pre_engine.name = "pre-checker"
+    mock_post_engine = MagicMock()
+    mock_post_engine.name = "post-checker"
+
+    mock_settings.evaluators = [
+        EvaluatorConfig(name="pre-checker", type="judge", phase="pre_call",
+                        config={"models": [{"name": "primary", "model": "gpt-4o"}]}),
+        EvaluatorConfig(name="post-checker", type="judge", phase="post_call",
+                        config={"models": [{"name": "primary", "model": "gpt-4o"}]}),
+    ]
+
+    cb = Callback(settings=mock_settings)
+
+    engines = [mock_pre_engine, mock_post_engine]
+    call_count = 0
+
+    async def mock_create(engine_type, config):
+        nonlocal call_count
+        result = engines[call_count]
+        call_count += 1
+        return result
+
+    with patch(
+        "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        new=mock_create,
+    ):
+        await cb.initialize()
+
+    assert len(cb._evaluators) == 2
+    assert cb._interceptor is not None
+    # Verify the interceptor received the correct partitioning
+    assert cb._interceptor._sync_pre_call_evaluators == [mock_pre_engine]
+    # In async mode (default), post_call evaluators go to async list
+    assert cb._interceptor._async_post_call_evaluators == [mock_post_engine]
+
+
+async def test_shutdown_shuts_down_all_evaluators(mock_settings):
+    """shutdown() calls shutdown() on every evaluator engine."""
+    from openbias.proxy.hooks import Callback
+
+    cb = Callback(settings=mock_settings)
+
+    engine1 = AsyncMock()
+    engine1.name = "engine-1"
+    engine2 = AsyncMock()
+    engine2.name = "engine-2"
+    cb._evaluators = [engine1, engine2]
+
+    await cb.shutdown()
+
+    engine1.shutdown.assert_awaited_once()
+    engine2.shutdown.assert_awaited_once()
+
+
+async def test_cleanup_session_resets_all_evaluators(mock_settings):
+    """cleanup_session() calls reset_session on all evaluators that support it."""
+    from openbias.proxy.hooks import Callback
+
+    cb = Callback(settings=mock_settings)
+
+    engine1 = AsyncMock()
+    engine1.name = "engine-1"
+    engine2 = AsyncMock()
+    engine2.name = "engine-2"
+    cb._evaluators = [engine1, engine2]
+
+    await cb.cleanup_session("test-session")
+
+    engine1.reset_session.assert_awaited_once_with("test-session")
+    engine2.reset_session.assert_awaited_once_with("test-session")

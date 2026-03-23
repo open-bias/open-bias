@@ -4,13 +4,13 @@ Open Bias LiteLLM hooks for workflow monitoring and intervention.
 This module implements the core hook system that intercepts LLM calls:
 
 1. async_pre_call_hook: Runs BEFORE LLM call
-   - Applies pending async checker results from previous call
-   - Runs sync PRE_CALL checkers
+   - Applies pending async engine results from previous call
+   - Runs sync PRE_CALL engines
    - Modifies request if INTERVENE with modified_data
 
 2. async_post_call_success_hook: Runs AFTER LLM call succeeds
-   - Runs sync POST_CALL checkers (can modify response on INTERVENE)
-   - Starts async checkers in background
+   - Runs sync POST_CALL engines (can modify response on INTERVENE)
+   - Starts async engines in background
    - Completes tracing
 
 All hooks are wrapped with fail-open semantics via `safe_hook()`:
@@ -161,9 +161,8 @@ class Callback(CustomLogger):
         self._interceptor: Interceptor | None = None
         self._interceptor_initialized = False
 
-        # Policy engine (lazy initialized) - kept for direct access if needed
-        self._policy_engine: PolicyEngine | None = None
-        self._policy_engine_initialized = False
+        # All evaluator engine instances (for shutdown/cleanup)
+        self._evaluators: list[PolicyEngine] = []
 
         # Lock for lazy init to prevent concurrent initialization races
         self._init_lock = asyncio.Lock()
@@ -174,34 +173,21 @@ class Callback(CustomLogger):
         # Effective hook timeout — starts at the configured value; may be
         # auto-adjusted upward after engine initialization to avoid racing
         # the engine's own LLM timeouts (see _compute_hook_timeout).
-        self._effective_hook_timeout: float = self.settings.policy.hook_timeout_seconds
+        self._effective_hook_timeout: float = self.settings.hook_timeout_seconds
 
         logger.info("Callback initialized")
 
-        if self.settings.policy.post_call_mode != "sync":
+        if self.settings.mode != "sync":
             logger.warning(
                 "POST_CALL mode is '%s' — the first policy violation in each session "
                 "will pass through to the user before intervention is applied on the "
-                "next request. Set post_call_mode='sync' in config for immediate "
+                "next request. Set mode='sync' in config for immediate "
                 "enforcement (adds latency).",
-                self.settings.policy.post_call_mode,
+                self.settings.mode,
             )
 
-    @staticmethod
-    def _should_skip_engine(engine_type: str, engine_config: dict) -> bool:
-        """Return True when the engine type has no meaningful config and should be skipped."""
-        if engine_type == "fsm" and not engine_config.get("config_path") and not engine_config.get("workflow"):
-            return True
-        if engine_type == "nemo" and not engine_config.get("config_path"):
-            return True
-        if engine_type == "llm" and not engine_config.get("config_path") and not engine_config.get("workflow"):
-            return True
-        if engine_type == "judge" and not engine_config.get("models"):
-            return True
-        return False
-
     async def _get_interceptor(self) -> Interceptor | None:
-        """Lazy-load interceptor with configured checkers."""
+        """Lazy-load interceptor with configured evaluators."""
         if self._interceptor_initialized:
             return self._interceptor
 
@@ -210,123 +196,112 @@ class Callback(CustomLogger):
             if self._interceptor_initialized:
                 return self._interceptor
 
-            return await self._initialize_interceptor()
+            return await self._initialize_evaluators()
 
-    async def _initialize_interceptor(self) -> Interceptor | None:
-        """Actually initialize the interceptor. Must be called under _init_lock."""
+    async def _initialize_evaluators(self) -> Interceptor | None:
+        """Create evaluator engines and build the Interceptor. Must be called under _init_lock."""
         try:
-            # Call _initialize_policy_engine directly instead of _get_policy_engine
-            # to avoid re-acquiring _init_lock (asyncio.Lock is not reentrant).
-            if not self._policy_engine_initialized:
-                await self._initialize_policy_engine()
-            policy_engine = self._policy_engine
-            if not policy_engine:
+            from openbias.policy.registry import PolicyEngineRegistry
+
+            pre_call_evaluators: list[PolicyEngine] = []
+            post_call_evaluators: list[PolicyEngine] = []
+            all_evaluators: list[PolicyEngine] = []
+
+            for ev_config in self.settings.evaluators:
+                logger.info(
+                    f"Initializing evaluator '{ev_config.name}' "
+                    f"(type={ev_config.type}, phase={ev_config.phase})"
+                )
+                engine = await PolicyEngineRegistry.create_and_initialize(
+                    ev_config.type, ev_config.config
+                )
+                # Wire up tracer for engines that support it (e.g. judge engine)
+                if hasattr(engine, "set_tracer") and self.tracer:
+                    engine.set_tracer(self.tracer)
+
+                all_evaluators.append(engine)
+                if ev_config.phase == "pre_call":
+                    pre_call_evaluators.append(engine)
+                else:
+                    post_call_evaluators.append(engine)
+
+            self._evaluators = all_evaluators
+
+            if not all_evaluators:
                 self._interceptor_initialized = True
                 return None
 
             self._interceptor = Interceptor(
-                engines=[policy_engine],
-                post_call_mode=self.settings.policy.post_call_mode,
-                default_strategy=self.settings.policy.default_strategy,
-                fail_action=self.settings.policy.fail_action,
+                pre_call_evaluators=pre_call_evaluators,
+                post_call_evaluators=post_call_evaluators,
+                mode=self.settings.mode,
+                default_strategy=self.settings.strategy,
+                fail_action=self.settings.fail_action,
+                max_intervention_attempts=self.settings.max_intervention_attempts,
+                session_ttl=self.settings.session_ttl,
+                max_sessions=self.settings.max_sessions,
             )
             self._interceptor_initialized = True
-            logger.info("Interceptor initialized")
+            logger.info("Interceptor initialized with %d evaluator(s)", len(all_evaluators))
 
-            # Recompute effective hook timeout now that the engine is available.
+            # Recompute effective hook timeout now that engines are available.
             self._effective_hook_timeout = self._compute_hook_timeout()
 
         except Exception as e:
-            logger.error(f"Failed to initialize interceptor: {e}")
+            logger.error(f"Failed to initialize evaluators: {e}", exc_info=True)
             self._interceptor_initialized = True
             self._interceptor = None
 
         return self._interceptor
 
-    async def _get_policy_engine(self) -> PolicyEngine | None:
-        """Lazy-load policy engine based on configuration."""
-        if self._policy_engine_initialized:
-            return self._policy_engine
-
-        async with self._init_lock:
-            # Double-check after acquiring lock
-            if self._policy_engine_initialized:
-                return self._policy_engine
-
-            return await self._initialize_policy_engine()
-
-    async def _initialize_policy_engine(self) -> PolicyEngine | None:
-        """Actually initialize the policy engine. Must be called under _init_lock."""
-        try:
-            from openbias.policy.registry import PolicyEngineRegistry
-
-            policy_config = self.settings.get_policy_config()
-            engine_type = policy_config.get("type", "judge")
-            engine_config = policy_config.get("config", {})
-
-            # Only initialize if we have configuration
-            if self._should_skip_engine(engine_type, engine_config):
-                logger.debug(f"No config for engine '{engine_type}', skipping policy engine")
-                self._policy_engine_initialized = True
-                return None
-
-            logger.info(f"Initializing policy engine: {engine_type}")
-            self._policy_engine = await PolicyEngineRegistry.create_and_initialize(
-                engine_type, engine_config
-            )
-            # Wire up tracer for engines that support it (e.g. judge engine)
-            if hasattr(self._policy_engine, "set_tracer") and self.tracer:
-                self._policy_engine.set_tracer(self.tracer)
-            self._policy_engine_initialized = True
-            logger.info(f"Policy engine initialized: {self._policy_engine.name}")
-
-        except Exception as e:
-            logger.error(f"Failed to initialize policy engine: {e}", exc_info=True)
-            self._policy_engine_initialized = True
-            self._policy_engine = None
-
-        return self._policy_engine
-
     def _compute_hook_timeout(self) -> float:
-        """Compute a hook timeout that won't race the engine's own LLM timeouts.
+        """Compute a hook timeout that won't race any engine's own LLM timeouts.
 
-        When the judge engine is configured, its per-model timeout plus a
-        safety buffer may exceed the configured hook_timeout_seconds.  In that
-        case we auto-adjust upward and log a warning so operators are aware.
+        Takes the max timeout across all evaluator engines.  When any engine's
+        per-model timeout plus a safety buffer exceeds the configured
+        hook_timeout_seconds, we auto-adjust upward and log a warning so
+        operators are aware.
 
-        For non-judge engines (or when no engine is initialized) the configured
-        value is returned unchanged.
+        For engines without a timeout attribute (or when no engines are
+        initialized) the configured value is returned unchanged.
         """
-        configured = self.settings.policy.hook_timeout_seconds
+        configured = self.settings.hook_timeout_seconds
 
-        engine = self._policy_engine
-        if engine is None:
+        if not self._evaluators:
             return configured
 
-        # Use the engine's advertised timeout if it exposes one (must be numeric).
-        engine_timeout = getattr(engine, "timeout", None)
-        if not isinstance(engine_timeout, (int, float)):
-            engine_timeout = None
-        if engine_timeout is not None and engine_timeout > 0:
-            # Give the engine time to hit its own timeout, plus a buffer for
-            # retries and processing overhead.
-            needed = engine_timeout + 5.0
-            if needed > configured:
-                logger.warning(
-                    "hook_timeout_seconds (%.1fs) is shorter than engine timeout "
-                    "(%.1fs). Auto-adjusting to %.1fs to prevent premature "
-                    "cancellation.",
-                    configured,
-                    engine_timeout,
-                    needed,
-                )
-                return needed
+        max_needed = configured
+        for engine in self._evaluators:
+            engine_timeout = getattr(engine, "timeout", None)
+            if not isinstance(engine_timeout, (int, float)):
+                continue
+            if engine_timeout is not None and engine_timeout > 0:
+                needed = engine_timeout + 5.0
+                if needed > max_needed:
+                    max_needed = needed
+
+        if max_needed > configured:
+            # Find the engine with the largest timeout for the warning message
+            max_engine_timeout = max(
+                (getattr(e, "timeout", 0) for e in self._evaluators
+                 if isinstance(getattr(e, "timeout", None), (int, float))),
+                default=0,
+            )
+            logger.warning(
+                "hook_timeout_seconds (%.1fs) is shorter than engine timeout "
+                "(%.1fs). Auto-adjusting to %.1fs to prevent premature "
+                "cancellation.",
+                configured,
+                max_engine_timeout,
+                max_needed,
+            )
+            return max_needed
 
         return configured
 
     async def initialize(self) -> None:
         """
-        Eagerly initialize the policy engine and interceptor.
+        Eagerly initialize evaluator engines and the interceptor.
 
         Called at startup by Proxy.initialize() so that configuration
         errors surface immediately rather than being silently swallowed on the
@@ -334,57 +309,59 @@ class Callback(CustomLogger):
         exceptions — callers receive the error directly.
         """
         async with self._init_lock:
-            if not self._policy_engine_initialized:
-                # Bypass the try/except in _initialize_policy_engine by calling
-                # the registry directly here, then setting state explicitly.
+            if not self._interceptor_initialized:
                 from openbias.policy.registry import PolicyEngineRegistry
 
-                policy_config = self.settings.get_policy_config()
-                engine_type = policy_config.get("type", "judge")
-                engine_config = policy_config.get("config", {})
+                pre_call_evaluators: list[PolicyEngine] = []
+                post_call_evaluators: list[PolicyEngine] = []
+                all_evaluators: list[PolicyEngine] = []
 
-                # Skip engines with no meaningful config (same logic as lazy path)
-                if self._should_skip_engine(engine_type, engine_config):
-                    logger.debug(f"No config for engine '{engine_type}', skipping policy engine at startup")
-                    self._policy_engine_initialized = True
-                    self._policy_engine = None
-                else:
-                    logger.info(f"Eagerly initializing policy engine at startup: {engine_type}")
-                    # Raises on failure — no try/except intentionally
-                    self._policy_engine = await PolicyEngineRegistry.create_and_initialize(
-                        engine_type, engine_config
+                for ev_config in self.settings.evaluators:
+                    logger.info(
+                        f"Eagerly initializing evaluator '{ev_config.name}' "
+                        f"(type={ev_config.type}, phase={ev_config.phase})"
                     )
-                    if hasattr(self._policy_engine, "set_tracer") and self.tracer:
-                        self._policy_engine.set_tracer(self.tracer)
-                    self._policy_engine_initialized = True
-                    logger.info(f"Policy engine ready: {self._policy_engine.name}")
+                    # Raises on failure — no try/except intentionally
+                    engine = await PolicyEngineRegistry.create_and_initialize(
+                        ev_config.type, ev_config.config
+                    )
+                    if hasattr(engine, "set_tracer") and self.tracer:
+                        engine.set_tracer(self.tracer)
 
-            if not self._interceptor_initialized:
-                # Build the interceptor directly so errors propagate (no try/except).
-                # _initialize_interceptor() swallows errors for the lazy path; we want
-                # config failures to surface immediately during eager startup.
-                policy_engine = self._policy_engine
-                if not policy_engine:
+                    all_evaluators.append(engine)
+                    if ev_config.phase == "pre_call":
+                        pre_call_evaluators.append(engine)
+                    else:
+                        post_call_evaluators.append(engine)
+
+                self._evaluators = all_evaluators
+
+                if not all_evaluators:
                     self._interceptor_initialized = True
                 else:
                     self._interceptor = Interceptor(
-                        engines=[policy_engine],
-                        post_call_mode=self.settings.policy.post_call_mode,
-                        default_strategy=self.settings.policy.default_strategy,
-                        fail_action=self.settings.policy.fail_action,
+                        pre_call_evaluators=pre_call_evaluators,
+                        post_call_evaluators=post_call_evaluators,
+                        mode=self.settings.mode,
+                        default_strategy=self.settings.strategy,
+                        fail_action=self.settings.fail_action,
+                        max_intervention_attempts=self.settings.max_intervention_attempts,
+                        session_ttl=self.settings.session_ttl,
+                        max_sessions=self.settings.max_sessions,
                     )
                     self._interceptor_initialized = True
-                    logger.info("Interceptor ready")
+                    logger.info("Interceptor ready with %d evaluator(s)", len(all_evaluators))
 
-            # Recompute the effective hook timeout now that the engine is known.
+            # Recompute the effective hook timeout now that engines are known.
             self._effective_hook_timeout = self._compute_hook_timeout()
 
     async def cleanup_session(self, session_id: str) -> None:
-        """Clean up all state for a session (interceptor tasks + engine session)."""
+        """Clean up all state for a session (interceptor tasks + engine sessions)."""
         if self._interceptor is not None:
             await self._interceptor.cleanup_session(session_id)
-        if self._policy_engine is not None and hasattr(self._policy_engine, "reset_session"):
-            await self._policy_engine.reset_session(session_id)
+        for engine in self._evaluators:
+            if hasattr(engine, "reset_session"):
+                await engine.reset_session(session_id)
         logger.debug(f"Cleaned up session {session_id} from hooks")
 
     async def shutdown(self) -> None:
@@ -402,11 +379,11 @@ class Callback(CustomLogger):
             except Exception as e:
                 logger.error(f"Error shutting down interceptor: {e}")
 
-        if self._policy_engine is not None:
+        for engine in self._evaluators:
             try:
-                await self._policy_engine.shutdown()
+                await engine.shutdown()
             except Exception as e:
-                logger.error(f"Error shutting down policy engine: {e}")
+                logger.error(f"Error shutting down evaluator '{engine.name}': {e}")
 
         if self._tracer is not None:
             try:
@@ -447,7 +424,7 @@ class Callback(CustomLogger):
             timeout=self._effective_hook_timeout,
             fallback=data,
             hook_name="async_pre_call_hook",
-            fail_open=self.settings.policy.fail_open,
+            fail_open=self.settings.fail_open,
         )
 
     async def _pre_call_impl(
@@ -556,7 +533,7 @@ class Callback(CustomLogger):
             timeout=self._effective_hook_timeout,
             fallback=response,
             hook_name="async_post_call_success_hook",
-            fail_open=self.settings.policy.fail_open,
+            fail_open=self.settings.fail_open,
         )
 
     async def _post_call_success_impl(
@@ -689,7 +666,7 @@ class Callback(CustomLogger):
             timeout=self._effective_hook_timeout,
             fallback=None,
             hook_name="async_post_call_failure_hook",
-            fail_open=self.settings.policy.fail_open,
+            fail_open=self.settings.fail_open,
             **kwargs,
         )
 
@@ -761,7 +738,7 @@ class Callback(CustomLogger):
             timeout=self._effective_hook_timeout,
             fallback=None,
             hook_name="async_log_success_event",
-            fail_open=self.settings.policy.fail_open,
+            fail_open=self.settings.fail_open,
         )
 
     async def _log_success_impl(
@@ -805,7 +782,7 @@ class Callback(CustomLogger):
             timeout=self._effective_hook_timeout,
             fallback=None,
             hook_name="async_log_failure_event",
-            fail_open=self.settings.policy.fail_open,
+            fail_open=self.settings.fail_open,
         )
 
     async def _log_failure_impl(

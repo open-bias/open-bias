@@ -74,7 +74,7 @@ class TestDeferredInterventionIntegration:
             message="Always verify identity first.",
             metadata={"strategy": "system_prompt_append"},
         )
-        interceptor = Interceptor(engines=[engine], default_strategy="system_prompt_append")
+        interceptor = Interceptor(pre_call_evaluators=[], post_call_evaluators=[engine], default_strategy="system_prompt_append")
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, "req-001")
         await asyncio.sleep(0.05)
@@ -92,7 +92,7 @@ class TestDeferredInterventionIntegration:
         engine = _mock_async_engine(
             message="Please verify identity.",
         )
-        interceptor = Interceptor(engines=[engine], default_strategy="user_message_inject")
+        interceptor = Interceptor(pre_call_evaluators=[], post_call_evaluators=[engine], default_strategy="user_message_inject")
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, "req-001")
         await asyncio.sleep(0.05)
@@ -111,7 +111,7 @@ class TestDeferredInterventionIntegration:
     async def test_default_strategy_is_user_message_inject(self):
         """Without strategy in metadata, defaults to user_message_inject."""
         engine = _mock_async_engine(message="Be safe.")
-        interceptor = Interceptor(engines=[engine])
+        interceptor = Interceptor(pre_call_evaluators=[], post_call_evaluators=[engine])
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, "req-001")
         await asyncio.sleep(0.05)
