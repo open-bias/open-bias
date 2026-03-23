@@ -237,6 +237,20 @@ async def run_trigger(
             pass
 
     # ------------------------------------------------------------------
+    # Derive overall decision from pipeline trace
+    # ------------------------------------------------------------------
+    trace = collector.pipeline_trace()
+
+    # Overall decision: worst decision wins (BLOCK > INTERVENE > ALLOW)
+    overall_decision = "ALLOW"
+    for entry in trace:
+        if entry["decision"] == "BLOCK":
+            overall_decision = "BLOCK"
+            break
+        if entry["decision"] == "INTERVENE":
+            overall_decision = "INTERVENE"
+
+    # ------------------------------------------------------------------
     # Print result
     # ------------------------------------------------------------------
     console.print()
@@ -250,13 +264,18 @@ async def run_trigger(
             traceback.print_exc()
         return
 
-    # Success
-    console.print(f"  [green]\u2713[/] [bold]ALLOW[/] ({duration:.2f}s)")
+    # Success — show overall decision
+    if overall_decision == "ALLOW":
+        console.print(f"  [green]\u2713[/] [bold]ALLOW[/] ({duration:.2f}s)")
+    elif overall_decision == "BLOCK":
+        console.print(f"  [red]\u2717[/] [bold red]BLOCK[/] ({duration:.2f}s)")
+    else:
+        console.print(f"  [yellow]![/] [bold yellow]INTERVENE[/] ({duration:.2f}s)")
+
     console.print()
     console.print("  [bold]Response[/]")
 
     if response_content:
-        # Wrap long lines at ~70 chars for readability
         for line in response_content.splitlines():
             console.print(f"  {line}")
     else:
@@ -265,7 +284,6 @@ async def run_trigger(
     # ------------------------------------------------------------------
     # Pipeline trace
     # ------------------------------------------------------------------
-    trace = collector.pipeline_trace()
     if trace:
         console.print()
         console.print("  [bold]Pipeline[/]")
