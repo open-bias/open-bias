@@ -1,8 +1,8 @@
 """
 Interceptor orchestrator.
 
-Manages the execution of checkers at PRE_CALL and POST_CALL phases,
-handles async checker task management, and applies interventions.
+Manages the execution of policy engines at PRE_CALL and POST_CALL phases,
+handles async engine task management, and applies interventions.
 """
 
 import asyncio
@@ -17,33 +17,28 @@ from openbias.core.intervention.strategies import (
     UserMessageInjectStrategy,
 )
 from openbias.core.session import SessionStore
-from openbias.policy.protocols import Decision, EngineResult
+from openbias.policy.protocols import Decision, EngineResult, PolicyEngine
 
-from .adapters import PolicyEngineChecker
-from .types import (
-    CheckerMode,
-    CheckPhase,
-    InterceptionResult,
-)
+from .types import InterceptionResult
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class _PendingResult:
-    """Internal: pairs an EngineResult with the checker name that produced it."""
+    """Internal: pairs an EngineResult with the engine name that produced it."""
 
-    checker_name: str
+    engine_name: str
     result: EngineResult
 
 
 class Interceptor:
     """
-    Orchestrator for running checkers during LLM request lifecycle.
+    Orchestrator for running policy engines during LLM request lifecycle.
 
     Manages:
-    - Sync checkers that block and must complete (ALLOW or BLOCK only)
-    - Async checkers that run in background with results applied next request
+    - Sync engines that block and must complete (ALLOW or BLOCK only)
+    - Async engines that run in background with results applied next request
     - Pending async results per session
     - Modification merging for deferred INTERVENE decisions
     """
@@ -55,28 +50,25 @@ class Interceptor:
 
     def __init__(
         self,
-        checkers: list[PolicyEngineChecker],
+        engines: list[PolicyEngine],
+        post_call_mode: str = "async",
         default_strategy: str = "user_message_inject",
         fail_action: Literal["intervene", "block", "shadow"] = "intervene",
         session_ttl: int | None = None,
         max_sessions: int | None = None,
         max_async_tasks_per_session: int | None = None,
     ):
-        self._sync_pre_call: list[PolicyEngineChecker] = []
-        self._sync_post_call: list[PolicyEngineChecker] = []
-        self._async_pre_call: list[PolicyEngineChecker] = []
-        self._async_post_call: list[PolicyEngineChecker] = []
+        # PRE_CALL is always sync
+        self._sync_pre_call: list[PolicyEngine] = list(engines)
 
-        for checker in checkers:
-            if checker.mode == CheckerMode.ASYNC:
-                if checker.phase == CheckPhase.PRE_CALL:
-                    self._async_pre_call.append(checker)
-                else:
-                    self._async_post_call.append(checker)
-            elif checker.phase == CheckPhase.PRE_CALL:
-                self._sync_pre_call.append(checker)
-            else:
-                self._sync_post_call.append(checker)
+        # POST_CALL mode depends on post_call_mode param
+        self._sync_post_call: list[PolicyEngine] = []
+        self._async_post_call: list[PolicyEngine] = []
+
+        if post_call_mode == "async":
+            self._async_post_call = list(engines)
+        else:
+            self._sync_post_call = list(engines)
 
         # Intervention strategy
         valid_strategies = {s.value for s in StrategyType}
@@ -107,7 +99,6 @@ class Interceptor:
         logger.info(
             f"Interceptor initialized: {len(self._sync_pre_call)} sync pre-call, "
             f"{len(self._sync_post_call)} sync post-call, "
-            f"{len(self._async_pre_call)} async pre-call, "
             f"{len(self._async_post_call)} async post-call"
         )
 
@@ -123,9 +114,8 @@ class Interceptor:
         1. Apply pending async results from previous request
            - BLOCK -> block this request
            - INTERVENE -> merge modified_data into request
-        2. Run sync PRE_CALL checkers (gate only: ALLOW or BLOCK)
-        3. Start async PRE_CALL checkers in background
-        4. Return result with possibly modified request_data
+        2. Run sync PRE_CALL engines (gate only: ALLOW or BLOCK)
+        3. Return result with possibly modified request_data
         """
         self._sessions.touch(session_id)
         self._sessions.evict_stale()
@@ -139,12 +129,12 @@ class Interceptor:
             result = pending.result
             decision = self._effective_decision(result.decision)
             all_metadata["results"].append(
-                {"checker": pending.checker_name, "decision": decision.value}
+                {"checker": pending.engine_name, "decision": decision.value}
             )
 
             if decision == Decision.BLOCK:
                 logger.warning(
-                    f"Request blocked by async checker '{pending.checker_name}': "
+                    f"Request blocked by async engine '{pending.engine_name}': "
                     f"{result.message}"
                 )
                 # Only confirm tasks up to and including the blocking one.
@@ -160,13 +150,13 @@ class Interceptor:
             if decision == Decision.INTERVENE:
                 if result.modified_messages is not None:
                     logger.info(
-                        f"Applying async message replacement from '{pending.checker_name}'"
+                        f"Applying async message replacement from '{pending.engine_name}'"
                     )
                     modified_data = dict(modified_data)
                     modified_data["messages"] = result.modified_messages
                 elif result.message:
                     logger.info(
-                        f"Applying async intervention from '{pending.checker_name}'"
+                        f"Applying async intervention from '{pending.engine_name}'"
                     )
                     modified_data = self._apply_intervention(
                         modified_data, result.message, self._default_strategy
@@ -175,24 +165,24 @@ class Interceptor:
         # Async results processed successfully — remove from session store
         self._confirm_collected(session_id)
 
-        # Step 2: Run sync PRE_CALL checkers
-        # Note: INTERVENE results accumulate — each checker sees the already-modified
-        # request_data from prior checkers. Order in checkers list matters.
-        for checker in self._sync_pre_call:
+        # Step 2: Run sync PRE_CALL engines
+        # Note: INTERVENE results accumulate — each engine sees the already-modified
+        # request_data from prior engines. Order in engines list matters.
+        for engine in self._sync_pre_call:
             try:
-                result = await checker.evaluate(
+                result = await engine.evaluate_request(
                     session_id=session_id,
                     request_data=modified_data,
                     context={"user_request_id": user_request_id},
                 )
                 decision = self._effective_decision(result.decision)
                 all_metadata["results"].append(
-                    {"checker": checker.name, "decision": decision.value}
+                    {"checker": engine.name, "decision": decision.value}
                 )
 
                 if decision == Decision.BLOCK:
                     logger.warning(
-                        f"Request blocked by sync checker '{checker.name}': "
+                        f"Request blocked by sync engine '{engine.name}': "
                         f"{result.message}"
                     )
                     return InterceptionResult(
@@ -204,31 +194,24 @@ class Interceptor:
                 if decision == Decision.INTERVENE:
                     if result.modified_messages is not None:
                         logger.info(
-                            f"Applying sync message replacement from '{checker.name}'"
+                            f"Applying sync message replacement from '{engine.name}'"
                         )
                         modified_data = dict(modified_data)
                         modified_data["messages"] = result.modified_messages
                     elif result.message:
                         logger.info(
-                            f"Applying sync intervention from '{checker.name}'"
+                            f"Applying sync intervention from '{engine.name}'"
                         )
                         modified_data = self._apply_intervention(
                             modified_data, result.message, self._default_strategy
                         )
 
             except Exception as e:
-                logger.error(f"Checker '{checker.name}' failed: {e}")
+                logger.error(f"Engine '{engine.name}' failed: {e}")
                 # Fail-open: log and continue instead of blocking
                 all_metadata["results"].append(
-                    {"checker": checker.name, "decision": "error", "error": str(e)}
+                    {"checker": engine.name, "decision": "error", "error": str(e)}
                 )
-
-        # Step 3: Start async PRE_CALL checkers in background
-        for checker in self._async_pre_call:
-            self._start_async_checker(
-                checker, session_id, modified_data, None,
-                context={"user_request_id": user_request_id},
-            )
 
         return InterceptionResult(
             allowed=True,
@@ -246,8 +229,8 @@ class Interceptor:
         """
         Run POST_CALL phase.
 
-        1. Run sync POST_CALL checkers (ALLOW, BLOCK, or INTERVENE)
-        2. Start async POST_CALL checkers in background (don't wait)
+        1. Run sync POST_CALL engines (ALLOW, BLOCK, or INTERVENE)
+        2. Start async POST_CALL engines in background (don't wait)
         3. Return result with optional modified_data for response modification
         """
         self._sessions.touch(session_id)
@@ -256,23 +239,23 @@ class Interceptor:
         all_metadata: dict[str, Any] = {"results": [], "interventions": []}
         modified_data: dict[str, Any] | None = None
 
-        # Step 1: Run sync POST_CALL checkers
-        for checker in self._sync_post_call:
+        # Step 1: Run sync POST_CALL engines
+        for engine in self._sync_post_call:
             try:
-                result = await checker.evaluate(
+                result = await engine.evaluate_response(
                     session_id=session_id,
-                    request_data=request_data,
                     response_data=response_data,
+                    request_data=request_data,
                     context={"user_request_id": user_request_id},
                 )
                 decision = self._effective_decision(result.decision)
                 all_metadata["results"].append(
-                    {"checker": checker.name, "decision": decision.value}
+                    {"checker": engine.name, "decision": decision.value}
                 )
 
                 if decision == Decision.BLOCK:
                     logger.warning(
-                        f"Response blocked by sync checker '{checker.name}': "
+                        f"Response blocked by sync engine '{engine.name}': "
                         f"{result.message}"
                     )
                     return InterceptionResult(
@@ -283,11 +266,11 @@ class Interceptor:
 
                 if decision == Decision.INTERVENE:
                     logger.info(
-                        f"Sync POST_CALL checker '{checker.name}' returned INTERVENE: "
+                        f"Sync POST_CALL engine '{engine.name}' returned INTERVENE: "
                         f"{result.message}"
                     )
                     intervention_info: dict[str, Any] = {
-                        "checker": checker.name,
+                        "checker": engine.name,
                         "message": result.message,
                     }
                     if result.modified_messages is not None:
@@ -298,7 +281,7 @@ class Interceptor:
                         modified_data = {}
                     modified_data.setdefault("_interventions", []).append(
                         {
-                            "checker": checker.name,
+                            "checker": engine.name,
                             "message": result.message,
                             "modified_messages": result.modified_messages,
                             "metadata": result.metadata,
@@ -306,15 +289,15 @@ class Interceptor:
                     )
 
             except Exception as e:
-                logger.error(f"Checker '{checker.name}' failed: {e}")
+                logger.error(f"Engine '{engine.name}' failed: {e}")
                 all_metadata["results"].append(
-                    {"checker": checker.name, "decision": "error", "error": str(e)}
+                    {"checker": engine.name, "decision": "error", "error": str(e)}
                 )
 
-        # Step 2: Start async POST_CALL checkers in background
-        for checker in self._async_post_call:
-            self._start_async_checker(
-                checker, session_id, request_data, response_data,
+        # Step 2: Start async POST_CALL engines in background
+        for engine in self._async_post_call:
+            self._start_async_engine(
+                engine, session_id, request_data, response_data,
                 context={"user_request_id": user_request_id},
             )
 
@@ -355,10 +338,10 @@ class Interceptor:
                     result = task.result()
                     results.append(result)
                 except asyncio.CancelledError:
-                    logger.warning("Async checker task was cancelled")
+                    logger.warning("Async engine task was cancelled")
                     results.append(
                         _PendingResult(
-                            checker_name="async_task_cancelled",
+                            engine_name="async_task_cancelled",
                             result=EngineResult(
                                 decision=Decision.ALLOW,
                                 message="Async task cancelled",
@@ -367,10 +350,10 @@ class Interceptor:
                         )
                     )
                 except Exception as e:
-                    logger.error(f"Async checker task failed: {e}")
+                    logger.error(f"Async engine task failed: {e}")
                     results.append(
                         _PendingResult(
-                            checker_name="async_task_error",
+                            engine_name="async_task_error",
                             result=EngineResult(
                                 decision=Decision.ALLOW,
                                 message=f"Async task error: {e}",
@@ -419,32 +402,39 @@ class Interceptor:
         else:
             self._sessions.remove(session_id)
 
-    def _start_async_checker(
+    def _start_async_engine(
         self,
-        checker: PolicyEngineChecker,
+        engine: PolicyEngine,
         session_id: str,
         request_data: dict[str, Any],
         response_data: Any,
         context: dict[str, Any] | None = None,
     ) -> None:
-        """Start an async checker task in the background."""
+        """Start an async engine task in the background."""
 
-        async def run_checker() -> _PendingResult:
+        async def run_engine() -> _PendingResult:
             try:
-                result = await checker.evaluate(
-                    session_id=session_id,
-                    request_data=request_data,
-                    response_data=response_data,
-                    context=context,
-                )
-                return _PendingResult(checker_name=checker.name, result=result)
+                if response_data is None:
+                    result = await engine.evaluate_request(
+                        session_id=session_id,
+                        request_data=request_data,
+                        context=context,
+                    )
+                else:
+                    result = await engine.evaluate_response(
+                        session_id=session_id,
+                        response_data=response_data,
+                        request_data=request_data,
+                        context=context,
+                    )
+                return _PendingResult(engine_name=engine.name, result=result)
             except Exception as e:
-                logger.error(f"Async checker '{checker.name}' failed: {e}")
+                logger.error(f"Async engine '{engine.name}' failed: {e}")
                 return _PendingResult(
-                    checker_name=checker.name,
+                    engine_name=engine.name,
                     result=EngineResult(
                         decision=Decision.ALLOW,
-                        message=f"Async checker error: {e}",
+                        message=f"Async engine error: {e}",
                         metadata={"error": str(e)},
                     ),
                 )
@@ -467,10 +457,10 @@ class Interceptor:
             if not oldest.done():
                 oldest.cancel()
 
-        task = asyncio.create_task(run_checker())
+        task = asyncio.create_task(run_engine())
         tasks.append(task)
 
-        logger.debug(f"Started async checker '{checker.name}' for session {session_id}")
+        logger.debug(f"Started async engine '{engine.name}' for session {session_id}")
 
     def _apply_intervention(
         self,
