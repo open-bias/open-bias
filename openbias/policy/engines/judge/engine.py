@@ -70,10 +70,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         # Config
         self._default_rubric: str = "agent_behavior"
-        self._conversation_rubric: str | None = "conversation_policy"
-        self._pre_call_enabled: bool = False
-        self._pre_call_rubric: str = "safety"
-        self._conversation_eval_interval: int = 5
+        self._max_intervention_attempts: int = 3
 
     @property
     def name(self) -> str:
@@ -99,12 +96,14 @@ class JudgePolicyEngine(PolicyEngine):
         Args:
             config: Configuration dict with:
                 - models: List of judge model configs [{name, model, temperature, ...}]
-                - default_rubric: Name of default turn-scope rubric
-                - conversation_rubric: Name of conversation-scope rubric (or null to disable)
-                - pre_call_enabled: Whether to evaluate requests (default: false)
-                - pre_call_rubric: Rubric for pre-call evaluation
-                - conversation_eval_interval: Run conversation eval every N turns (default: 5)
+                - default_rubric: Name of default rubric for this evaluator instance
+                - rubric: Shorthand for default_rubric
+                - policies: List of rule strings (shorthand for inline_policy)
+                - inline_policy: Inline policy rules or rubric definitions
+                - max_intervention_attempts: Escalation cap (default: 3)
                 - custom_rubrics_path: Path to custom rubric YAML files
+                - session_ttl: Session TTL in seconds
+                - max_sessions: Maximum concurrent sessions
                 - checker_mode: "async" or "sync" (used by interceptor, not engine)
         """
         # Build client with judge models
@@ -132,12 +131,16 @@ class JudgePolicyEngine(PolicyEngine):
             verbose=config.get("verbose", False),
         )
 
-        # Config
+        # Config shorthands
+        # `rubric: "name"` → sets default_rubric
+        # `policies: [list of strings]` → treated as inline_policy
+        if "rubric" in config and "default_rubric" not in config:
+            config = {**config, "default_rubric": config["rubric"]}
+        if "policies" in config and "inline_policy" not in config:
+            config = {**config, "inline_policy": config["policies"]}
+
         self._default_rubric = config.get("default_rubric", "agent_behavior")
-        self._conversation_rubric = config.get("conversation_rubric", "conversation_policy")
-        self._pre_call_enabled = config.get("pre_call_enabled", False)
-        self._pre_call_rubric = config.get("pre_call_rubric", "safety")
-        self._conversation_eval_interval = config.get("conversation_eval_interval", 5)
+        self._max_intervention_attempts = config.get("max_intervention_attempts", 3)
 
         # Session memory management
         self._sessions.configure(
@@ -163,14 +166,6 @@ class JudgePolicyEngine(PolicyEngine):
                 f"Available: {available}"
             )
 
-        # Verify conversation rubric exists if configured
-        if self._conversation_rubric and not self._registry.get(self._conversation_rubric):
-            available = self._registry.list_rubrics()
-            raise ValueError(
-                f"Conversation rubric '{self._conversation_rubric}' not found. "
-                f"Available: {available}"
-            )
-
         self._initialized = True
         logger.info(f"JudgePolicyEngine initialized: {self.name}")
 
@@ -187,14 +182,42 @@ class JudgePolicyEngine(PolicyEngine):
     ) -> EngineResult:
         """Evaluate an incoming request (PRE_CALL).
 
-        Default: ALLOW (most judgment happens post-call).
-        If pre_call_enabled, run safety screening.
+        Runs the configured default rubric against the latest user message.
+        The interceptor only calls this method when the evaluator is assigned
+        to the pre_call phase, so no phase guard is needed here.
         """
-        # Optional pre-call screening
-        if self._pre_call_enabled:
-            return await self._evaluate_pre_call(session_id, request_data, context)
+        rubric = self._registry.get(self._default_rubric)
+        if not rubric:
+            return EngineResult(decision=Decision.ALLOW)
 
-        return EngineResult(decision=Decision.ALLOW)
+        messages = request_data.get("messages", [])
+        user_message = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                user_message = msg.get("content", "")
+                break
+
+        if not user_message:
+            return EngineResult(decision=Decision.ALLOW)
+
+        primary_model = self._client.primary_model
+        if not primary_model:
+            return EngineResult(decision=Decision.ALLOW)
+
+        try:
+            verdict = await self._evaluator.evaluate_turn(
+                model_name=primary_model,
+                rubric=rubric,
+                response_content=user_message,
+                conversation=messages,
+                metadata=(context or {}).get("metadata", {}),
+                session_id=session_id,
+                fail_action=VerdictAction.INTERVENE,
+            )
+            return self._build_result([verdict], self._get_or_create_session(session_id))
+        except Exception as e:
+            logger.error(f"Pre-call evaluation failed: {e}")
+            return EngineResult(decision=Decision.ALLOW)
 
     @require_initialized
     async def evaluate_response(
@@ -206,11 +229,9 @@ class JudgePolicyEngine(PolicyEngine):
     ) -> EngineResult:
         """Evaluate an LLM response (POST_CALL).
 
-        Main evaluation path:
-        1. Always run turn-scope rubric on latest response
-        2. Run conversation-scope rubric on interval or when triggered
-        3. Merge verdicts (most restrictive action wins)
-        4. Map to EngineResult
+        Runs the configured default rubric against the latest response.
+        Each evaluator instance has one rubric; conversation-scope evaluation
+        is handled by configuring a separate evaluator instance.
         """
         session = self._get_or_create_session(session_id)
         response_content = extract_response_content(response_data)
@@ -226,13 +247,13 @@ class JudgePolicyEngine(PolicyEngine):
 
         verdicts: list[JudgeVerdict] = []
 
-        # 1. Turn-scope evaluation (always runs)
-        turn_rubric = self._registry.get(self._default_rubric)
-        if turn_rubric:
+        # Run the configured rubric
+        rubric = self._registry.get(self._default_rubric)
+        if rubric:
             try:
-                turn_verdict = await self._evaluator.evaluate_turn(
+                verdict = await self._evaluator.evaluate_turn(
                     model_name=primary_model,
-                    rubric=turn_rubric,
+                    rubric=rubric,
                     response_content=response_content,
                     conversation=conversation,
                     metadata=metadata,
@@ -242,8 +263,8 @@ class JudgePolicyEngine(PolicyEngine):
                     tool_definitions=tool_definitions,
                     fail_action=VerdictAction.INTERVENE,
                 )
-                self._trace_verdict(session_id, turn_verdict, turn_rubric.name)
-                verdicts.append(turn_verdict)
+                self._trace_verdict(session_id, verdict, rubric.name)
+                verdicts.append(verdict)
             except Exception as e:
                 logger.error(
                     f"Turn evaluation failed for session {session_id} "
@@ -252,29 +273,7 @@ class JudgePolicyEngine(PolicyEngine):
         else:
             logger.warning(f"Default rubric not found: {self._default_rubric}")
 
-        # 2. Conversation-scope evaluation (on interval or trigger)
-        if self._should_run_conversation_eval(session, verdicts):
-            conv_rubric = self._registry.get(self._conversation_rubric)
-            if conv_rubric:
-                try:
-                    conv_verdict = await self._evaluator.evaluate_conversation(
-                        model_name=primary_model,
-                        rubric=conv_rubric,
-                        full_conversation=conversation,
-                        metadata=metadata,
-                        session_id=session_id,
-                        session_context=session,
-                        fail_action=VerdictAction.INTERVENE,
-                    )
-                    self._trace_verdict(session_id, conv_verdict, conv_rubric.name)
-                    verdicts.append(conv_verdict)
-                except Exception as e:
-                    logger.error(
-                        f"Conversation evaluation failed for session {session_id} "
-                        f"({type(e).__name__}): {e}"
-                    )
-
-        # 3. Merge verdicts and build result
+        # Build result
         if not verdicts:
             return EngineResult(decision=Decision.ALLOW)
 
@@ -282,7 +281,7 @@ class JudgePolicyEngine(PolicyEngine):
         # compare against prior session state, not the current turn's own data
         result = self._build_result(verdicts, session)
 
-        # 4. Record verdicts to session after result is built
+        # Record verdicts to session after result is built
         session.turn_count += 1
         session.last_intervention_criteria = []
         for v in verdicts:
@@ -343,6 +342,12 @@ class JudgePolicyEngine(PolicyEngine):
                 if not isinstance(m, dict) or not m.get("model"):
                     errors.append(f"models[{i}]: missing 'model' field.")
 
+        # Apply config shorthands (same as initialize)
+        if "rubric" in config and "default_rubric" not in config:
+            config = {**config, "default_rubric": config["rubric"]}
+        if "policies" in config and "inline_policy" not in config:
+            config = {**config, "inline_policy": config["policies"]}
+
         # Build a temporary registry and load inline policy to check rubrics
         registry = RubricRegistry()
 
@@ -374,23 +379,6 @@ class JudgePolicyEngine(PolicyEngine):
             errors.append(
                 f"Default rubric '{default_rubric}' not found. Available: {available}"
             )
-
-        # Check conversation rubric if set
-        conv_rubric = config.get("conversation_rubric", "conversation_policy")
-        if conv_rubric and not registry.get(conv_rubric):
-            available = registry.list_rubrics()
-            errors.append(
-                f"Conversation rubric '{conv_rubric}' not found. Available: {available}"
-            )
-
-        # Check pre_call_rubric if pre_call is enabled
-        if config.get("pre_call_enabled", False):
-            pre_rubric = config.get("pre_call_rubric", "safety")
-            if not registry.get(pre_rubric):
-                available = registry.list_rubrics()
-                errors.append(
-                    f"Pre-call rubric '{pre_rubric}' not found. Available: {available}"
-                )
 
         return errors
 
@@ -501,70 +489,6 @@ class JudgePolicyEngine(PolicyEngine):
             self._sessions.touch(session_id)
         return session
 
-    def _should_run_conversation_eval(
-        self,
-        session: JudgeSessionContext,
-        turn_verdicts: list[JudgeVerdict],
-    ) -> bool:
-        """Determine if conversation-scope evaluation should run."""
-        if not self._conversation_rubric:
-            return False
-
-        # Run on interval (check +1 because record_verdict hasn't incremented yet)
-        effective_turn = session.turn_count + 1
-        if (
-            effective_turn > 0
-            and effective_turn % self._conversation_eval_interval == 0
-        ):
-            return True
-
-        # Run when a turn verdict is intervene or worse
-        for v in turn_verdicts:
-            if v.action != VerdictAction.PASS:
-                return True
-
-        return False
-
-    async def _evaluate_pre_call(
-        self,
-        session_id: str,
-        request_data: dict[str, Any],
-        context: dict[str, Any] | None = None,
-    ) -> EngineResult:
-        """Run pre-call safety screening on user message."""
-        rubric = self._registry.get(self._pre_call_rubric)
-        if not rubric:
-            return EngineResult(decision=Decision.ALLOW)
-
-        messages = request_data.get("messages", [])
-        user_message = ""
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                user_message = msg.get("content", "")
-                break
-
-        if not user_message:
-            return EngineResult(decision=Decision.ALLOW)
-
-        primary_model = self._client.primary_model
-        if not primary_model:
-            return EngineResult(decision=Decision.ALLOW)
-
-        try:
-            verdict = await self._evaluator.evaluate_turn(
-                model_name=primary_model,
-                rubric=rubric,
-                response_content=user_message,
-                conversation=messages,
-                metadata=(context or {}).get("metadata", {}),
-                session_id=session_id,
-                fail_action=VerdictAction.INTERVENE,
-            )
-            return self._build_result([verdict], self._get_or_create_session(session_id))
-        except Exception as e:
-            logger.error(f"Pre-call evaluation failed: {e}")
-            return EngineResult(decision=Decision.ALLOW)
-
     def _build_result(
         self,
         verdicts: list[JudgeVerdict],
@@ -652,7 +576,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         Escalation triggers:
         1. Same criterion fails after a prior intervention was applied
-        2. Total intervention count exceeds cap (3)
+        2. Total intervention count exceeds max_intervention_attempts
 
         Returns dict with should_escalate, reason, and escalation_prefix.
         """
@@ -687,10 +611,10 @@ class JudgePolicyEngine(PolicyEngine):
             )
             return result
 
-        # Check 2: total intervention count cap (3)
+        # Check 2: total intervention count cap
         # +1 because session hasn't recorded this verdict yet
         pending_count = session.intervention_count + 1
-        if pending_count > 3:
+        if pending_count > self._max_intervention_attempts:
             result["should_escalate"] = True
             result["reason"] = (
                 f"intervention_count_exceeded: {pending_count} interventions in session"

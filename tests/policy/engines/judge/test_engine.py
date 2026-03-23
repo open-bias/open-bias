@@ -42,9 +42,7 @@ def full_config():
             {"name": "primary", "model": "gpt-4o-mini", "temperature": 0.0},
         ],
         "default_rubric": "agent_behavior",
-        "conversation_rubric": "conversation_policy",
-        "pre_call_enabled": False,
-        "conversation_eval_interval": 5,
+        "max_intervention_attempts": 3,
     }
 
 
@@ -132,7 +130,7 @@ class TestInitialization:
     async def test_initialize_full_config(self, engine, full_config):
         await engine.initialize(full_config)
         assert engine._initialized
-        assert engine._conversation_eval_interval == 5
+        assert engine._max_intervention_attempts == 3
 
     async def test_initialize_raises_without_models(self, engine):
         """Test that engine raises ValueError when no models provided."""
@@ -154,37 +152,53 @@ class TestEvaluateRequest:
         with pytest.raises(RuntimeError, match="not initialized"):
             await engine.evaluate_request("s1", sample_request)
 
-    async def test_allow_by_default(self, engine, judge_config, sample_request):
-        await engine.initialize(judge_config)
-        result = await engine.evaluate_request("s1", sample_request)
-        assert result.decision == Decision.ALLOW
-
-    async def test_pre_call_enabled_evaluates_request(self, engine, sample_request):
+    async def test_always_evaluates_with_default_rubric(self, engine, sample_request):
+        """evaluate_request always runs the default rubric (no pre_call_enabled guard)."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "pre_call_enabled": True,
         }
         await engine.initialize(config)
-        engine._client.call_judge = AsyncMock(return_value=_passing_safety_response())
+        engine._client.call_judge = AsyncMock(return_value=_passing_judge_response())
 
         result = await engine.evaluate_request("s1", sample_request)
 
         assert result.decision == Decision.ALLOW
         engine._client.call_judge.assert_called_once()
 
-    async def test_pre_call_enabled_failing_request(self, engine, sample_request):
+    async def test_failing_request(self, engine, sample_request):
+        """Failing rubric evaluation results in INTERVENE."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "pre_call_enabled": True,
         }
         await engine.initialize(config)
-        engine._client.call_judge = AsyncMock(return_value=_failing_safety_response())
+        engine._client.call_judge = AsyncMock(return_value=_failing_judge_response())
 
         result = await engine.evaluate_request("s1", sample_request)
 
         assert result.decision == Decision.INTERVENE
         violations = result.metadata.get("violations", [])
         assert len(violations) > 0
+
+    async def test_empty_user_message_allows(self, engine):
+        """No user message in request → ALLOW without calling judge."""
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+        }
+        await engine.initialize(config)
+
+        result = await engine.evaluate_request("s1", {"messages": []})
+        assert result.decision == Decision.ALLOW
+
+    async def test_judge_error_failopen(self, engine, sample_request):
+        """Judge LLM error → fail-open to ALLOW."""
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+        }
+        await engine.initialize(config)
+        engine._client.call_judge = AsyncMock(side_effect=Exception("LLM error"))
+
+        result = await engine.evaluate_request("s1", sample_request)
+        assert result.decision == Decision.ALLOW
 
 
 class TestEvaluateResponse:
@@ -319,34 +333,48 @@ class TestResponseExtraction:
         assert extract_response_content(42) == "42"
 
 
-class TestConversationEvalTrigger:
-    async def test_conversation_eval_on_interval(self, engine, judge_config, sample_request, sample_response):
-        """Conversation eval should trigger every N turns."""
-        judge_config["conversation_eval_interval"] = 1
-        await engine.initialize(judge_config)
+class TestConfigShorthands:
+    """Tests for config shorthands: `rubric` and `policies`."""
 
-        passing_verdict = JudgeVerdict(
-            scores=[],
-            composite_score=5.0,
-            action=VerdictAction.PASS,
-            summary="OK",
-            judge_model="gpt-4o-mini",
-            latency_ms=10.0,
-            token_usage=0,
-            scope=EvaluationScope.TURN,
-        )
-        engine._evaluator.evaluate_turn = AsyncMock(return_value=passing_verdict)
-        engine._evaluator.evaluate_conversation = AsyncMock(return_value=passing_verdict)
+    async def test_rubric_shorthand(self, engine):
+        """rubric: 'name' sets default_rubric."""
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "rubric": "agent_behavior",
+        }
+        await engine.initialize(config)
+        assert engine._default_rubric == "agent_behavior"
 
-        # Turn 1: turn_count=0, effective_turn=1, 1%1==0 → conversation eval fires
-        await engine.evaluate_response("s1", sample_response, sample_request)
-        assert engine._evaluator.evaluate_turn.call_count == 1
-        assert engine._evaluator.evaluate_conversation.call_count == 1
+    async def test_policies_shorthand(self, engine):
+        """policies: [list] treated as inline_policy."""
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "policies": ["Be safe", "Be helpful"],
+        }
+        await engine.initialize(config)
+        assert engine._default_rubric == "inline_policy"
+        rubric = engine._registry.get("inline_policy")
+        assert rubric is not None
 
-        # Turn 2: turn_count=1, effective_turn=2, 2%1==0 → conversation eval fires again
-        await engine.evaluate_response("s1", sample_response, sample_request)
-        assert engine._evaluator.evaluate_turn.call_count == 2
-        assert engine._evaluator.evaluate_conversation.call_count == 2
+    async def test_explicit_overrides_shorthand(self, engine):
+        """Explicit default_rubric takes precedence over rubric shorthand."""
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "rubric": "safety",
+            "default_rubric": "agent_behavior",
+        }
+        await engine.initialize(config)
+        assert engine._default_rubric == "agent_behavior"
+
+    async def test_max_intervention_attempts_from_config(self):
+        """max_intervention_attempts is read from config."""
+        engine = JudgePolicyEngine()
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "max_intervention_attempts": 5,
+        }
+        await engine.initialize(config)
+        assert engine._max_intervention_attempts == 5
 
 
 class TestPerRuleCriteria:
@@ -665,7 +693,7 @@ class TestInterventionEscalation:
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_policy": ["Never delete user data"],
-            "conversation_rubric": None,
+    
         }
         await engine.initialize(config)
 
@@ -704,7 +732,7 @@ class TestInterventionEscalation:
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_policy": ["No financial advice", "Be professional"],
-            "conversation_rubric": None,
+    
         }
         await engine.initialize(config)
 
@@ -749,7 +777,7 @@ class TestInterventionEscalation:
                 "Rule D",
                 "Rule E",
             ],
-            "conversation_rubric": None,
+    
         }
         await engine.initialize(config)
 
@@ -872,7 +900,7 @@ class TestInterventionEscalation:
         assert session.criterion_intervention_counts == {}
 
     def test_escalation_cap_works_with_composite_only_verdicts(self):
-        """Intervention count cap (3) triggers on composite-only verdicts
+        """Intervention count cap triggers on composite-only verdicts
         (no criterion_failures) via direct session model testing.
         """
         from openbias.policy.engines.judge.models import JudgeSessionContext
@@ -1021,6 +1049,71 @@ class TestInterventionEscalation:
         assert result.decision == Decision.ALLOW
         assert result.metadata.get("escalated") is not True
 
+    def test_configurable_max_intervention_attempts(self):
+        """Escalation cap uses max_intervention_attempts from config, not hardcoded 3."""
+        from openbias.policy.engines.judge.models import JudgeSessionContext
+
+        engine = JudgePolicyEngine()
+        engine._max_intervention_attempts = 5  # Higher than default 3
+
+        session = JudgeSessionContext(session_id="custom-cap")
+        session.intervention_count = 4  # Would trigger with default cap of 3
+
+        verdict = JudgeVerdict(
+            scores=[
+                JudgeScore(criterion="quality", score=2, max_score=5, reasoning="Low"),
+            ],
+            composite_score=0.3,
+            action=VerdictAction.INTERVENE,
+            summary="Low quality",
+            judge_model="test",
+            metadata={},
+        )
+
+        # pending_count = 4+1 = 5, not > 5, so should NOT escalate
+        result = engine._check_escalation(verdict, session)
+        assert result["should_escalate"] is False
+
+        # Now set count to 5 → pending = 6 > 5 → should escalate
+        session.intervention_count = 5
+        result = engine._check_escalation(verdict, session)
+        assert result["should_escalate"] is True
+        assert "intervention_count_exceeded" in result["reason"]
+
+    async def test_intervention_cap_uses_config_value_end_to_end(
+        self, engine, sample_request, sample_response
+    ):
+        """End-to-end: max_intervention_attempts=2 escalates after 2 interventions."""
+        config = {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "inline_policy": ["Rule A", "Rule B", "Rule C"],
+            "max_intervention_attempts": 2,
+        }
+        await engine.initialize(config)
+
+        rubric = engine._registry.get("inline_policy")
+        criteria_names = [c.name for c in rubric.criteria]
+
+        # 3 different criterion violations (each unique, no repeat escalation)
+        for i in range(3):
+            scores = []
+            for j, name in enumerate(criteria_names):
+                scores.append({
+                    "criterion": name,
+                    "score": 0 if j == i else 1,
+                    "reasoning": f"{'Fail' if j == i else 'Pass'}",
+                    "evidence": [],
+                    "confidence": 0.9,
+                })
+            response = {"scores": scores, "summary": f"Violation {i+1}."}
+            engine._client.call_judge = AsyncMock(return_value=response)
+            result = await engine.evaluate_response("s1", sample_response, sample_request)
+
+        # 3rd violation should have triggered the count cap (>2) → BLOCK
+        assert result.decision == Decision.BLOCK
+        assert result.metadata.get("escalated") is True
+        assert "intervention_count_exceeded" in result.metadata.get("escalation_reason", "")
+
 
 class TestJudgeSessionEviction:
     """Tests for judge engine session TTL and LRU eviction."""
@@ -1094,7 +1187,7 @@ class TestMissingCriterionFalsePositive:
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_policy": ["No financial advice", "Be professional"],
-            "conversation_rubric": None,
+    
         }
         await engine.initialize(config)
 
@@ -1274,28 +1367,19 @@ class TestValidateConfig:
         })
         assert any("does_not_exist" in e for e in errors)
 
-    def test_nonexistent_conversation_rubric(self):
+    def test_validate_config_with_rubric_shorthand(self):
         errors = JudgePolicyEngine.validate_config({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "conversation_rubric": "nope",
+            "rubric": "agent_behavior",
         })
-        assert any("nope" in e for e in errors)
+        assert errors == []
 
-    def test_nonexistent_pre_call_rubric_when_enabled(self):
+    def test_validate_config_with_policies_shorthand(self):
         errors = JudgePolicyEngine.validate_config({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "pre_call_enabled": True,
-            "pre_call_rubric": "missing_rubric",
+            "policies": ["Be safe"],
         })
-        assert any("missing_rubric" in e for e in errors)
-
-    def test_pre_call_rubric_not_checked_when_disabled(self):
-        errors = JudgePolicyEngine.validate_config({
-            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "pre_call_enabled": False,
-            "pre_call_rubric": "missing_rubric",
-        })
-        assert not any("missing_rubric" in e for e in errors)
+        assert errors == []
 
     def test_invalid_inline_policy_type(self):
         errors = JudgePolicyEngine.validate_config({
