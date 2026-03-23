@@ -70,7 +70,7 @@ log_level: INFO            # default: INFO
 #     policies: [...]  → config.inline_policy: [...]
 #     rubric: "x"      → config.default_rubric: "x"
 #
-#   FSM shorthand:
+#   FSM / NeMo shorthand:
 #     policy: "./x"    → config.config_path: "./x" (resolved to absolute path)
 #
 #   All other keys pass through to config unchanged.

@@ -346,7 +346,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
                         config["default_rubric"] = v
                         continue
 
-                if ev_type == "fsm" and k == "policy":
+                if ev_type in ("fsm", "nemo") and k == "policy":
                     config["config_path"] = self._resolve_path(v)
                     continue
 
