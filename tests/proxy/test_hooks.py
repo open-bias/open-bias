@@ -1043,6 +1043,169 @@ async def test_initialize_partitions_evaluators_by_phase(mock_settings):
     assert cb._interceptor._async_post_call_evaluators == [mock_post_engine]
 
 
+async def test_initialize_propagates_global_config_to_interceptor(mock_settings):
+    """initialize() passes all global settings through to the Interceptor instance."""
+    from openbias.proxy.hooks import Callback
+    from openbias.config.settings import EvaluatorConfig
+
+    # Set non-default values on settings
+    mock_settings.mode = "sync"
+    mock_settings.fail_action = "block"
+    mock_settings.max_intervention_attempts = 5
+    mock_settings.session_ttl = 7200
+    mock_settings.max_sessions = 500
+    mock_settings.strategy = "system_prompt_append"
+
+    mock_engine = MagicMock()
+    mock_engine.name = "test-engine"
+
+    mock_settings.evaluators = [
+        EvaluatorConfig(name="test-eval", type="judge", phase="post_call",
+                        config={"models": [{"name": "primary", "model": "gpt-4o"}]}),
+    ]
+
+    cb = Callback(settings=mock_settings)
+
+    with patch(
+        "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        new=AsyncMock(return_value=mock_engine),
+    ):
+        await cb.initialize()
+
+    interceptor = cb._interceptor
+    assert interceptor is not None
+
+    # Verify global config landed on interceptor attributes
+    assert interceptor._default_strategy == "system_prompt_append"
+    assert interceptor._fail_action == "block"
+    assert interceptor._max_intervention_attempts == 5
+    assert interceptor._sessions._ttl == 7200
+    assert interceptor._sessions._max_sessions == 500
+
+    # mode="sync" means post_call evaluators go to sync list, not async
+    assert interceptor._sync_post_call_evaluators == [mock_engine]
+    assert interceptor._async_post_call_evaluators == []
+
+
+async def test_initialize_partial_failure_shuts_down_created_engines(mock_settings):
+    """When the 2nd evaluator fails to initialize, the 1st engine is shut down for cleanup."""
+    from openbias.proxy.hooks import Callback
+    from openbias.config.settings import EvaluatorConfig
+
+    engine1 = AsyncMock()
+    engine1.name = "engine-1"
+
+    mock_settings.evaluators = [
+        EvaluatorConfig(name="eval-1", type="judge", phase="pre_call",
+                        config={"models": [{"name": "primary", "model": "gpt-4o"}]}),
+        EvaluatorConfig(name="eval-2", type="judge", phase="post_call",
+                        config={"models": [{"name": "primary", "model": "gpt-4o"}]}),
+    ]
+
+    cb = Callback(settings=mock_settings)
+
+    call_count = 0
+
+    async def mock_create(engine_type, config):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return engine1
+        raise RuntimeError("engine-2 init failed")
+
+    with patch(
+        "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        new=mock_create,
+    ):
+        with pytest.raises(RuntimeError, match="engine-2 init failed"):
+            await cb.initialize()
+
+    # The first engine should have been shut down during cleanup
+    engine1.shutdown.assert_awaited_once()
+
+
+async def test_pre_call_runs_only_pre_call_evaluators_end_to_end(
+    mock_api_key, mock_cache
+):
+    """During pre_call, only pre_call evaluators run; post_call evaluators are not consulted."""
+    from openbias.proxy.hooks import Callback
+    from openbias.core.interceptor import Interceptor
+    from openbias.policy.protocols import Decision, EngineResult
+
+    settings = MagicMock()
+    settings.fail_open = True
+    settings.hook_timeout_seconds = 5.0
+    settings.fail_action = "intervene"
+    settings.strategy = "user_message_inject"
+    settings.mode = "sync"
+    settings.max_intervention_attempts = 3
+    settings.session_ttl = 3600
+    settings.max_sessions = 10000
+    settings.evaluators = []
+    settings.otel.enabled = False
+    settings.debug = False
+
+    cb = Callback(settings=settings)
+    cb._tracer = None
+
+    # Pre-call evaluator that returns INTERVENE
+    pre_engine = AsyncMock()
+    pre_engine.name = "pre-engine"
+    pre_engine.evaluate_request = AsyncMock(
+        return_value=EngineResult(
+            decision=Decision.INTERVENE,
+            message="pre-call intervention",
+        )
+    )
+
+    # Post-call evaluator that returns BLOCK (should NOT fire during pre_call)
+    post_engine = AsyncMock()
+    post_engine.name = "post-engine"
+    post_engine.evaluate_request = AsyncMock(
+        return_value=EngineResult(
+            decision=Decision.BLOCK,
+            message="post-call block",
+        )
+    )
+    post_engine.evaluate_response = AsyncMock(
+        return_value=EngineResult(
+            decision=Decision.BLOCK,
+            message="post-call block",
+        )
+    )
+
+    # Build a real Interceptor with both evaluators in their respective phases
+    interceptor = Interceptor(
+        pre_call_evaluators=[pre_engine],
+        post_call_evaluators=[post_engine],
+        mode="sync",
+        default_strategy="user_message_inject",
+        fail_action="intervene",
+    )
+
+    cb._interceptor = interceptor
+    cb._interceptor_initialized = True
+
+    data = {
+        "messages": [{"role": "user", "content": "hello"}],
+        "model": "gpt-4",
+    }
+
+    result = await cb.async_pre_call_hook(mock_api_key, mock_cache, data, "completion")
+
+    # Pre-call evaluator should have been called
+    pre_engine.evaluate_request.assert_awaited_once()
+
+    # Post-call evaluator should NOT have been called during pre_call
+    post_engine.evaluate_request.assert_not_called()
+    post_engine.evaluate_response.assert_not_called()
+
+    # The result should reflect the pre-call intervention (modified data, not a block)
+    assert not isinstance(result, Exception), (
+        f"Expected modified data from INTERVENE, got Exception: {result}"
+    )
+
+
 async def test_shutdown_shuts_down_all_evaluators(mock_settings):
     """shutdown() calls shutdown() on every evaluator engine."""
     from openbias.proxy.hooks import Callback
