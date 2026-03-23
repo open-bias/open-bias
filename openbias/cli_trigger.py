@@ -136,16 +136,14 @@ async def run_trigger(
         message:  User message to send (defaults to DEFAULT_MESSAGE).
         debug:    If True, print tracebacks on error.
     """
-    from openbias.proxy.server import Proxy
-    from openbias.core.utils import extract_response_content
     from openbias.cli_ui import (
         config_panel,
         console,
         dim,
-        error,
-        success,
         warning,
     )
+    from openbias.core.utils import extract_response_content
+    from openbias.proxy.server import Proxy
 
     resolved_message = message or DEFAULT_MESSAGE
 
@@ -194,7 +192,7 @@ async def run_trigger(
         interceptor_logger.removeHandler(collector)
         hooks_logger.removeHandler(collector)
         console.print()
-        console.print(f"  [red]\u2717[/] [bold red]Error[/]")
+        console.print("  [red]\u2717[/] [bold red]Error[/]")
         console.print()
         console.print(f"  {type(exc).__name__}: {exc}")
         if debug:
@@ -210,7 +208,7 @@ async def run_trigger(
         # fall through to completion below
 
     messages = [{"role": "user", "content": resolved_message}]
-    model = display_model
+    model = settings.proxy.default_model  # may be None, let proxy handle it
 
     start_time = time.monotonic()
 

@@ -1,9 +1,8 @@
 """Tests for openbias.cli commands."""
 
-import sys
 from io import StringIO
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
@@ -252,7 +251,7 @@ class TestCompileCommand:
             with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
                 with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=None):
                     with patch("openbias.policy.compiler.PolicyCompilerRegistry.get", return_value=mock_compiler_class):
-                        result = runner.invoke(main, ["compile", "be professional"])
+                        runner.invoke(main, ["compile", "be professional"])
 
             # Model should have been set from yaml (gpt-4o), not gpt-4o-mini
             assert mock_compiler.model == "gpt-4o"
@@ -278,7 +277,7 @@ class TestCompileCommand:
             with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=None):
                 with patch("openbias.policy.compiler.PolicyCompilerRegistry.get", return_value=mock_compiler_class):
                     with patch("openbias.cli_init.ensure_model_and_key", return_value=("claude-3-haiku", None)) as mock_ensure:
-                        result = runner.invoke(main, ["compile", "be professional"])
+                        runner.invoke(main, ["compile", "be professional"])
 
             mock_ensure.assert_called_once()
             assert mock_compiler.model == "claude-3-haiku"
@@ -320,7 +319,7 @@ class TestCompileCommand:
             mock_engine_cls.return_value = mock_engine_instance
 
             with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=mock_engine_cls):
-                result = runner.invoke(
+                runner.invoke(
                     main, ["compile", "be professional", "--api-key", "sk-test-key"]
                 )
 
@@ -354,7 +353,7 @@ class TestCompileCommand:
 
             with patch.dict("os.environ", {"GOOGLE_API_KEY": "test-gemini-key"}):
                 with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=mock_engine_cls):
-                    result = runner.invoke(main, ["compile", "be professional"])
+                    runner.invoke(main, ["compile", "be professional"])
 
             # get_compiler should have received the resolved gemini key
             mock_engine_instance.get_compiler.assert_called_once_with(
@@ -396,7 +395,6 @@ class TestTriggerCommand:
                 "tracing:\n  type: none\n"
             )
 
-            import asyncio
             from unittest.mock import AsyncMock
 
             mock_proxy = MagicMock()

@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 import click
+from rich.text import Text
 
 from openbias import __version__
 from openbias.cli_ui import (
@@ -31,7 +32,22 @@ from openbias.cli_ui import (
     warning,
     yaml_preview,
 )
-from rich.text import Text
+
+
+def _require_config(config: Path | None) -> None:
+    """Require openbias.yaml exists when no explicit --config given."""
+    if config is not None:
+        return
+    _yaml_candidates = [Path("openbias.yaml"), Path("openbias.yml")]
+    _env_path = os.environ.get("OBIAS_CONFIG")
+    if _env_path:
+        _yaml_candidates.insert(0, Path(_env_path))
+    if not any(p.is_file() for p in _yaml_candidates):
+        error(
+            "No openbias.yaml found in the current directory.",
+            hint="Run: openbias init",
+        )
+        raise SystemExit(1)
 
 
 def setup_logging(debug: bool = False) -> None:
@@ -99,18 +115,7 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
 
     # Gate: require openbias.yaml (or explicit --config) before doing anything.
     # This ensures users always run `openbias init` first.
-    if config is None:
-        from pathlib import Path as _Path
-        _yaml_candidates = [_Path("openbias.yaml"), _Path("openbias.yml")]
-        _env_path = os.environ.get("OBIAS_CONFIG")
-        if _env_path:
-            _yaml_candidates.insert(0, _Path(_env_path))
-        if not any(p.is_file() for p in _yaml_candidates):
-            error(
-                "No openbias.yaml found in the current directory.",
-                hint="Run: openbias init",
-            )
-            raise SystemExit(1)
+    _require_config(config)
 
     try:
         with spinner("Loading configuration..."):
@@ -204,18 +209,7 @@ def trigger(config: Path, message: str, debug: bool) -> None:
     from openbias.config.settings import Settings
 
     # Gate: require openbias.yaml (or explicit --config) before doing anything.
-    if config is None:
-        from pathlib import Path as _Path
-        _yaml_candidates = [_Path("openbias.yaml"), _Path("openbias.yml")]
-        _env_path = os.environ.get("OBIAS_CONFIG")
-        if _env_path:
-            _yaml_candidates.insert(0, _Path(_env_path))
-        if not any(p.is_file() for p in _yaml_candidates):
-            error(
-                "No openbias.yaml found in the current directory.",
-                hint="Run: openbias init",
-            )
-            raise SystemExit(1)
+    _require_config(config)
 
     try:
         with spinner("Loading configuration..."):
@@ -786,10 +780,10 @@ def compile(
         context["domain"] = domain
 
     async def run_compile() -> None:
-        from openbias.policy.compiler import PolicyCompilerRegistry
-        from openbias.policy.registry import PolicyEngineRegistry
         from openbias.cli_init import ensure_model_and_key
         from openbias.config.settings import Settings
+        from openbias.policy.compiler import PolicyCompilerRegistry
+        from openbias.policy.registry import PolicyEngineRegistry
 
         try:
             # --- Resolve model (yaml > interactive) and validate API key ---
