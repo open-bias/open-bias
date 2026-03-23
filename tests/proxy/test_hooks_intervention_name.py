@@ -7,16 +7,10 @@ Tests the full deferred intervention flow end-to-end through the Interceptor.
 
 import asyncio
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
-from openbias.core.interceptor import (
-    CheckerMode,
-    CheckPhase,
-    Decision,
-    EngineResult,
-    Interceptor,
-)
-from openbias.core.interceptor.adapters import PolicyEngineChecker
+from openbias.core.interceptor import Interceptor
+from openbias.policy.protocols import Decision, EngineResult
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -35,18 +29,25 @@ def _request(content: str = "hello") -> dict[str, Any]:
     }
 
 
-def _mock_async_checker(
+def _mock_async_engine(
     message: str,
     metadata: dict[str, Any] | None = None,
-) -> PolicyEngineChecker:
-    """Async POST_CALL checker that returns INTERVENE with a message."""
+) -> Any:
+    """Mock PolicyEngine that returns INTERVENE on evaluate_response and ALLOW on evaluate_request."""
     engine = MagicMock()
-    engine.name = "fake_async_intervention"
+    type(engine).name = PropertyMock(return_value="fake_async_intervention")
 
-    async def _evaluate(
+    async def _evaluate_request(
         session_id: str,
         request_data: dict[str, Any],
-        response_data: Any = None,
+        context: dict[str, Any] | None = None,
+    ) -> EngineResult:
+        return EngineResult(decision=Decision.ALLOW)
+
+    async def _evaluate_response(
+        session_id: str,
+        response_data: Any,
+        request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
     ) -> EngineResult:
         return EngineResult(
@@ -55,11 +56,9 @@ def _mock_async_checker(
             metadata=metadata or {},
         )
 
-    checker = PolicyEngineChecker(
-        engine=engine, phase=CheckPhase.POST_CALL, mode=CheckerMode.ASYNC
-    )
-    checker.evaluate = _evaluate  # type: ignore[assignment]
-    return checker
+    engine.evaluate_request = _evaluate_request
+    engine.evaluate_response = _evaluate_response
+    return engine
 
 
 # ---------------------------------------------------------------------------
@@ -71,11 +70,11 @@ class TestDeferredInterventionIntegration:
 
     async def test_system_prompt_append_applied(self):
         """Async checker returns INTERVENE -> system prompt is appended on next PRE_CALL."""
-        checker = _mock_async_checker(
+        engine = _mock_async_engine(
             message="Always verify identity first.",
             metadata={"strategy": "system_prompt_append"},
         )
-        interceptor = Interceptor([checker], default_strategy="system_prompt_append")
+        interceptor = Interceptor(engines=[engine], default_strategy="system_prompt_append")
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, "req-001")
         await asyncio.sleep(0.05)
@@ -90,10 +89,10 @@ class TestDeferredInterventionIntegration:
 
     async def test_user_message_inject_applied(self):
         """Async checker returns INTERVENE with user_message_inject strategy."""
-        checker = _mock_async_checker(
+        engine = _mock_async_engine(
             message="Please verify identity.",
         )
-        interceptor = Interceptor([checker], default_strategy="user_message_inject")
+        interceptor = Interceptor(engines=[engine], default_strategy="user_message_inject")
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, "req-001")
         await asyncio.sleep(0.05)
@@ -111,8 +110,8 @@ class TestDeferredInterventionIntegration:
 
     async def test_default_strategy_is_user_message_inject(self):
         """Without strategy in metadata, defaults to user_message_inject."""
-        checker = _mock_async_checker(message="Be safe.")
-        interceptor = Interceptor([checker])
+        engine = _mock_async_engine(message="Be safe.")
+        interceptor = Interceptor(engines=[engine])
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, "req-001")
         await asyncio.sleep(0.05)
