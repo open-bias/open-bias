@@ -90,28 +90,6 @@ def _failing_judge_response():
     }
 
 
-def _passing_safety_response():
-    return {
-        "scores": [
-            {"criterion": "no_harmful_content", "score": 1, "reasoning": "Safe content", "evidence": [], "confidence": 0.95},
-            {"criterion": "no_pii_leak", "score": 1, "reasoning": "No PII", "evidence": [], "confidence": 0.95},
-            {"criterion": "no_unauthorized_actions", "score": 1, "reasoning": "No unauthorized actions", "evidence": [], "confidence": 0.95},
-        ],
-        "summary": "Request is safe.",
-    }
-
-
-def _failing_safety_response():
-    return {
-        "scores": [
-            {"criterion": "no_harmful_content", "score": 0, "reasoning": "Contains harmful content", "evidence": ["harmful phrase"], "confidence": 0.9},
-            {"criterion": "no_pii_leak", "score": 1, "reasoning": "No PII", "evidence": [], "confidence": 0.9},
-            {"criterion": "no_unauthorized_actions", "score": 0, "reasoning": "Suggests unauthorized actions", "evidence": ["bad action"], "confidence": 0.9},
-        ],
-        "summary": "Request contains harmful content and unauthorized actions.",
-    }
-
-
 class TestRegistration:
     def test_engine_registered(self):
         engine = PolicyEngineRegistry.create("judge")
@@ -693,7 +671,6 @@ class TestInterventionEscalation:
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_policy": ["Never delete user data"],
-    
         }
         await engine.initialize(config)
 
@@ -732,7 +709,6 @@ class TestInterventionEscalation:
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_policy": ["No financial advice", "Be professional"],
-    
         }
         await engine.initialize(config)
 
@@ -777,7 +753,6 @@ class TestInterventionEscalation:
                 "Rule D",
                 "Rule E",
             ],
-    
         }
         await engine.initialize(config)
 
@@ -1187,7 +1162,6 @@ class TestMissingCriterionFalsePositive:
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_policy": ["No financial advice", "Be professional"],
-    
         }
         await engine.initialize(config)
 

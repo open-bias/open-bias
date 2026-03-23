@@ -48,8 +48,8 @@ _VERDICT_MAP: dict[VerdictAction, Decision] = {
 class JudgePolicyEngine(PolicyEngine):
     """Policy engine that uses LLM judges to evaluate agent behavior.
 
-    Supports turn-level and conversation-level evaluation against
-    configurable rubrics. Works with single or multiple judge models.
+    Supports turn-level evaluation against configurable rubrics.
+    Works with single or multiple judge models.
     """
 
     # Defaults for session memory management
