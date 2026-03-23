@@ -12,7 +12,7 @@ Architecture (what happens on each call):
      The response is returned to your app IMMEDIATELY — zero critical-path
      latency.
   4. The judge LLM scores the response against each policy rule using
-     built-in rubrics (safety, tone, instruction_following). Scores are
+     built-in rubrics (safety, tone, instruction_following, agent_behavior). Scores are
      normalized to [0,1] and aggregated into a weighted average.
   5. If the aggregate score falls below threshold, an intervention is
      QUEUED for the next turn — not applied retroactively. This is the
