@@ -205,13 +205,31 @@ OpenSentinel reads `.env` files automatically. API keys found in `.env` are sync
 
 See `.env.example` in the repository root for a template.
 
+## Eval
+
+Configure offline scenario-based evaluation under the `eval:` section. Used by `osentinel eval`.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `eval.scenarios` | list of strings | `[]` | Glob patterns for scenario JSON files, resolved relative to the config file |
+
+```yaml
+eval:
+  scenarios:
+    - ./eval/scenarios/*.json
+    - ./eval/scenarios/**/*.json    # recursive
+```
+
+The engine under test is determined by the top-level `engine` key.
+
 ## Config Validation
 
 The `osentinel serve` command validates configuration at startup:
 
 - Checks that referenced policy files exist on disk
-- Verifies that the required API key is present for the configured model
+- Verifies that the required API key is present for the configured model (skipped for `fsm`, which is local-only)
 - Applies engine defaults before engine-specific overrides
+- Eagerly initializes policy engines, failing fast on bad configuration instead of deferring errors to the first request
 
 If validation fails, the server prints the error and exits with code 1. Use `--debug` for a full traceback.
 

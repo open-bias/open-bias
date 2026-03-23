@@ -101,26 +101,27 @@ pytest -v
 ```
 tests/
 ├── conftest.py                    # Shared fixtures
+├── test_cli.py                    # CLI commands
 ├── config/                        # Config/settings tests
-├── tracing/
-│   └── test_otel_tracer.py
 ├── core/
 │   ├── interceptor/
 │   │   ├── test_interceptor.py    # Interceptor orchestration
 │   │   └── test_adapters.py       # PolicyEngineChecker adapter
-│   └── test_intervention.py       # Strategy tests
+│   ├── test_intervention.py       # Strategy tests
+│   └── test_session.py
+├── eval/                          # Offline scenario-based evaluation
 ├── proxy/
 │   ├── test_hooks.py              # SentinelCallback tests
-│   └── test_middleware.py         # Session extraction
+│   ├── test_middleware.py         # Session extraction
+│   └── test_server_shutdown.py    # Graceful shutdown
+├── tracing/
+│   └── test_otel_tracer.py
 └── policy/
-    ├── compiler/
+    ├── compiler/                  # Per-engine compiler tests
     └── engines/
-        ├── fsm/
-        │   ├── test_classifier.py
-        │   ├── test_constraints.py
-        │   ├── test_state_machine.py
-        │   └── test_workflow_parser.py
-        ├── llm/
+        ├── fsm/                   # Classifier, constraints, state machine
+        ├── judge/                 # Evaluator, rubrics, bias, tool calls
+        ├── llm/                   # Drift, constraints, classification
         └── nemo/
 ```
 
