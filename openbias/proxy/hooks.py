@@ -39,12 +39,7 @@ from litellm.proxy._types import UserAPIKeyAuth
 
 from openbias.config.settings import Settings
 from openbias.core.utils import extract_response_content, extract_usage_info
-from openbias.core.interceptor import (
-    CheckerMode,
-    CheckPhase,
-    Interceptor,
-    PolicyEngineChecker,
-)
+from openbias.core.interceptor import Interceptor
 from openbias.core.intervention.strategies import WorkflowViolationError
 from openbias.policy.protocols import PolicyEngine
 from openbias.proxy.middleware import SessionExtractor
@@ -229,42 +224,14 @@ class Callback(CustomLogger):
                 self._interceptor_initialized = True
                 return None
 
-            # Create checkers from policy engine
-            checkers: list[PolicyEngineChecker] = []
-
-            # Sync PRE_CALL checker for request evaluation
-            checkers.append(
-                PolicyEngineChecker(
-                    engine=policy_engine,
-                    phase=CheckPhase.PRE_CALL,
-                    mode=CheckerMode.SYNC,
-                )
-            )
-
-            # POST_CALL checker — mode is configurable:
-            #   async (default): results deferred to next PRE_CALL, zero latency
-            #   sync: blocks response, enables real-time BLOCK/INTERVENE
-            post_call_mode = (
-                CheckerMode.SYNC
-                if self.settings.policy.post_call_mode == "sync"
-                else CheckerMode.ASYNC
-            )
-            checkers.append(
-                PolicyEngineChecker(
-                    engine=policy_engine,
-                    phase=CheckPhase.POST_CALL,
-                    mode=post_call_mode,
-                )
-            )
-            logger.info(f"POST_CALL checker mode: {post_call_mode.value}")
-
             self._interceptor = Interceptor(
-                checkers,
+                engines=[policy_engine],
+                post_call_mode=self.settings.policy.post_call_mode,
                 default_strategy=self.settings.policy.default_strategy,
                 fail_action=self.settings.policy.fail_action,
             )
             self._interceptor_initialized = True
-            logger.info(f"Interceptor initialized with {len(checkers)} checkers")
+            logger.info("Interceptor initialized")
 
             # Recompute effective hook timeout now that the engine is available.
             self._effective_hook_timeout = self._compute_hook_timeout()
@@ -400,29 +367,14 @@ class Callback(CustomLogger):
                 if not policy_engine:
                     self._interceptor_initialized = True
                 else:
-                    checkers: list[PolicyEngineChecker] = [
-                        PolicyEngineChecker(
-                            engine=policy_engine,
-                            phase=CheckPhase.PRE_CALL,
-                            mode=CheckerMode.SYNC,
-                        ),
-                        PolicyEngineChecker(
-                            engine=policy_engine,
-                            phase=CheckPhase.POST_CALL,
-                            mode=(
-                                CheckerMode.SYNC
-                                if self.settings.policy.post_call_mode == "sync"
-                                else CheckerMode.ASYNC
-                            ),
-                        ),
-                    ]
                     self._interceptor = Interceptor(
-                        checkers,
+                        engines=[policy_engine],
+                        post_call_mode=self.settings.policy.post_call_mode,
                         default_strategy=self.settings.policy.default_strategy,
                         fail_action=self.settings.policy.fail_action,
                     )
                     self._interceptor_initialized = True
-                    logger.info(f"Interceptor ready with {len(checkers)} checkers")
+                    logger.info("Interceptor ready")
 
             # Recompute the effective hook timeout now that the engine is known.
             self._effective_hook_timeout = self._compute_hook_timeout()
