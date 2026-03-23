@@ -47,6 +47,7 @@ class Interceptor:
     # Defaults for session memory management
     DEFAULT_SESSION_TTL = 3600  # 1 hour
     DEFAULT_MAX_SESSIONS = 10_000
+
     def __init__(
         self,
         pre_call_evaluators: list[PolicyEngine],
@@ -496,12 +497,12 @@ class Interceptor:
 
         return result
 
-    @staticmethod
-    def _on_session_evict(_session_id: str, tasks: list[asyncio.Task[_PendingResult]]) -> None:
-        """Cancel all async tasks when a session is evicted."""
+    def _on_session_evict(self, session_id: str, tasks: list[asyncio.Task[_PendingResult]]) -> None:
+        """Cancel all async tasks and clean up intervention count when a session is evicted."""
         for task in tasks:
             if not task.done():
                 task.cancel()
+        self._intervention_counts.pop(session_id, None)
 
     async def cleanup_session(self, session_id: str) -> None:
         """Cancel running async tasks and clear pending results for a session."""
