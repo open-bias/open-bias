@@ -24,7 +24,6 @@ from openbias.policy.engines.judge.models import (
     JudgeVerdict,
     JudgeSessionContext,
     VerdictAction,
-    EvaluationScope,
 )
 from openbias.core.utils import extract_response_content, extract_tool_calls
 from openbias.policy.engines.judge.client import JudgeClient
