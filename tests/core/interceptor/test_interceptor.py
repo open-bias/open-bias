@@ -2,14 +2,16 @@
 Comprehensive tests for the Interceptor orchestrator.
 
 Covers:
-- Sync PRE_CALL engine flow (pass, fail, short-circuit)
-- Sync POST_CALL engine flow (pass, fail)
-- Async engine lifecycle (fire, collect, cross-request handoff)
+- Sync PRE_CALL evaluator flow (pass, fail, short-circuit)
+- Sync POST_CALL evaluator flow (pass, fail)
+- Async evaluator lifecycle (fire, collect, cross-request handoff)
 - Async edge cases (task failure, still-running, cleanup, shutdown)
 - Interceptor init categorization
 - Session TTL and LRU eviction
-- Async task cap enforcement
-- Context passing to engines
+- Context passing to evaluators
+- fail_action upgrade logic
+- max_intervention_attempts escalation
+- Separate pre_call / post_call evaluator lists
 """
 
 import asyncio
@@ -97,9 +99,9 @@ def _mock_engine(
 class TestSyncPreCall:
 
     async def test_pass_unchanged(self):
-        """Single ALLOW engine — request goes through unchanged."""
-        engine = _mock_engine()
-        interceptor = Interceptor(engines=[engine])
+        """Single ALLOW evaluator — request goes through unchanged."""
+        evaluator = _mock_engine()
+        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
 
         result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
 
@@ -107,12 +109,12 @@ class TestSyncPreCall:
         assert result.modified_data is None
 
     async def test_block_blocks(self):
-        """BLOCK engine blocks the request."""
-        engine = _mock_engine(
+        """BLOCK evaluator blocks the request."""
+        evaluator = _mock_engine(
             decision=Decision.BLOCK,
             message="forbidden",
         )
-        interceptor = Interceptor(engines=[engine])
+        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
 
         result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
 
@@ -120,7 +122,7 @@ class TestSyncPreCall:
         assert result.message == "forbidden"
 
     async def test_block_short_circuits(self):
-        """First engine BLOCKs — second engine never runs."""
+        """First evaluator BLOCKs — second evaluator never runs."""
         e1 = _mock_engine(
             name="blocker",
             decision=Decision.BLOCK,
@@ -138,7 +140,7 @@ class TestSyncPreCall:
 
         e2 = _mock_engine(name="skipped")
         e2.evaluate_request = AsyncMock(side_effect=counting_evaluate_request)
-        interceptor = Interceptor(engines=[e1, e2])
+        interceptor = Interceptor(pre_call_evaluators=[e1, e2], post_call_evaluators=[])
 
         result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
 
@@ -146,11 +148,11 @@ class TestSyncPreCall:
         assert call_count == 0  # Never reached
 
     async def test_engine_exception_fails_open(self):
-        """Exception in a sync engine fails open (ALLOW)."""
-        engine = _mock_engine(
+        """Exception in a sync evaluator fails open (ALLOW)."""
+        evaluator = _mock_engine(
             raise_on_evaluate=RuntimeError("kaboom"),
         )
-        interceptor = Interceptor(engines=[engine])
+        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
 
         result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
 
@@ -158,12 +160,12 @@ class TestSyncPreCall:
         assert result.allowed is True
 
     async def test_intervene_injects_user_message_by_default(self):
-        """INTERVENE engine injects a user message by default."""
-        engine = _mock_engine(
+        """INTERVENE evaluator injects a user message by default."""
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             message="Stay on topic",
         )
-        interceptor = Interceptor(engines=[engine])
+        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
         req = _request()
 
         result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
@@ -175,11 +177,15 @@ class TestSyncPreCall:
 
     async def test_intervene_system_prompt_append_strategy(self):
         """INTERVENE with system_prompt_append strategy appends to system prompt."""
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             message="Verify identity first",
         )
-        interceptor = Interceptor(engines=[engine], default_strategy="system_prompt_append")
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator],
+            post_call_evaluators=[],
+            default_strategy="system_prompt_append",
+        )
         req = _request()
 
         result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
@@ -192,11 +198,15 @@ class TestSyncPreCall:
 
     async def test_intervene_user_message_inject_strategy(self):
         """INTERVENE with user_message_inject strategy injects a user message."""
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             message="Verify identity first",
         )
-        interceptor = Interceptor(engines=[engine], default_strategy="user_message_inject")
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator],
+            post_call_evaluators=[],
+            default_strategy="user_message_inject",
+        )
         req = _request()
 
         result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
@@ -209,11 +219,11 @@ class TestSyncPreCall:
 
     async def test_intervene_without_message_no_modification(self):
         """INTERVENE with no message — no modification applied."""
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             message=None,
         )
-        interceptor = Interceptor(engines=[engine])
+        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
         req = _request()
 
         result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
@@ -224,11 +234,11 @@ class TestSyncPreCall:
     async def test_intervene_modified_messages_replaces_messages(self):
         """INTERVENE with modified_messages replaces request messages directly."""
         sanitized = [{"role": "user", "content": "sanitized hello"}]
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             modified_messages=sanitized,
         )
-        interceptor = Interceptor(engines=[engine])
+        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
         req = _request()
 
         result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
@@ -240,12 +250,12 @@ class TestSyncPreCall:
     async def test_intervene_modified_messages_takes_precedence_over_message(self):
         """modified_messages takes precedence over message text."""
         sanitized = [{"role": "user", "content": "sanitized"}]
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             message="This should be ignored",
             modified_messages=sanitized,
         )
-        interceptor = Interceptor(engines=[engine])
+        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
         req = _request()
 
         result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
@@ -260,11 +270,15 @@ class TestSyncPreCall:
         response_modification is a response-time strategy and must not be applied
         at request-modification time.
         """
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             message="Some guidance",
         )
-        interceptor = Interceptor(engines=[engine], default_strategy="response_modification")
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator],
+            post_call_evaluators=[],
+            default_strategy="response_modification",
+        )
         req = _request()
 
         result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
@@ -275,11 +289,11 @@ class TestSyncPreCall:
 
     async def test_intervene_does_not_mutate_original_request_data(self):
         """Intervention must not mutate the caller's original request_data dict."""
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             message="Stay on topic",
         )
-        interceptor = Interceptor(engines=[engine])
+        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
         original_messages = [{"role": "user", "content": "hello"}]
         req: dict[str, Any] = {"messages": original_messages, "model": "gpt-4"}
         original_content = req["messages"][0]["content"]
@@ -301,9 +315,11 @@ class TestSyncPreCall:
 class TestSyncPostCall:
 
     async def test_pass_unchanged(self):
-        """ALLOW engine — response goes through unchanged."""
-        engine = _mock_engine()
-        interceptor = Interceptor(engines=[engine], post_call_mode="sync")
+        """ALLOW evaluator — response goes through unchanged."""
+        evaluator = _mock_engine()
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[evaluator], mode="sync"
+        )
         req = _request()
 
         result = await interceptor.run_post_call(SESSION, req, {"answer": "hi"}, REQUEST_ID)
@@ -312,12 +328,14 @@ class TestSyncPostCall:
         assert result.modified_data is None
 
     async def test_block_blocks(self):
-        """BLOCK engine — response is blocked."""
-        engine = _mock_engine(
+        """BLOCK evaluator — response is blocked."""
+        evaluator = _mock_engine(
             decision=Decision.BLOCK,
             message="toxic content",
         )
-        interceptor = Interceptor(engines=[engine], post_call_mode="sync")
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[evaluator], mode="sync"
+        )
 
         result = await interceptor.run_post_call(
             SESSION, _request(), {"answer": "bad"}, REQUEST_ID
@@ -327,12 +345,14 @@ class TestSyncPostCall:
         assert result.message == "toxic content"
 
     async def test_intervene_returns_intervention_data(self):
-        """INTERVENE engine — modified_data contains intervention info."""
-        engine = _mock_engine(
+        """INTERVENE evaluator — modified_data contains intervention info."""
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             message="Dangerous tool call detected",
         )
-        interceptor = Interceptor(engines=[engine], post_call_mode="sync")
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[evaluator], mode="sync"
+        )
 
         result = await interceptor.run_post_call(
             SESSION, _request(), {"answer": "bad"}, REQUEST_ID
@@ -347,12 +367,14 @@ class TestSyncPostCall:
     async def test_intervene_with_modified_messages(self):
         """INTERVENE with modified_messages passes them through."""
         sanitized = [{"role": "assistant", "content": "I cannot do that."}]
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             message="Replaced dangerous response",
             modified_messages=sanitized,
         )
-        interceptor = Interceptor(engines=[engine], post_call_mode="sync")
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[evaluator], mode="sync"
+        )
 
         result = await interceptor.run_post_call(
             SESSION, _request(), {"answer": "bad"}, REQUEST_ID
@@ -363,19 +385,21 @@ class TestSyncPostCall:
         interventions = result.modified_data["_interventions"]
         assert interventions[0]["modified_messages"] == sanitized
 
-    async def test_multiple_intervene_engines_accumulate(self):
-        """Multiple INTERVENE engines — all interventions are collected."""
+    async def test_multiple_intervene_evaluators_accumulate(self):
+        """Multiple INTERVENE evaluators — all interventions are collected."""
         e1 = _mock_engine(
-            name="engine1",
+            name="evaluator1",
             decision=Decision.INTERVENE,
             message="Issue 1",
         )
         e2 = _mock_engine(
-            name="engine2",
+            name="evaluator2",
             decision=Decision.INTERVENE,
             message="Issue 2",
         )
-        interceptor = Interceptor(engines=[e1, e2], post_call_mode="sync")
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[e1, e2], mode="sync"
+        )
 
         result = await interceptor.run_post_call(
             SESSION, _request(), {"answer": "bad"}, REQUEST_ID
@@ -386,11 +410,13 @@ class TestSyncPostCall:
         assert len(interventions) == 2
 
     async def test_engine_exception_fails_open(self):
-        """Exception in sync POST_CALL engine fails open."""
-        engine = _mock_engine(
+        """Exception in sync POST_CALL evaluator fails open."""
+        evaluator = _mock_engine(
             raise_on_evaluate=RuntimeError("kaboom"),
         )
-        interceptor = Interceptor(engines=[engine], post_call_mode="sync")
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[evaluator], mode="sync"
+        )
 
         result = await interceptor.run_post_call(
             SESSION, _request(), {"answer": "hi"}, REQUEST_ID
@@ -400,19 +426,21 @@ class TestSyncPostCall:
 
 
 # ===========================================================================
-# Async engine lifecycle tests
+# Async evaluator lifecycle tests
 # ===========================================================================
 
 
 class TestAsyncCheckerLifecycle:
 
-    async def test_async_engine_started_during_post_call(self):
+    async def test_async_evaluator_started_during_post_call(self):
         """After run_post_call, async task is stored in _running_tasks."""
-        async_engine = _mock_engine(
+        async_evaluator = _mock_engine(
             name="async_e",
             delay=0.5,
         )
-        interceptor = Interceptor(engines=[async_engine])
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
+        )
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
 
@@ -422,15 +450,17 @@ class TestAsyncCheckerLifecycle:
 
     async def test_cross_request_handoff(self):
         """
-        Full lifecycle: async engine runs during POST_CALL of req 1,
+        Full lifecycle: async evaluator runs during POST_CALL of req 1,
         its result is collected during PRE_CALL of req 2.
         """
-        async_engine = _mock_engine(
+        async_evaluator = _mock_engine(
             name="async_monitor",
             decision=Decision.ALLOW,
             delay=0.01,
         )
-        interceptor = Interceptor(engines=[async_engine])
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
+        )
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
         await asyncio.sleep(0.05)
@@ -440,14 +470,16 @@ class TestAsyncCheckerLifecycle:
         assert result.allowed is True
 
     async def test_async_intervene_modifies_next_request(self):
-        """Async engine returns INTERVENE — next PRE_CALL applies intervention."""
-        async_engine = _mock_engine(
+        """Async evaluator returns INTERVENE — next PRE_CALL applies intervention."""
+        async_evaluator = _mock_engine(
             name="async_guide",
             decision=Decision.INTERVENE,
             message="Remember the workflow",
             delay=0.01,
         )
-        interceptor = Interceptor(engines=[async_engine])
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
+        )
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
         await asyncio.sleep(0.05)
@@ -461,14 +493,16 @@ class TestAsyncCheckerLifecycle:
         assert "Remember the workflow" in guidance_msg["content"]
 
     async def test_async_block_blocks_next_request(self):
-        """Async engine returns BLOCK — next PRE_CALL blocks."""
-        async_engine = _mock_engine(
+        """Async evaluator returns BLOCK — next PRE_CALL blocks."""
+        async_evaluator = _mock_engine(
             name="async_blocker",
             decision=Decision.BLOCK,
             message="violation detected async",
             delay=0.01,
         )
-        interceptor = Interceptor(engines=[async_engine])
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
+        )
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
         await asyncio.sleep(0.05)
@@ -484,7 +518,7 @@ class TestAsyncCheckerLifecycle:
         but had not yet been iterated must remain in the session and be picked up
         on the next request.
 
-        Setup: three async engines complete — A=ALLOW, B=BLOCK, C=INTERVENE.
+        Setup: three async evaluators complete — A=ALLOW, B=BLOCK, C=INTERVENE.
         On request 2: B triggers the early BLOCK return. C's result must not be
         discarded; it should be applied on request 3.
 
@@ -497,11 +531,6 @@ class TestAsyncCheckerLifecycle:
 
         # Engine B: ALLOW at sync pre-call, BLOCK at async post-call
         engine_b = _mock_engine(name="engine_b", decision=Decision.ALLOW, delay=0.01)
-        engine_b.evaluate_response = AsyncMock(
-            side_effect=lambda session_id, response_data, request_data, context=None: (
-                asyncio.sleep(0.01)
-            )
-        )
 
         async def _b_response(
             session_id: str,
@@ -528,9 +557,12 @@ class TestAsyncCheckerLifecycle:
 
         engine_c.evaluate_response = AsyncMock(side_effect=_c_response)
 
-        interceptor = Interceptor(engines=[engine_a, engine_b, engine_c])
+        interceptor = Interceptor(
+            pre_call_evaluators=[],
+            post_call_evaluators=[engine_a, engine_b, engine_c],
+        )
 
-        # Request 1: fire all three async engines
+        # Request 1: fire all three async evaluators
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
         # Wait for all three to complete
         await asyncio.sleep(0.1)
@@ -557,12 +589,14 @@ class TestAsyncCheckerLifecycle:
 class TestAsyncEdgeCases:
 
     async def test_async_exception_fails_open(self):
-        """Async engine that raises — fails open on next collection."""
-        async_engine = _mock_engine(
+        """Async evaluator that raises — fails open on next collection."""
+        async_evaluator = _mock_engine(
             name="async_crasher",
             raise_on_evaluate=RuntimeError("async boom"),
         )
-        interceptor = Interceptor(engines=[async_engine])
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
+        )
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
         await asyncio.sleep(0.05)
@@ -574,11 +608,13 @@ class TestAsyncEdgeCases:
 
     async def test_still_running_not_collected(self):
         """Async task that isn't done yet stays in _running_tasks."""
-        slow_engine = _mock_engine(
+        slow_evaluator = _mock_engine(
             name="slow_async",
             delay=5.0,
         )
-        interceptor = Interceptor(engines=[slow_engine])
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[slow_evaluator]
+        )
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
 
@@ -592,11 +628,13 @@ class TestAsyncEdgeCases:
 
     async def test_cleanup_session_cancels_tasks(self):
         """cleanup_session cancels running tasks and clears pending results."""
-        slow_engine = _mock_engine(
+        slow_evaluator = _mock_engine(
             name="cleanup_target",
             delay=5.0,
         )
-        interceptor = Interceptor(engines=[slow_engine])
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[slow_evaluator]
+        )
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
         assert SESSION in interceptor._sessions
@@ -607,10 +645,12 @@ class TestAsyncEdgeCases:
 
     async def test_shutdown_cleans_all_sessions(self):
         """shutdown cancels tasks across all sessions."""
-        slow_engine = _mock_engine(
+        slow_evaluator = _mock_engine(
             delay=5.0,
         )
-        interceptor = Interceptor(engines=[slow_engine])
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[slow_evaluator]
+        )
 
         await interceptor.run_post_call("session-a", _request(), {"r": 1}, REQUEST_ID)
         await interceptor.run_post_call("session-b", _request(), {"r": 2}, REQUEST_ID)
@@ -623,7 +663,7 @@ class TestAsyncEdgeCases:
 
     async def test_no_pending_async_on_first_request(self):
         """First PRE_CALL with no prior async results works cleanly."""
-        interceptor = Interceptor(engines=[])
+        interceptor = Interceptor(pre_call_evaluators=[], post_call_evaluators=[])
 
         result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
 
@@ -631,11 +671,13 @@ class TestAsyncEdgeCases:
 
     async def test_cancelled_async_task_fails_open(self):
         """Cancelled async task is handled gracefully — next PRE_CALL is allowed."""
-        slow_engine = _mock_engine(
+        slow_evaluator = _mock_engine(
             name="cancellable",
             delay=5.0,
         )
-        interceptor = Interceptor(engines=[slow_engine])
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[slow_evaluator]
+        )
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
 
@@ -659,33 +701,41 @@ class TestAsyncEdgeCases:
 
 class TestInterceptorInit:
 
-    async def test_categorizes_engines_sync_post_call(self):
-        """With post_call_mode='sync': engines go to _sync_pre_call and _sync_post_call."""
-        engine = _mock_engine(name="e1")
+    async def test_categorizes_evaluators_sync_post_call(self):
+        """With mode='sync': post_call_evaluators go to _sync_post_call_evaluators."""
+        evaluator = _mock_engine(name="e1")
 
-        interceptor = Interceptor(engines=[engine], post_call_mode="sync")
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator],
+            post_call_evaluators=[evaluator],
+            mode="sync",
+        )
 
-        assert len(interceptor._sync_pre_call) == 1
-        assert engine in interceptor._sync_pre_call
-        assert len(interceptor._sync_post_call) == 1
-        assert engine in interceptor._sync_post_call
-        assert len(interceptor._async_post_call) == 0
+        assert len(interceptor._sync_pre_call_evaluators) == 1
+        assert evaluator in interceptor._sync_pre_call_evaluators
+        assert len(interceptor._sync_post_call_evaluators) == 1
+        assert evaluator in interceptor._sync_post_call_evaluators
+        assert len(interceptor._async_post_call_evaluators) == 0
 
-    async def test_categorizes_engines_async_post_call(self):
-        """With post_call_mode='async': engines go to _sync_pre_call and _async_post_call."""
-        engine = _mock_engine(name="e1")
+    async def test_categorizes_evaluators_async_post_call(self):
+        """With mode='async': post_call_evaluators go to _async_post_call_evaluators."""
+        evaluator = _mock_engine(name="e1")
 
-        interceptor = Interceptor(engines=[engine], post_call_mode="async")
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator],
+            post_call_evaluators=[evaluator],
+            mode="async",
+        )
 
-        assert len(interceptor._sync_pre_call) == 1
-        assert engine in interceptor._sync_pre_call
-        assert len(interceptor._async_post_call) == 1
-        assert engine in interceptor._async_post_call
-        assert len(interceptor._sync_post_call) == 0
+        assert len(interceptor._sync_pre_call_evaluators) == 1
+        assert evaluator in interceptor._sync_pre_call_evaluators
+        assert len(interceptor._async_post_call_evaluators) == 1
+        assert evaluator in interceptor._async_post_call_evaluators
+        assert len(interceptor._sync_post_call_evaluators) == 0
 
-    async def test_empty_engines_list(self):
-        """Interceptor with no engines still works."""
-        interceptor = Interceptor(engines=[])
+    async def test_empty_evaluator_lists(self):
+        """Interceptor with no evaluators still works."""
+        interceptor = Interceptor(pre_call_evaluators=[], post_call_evaluators=[])
 
         pre = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
         post = await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
@@ -696,7 +746,9 @@ class TestInterceptorInit:
     def test_invalid_default_strategy_raises(self) -> None:
         """Unknown default_strategy should raise ValueError at init time."""
         with pytest.raises(ValueError, match="hard_blok"):
-            Interceptor(engines=[], default_strategy="hard_blok")
+            Interceptor(
+                pre_call_evaluators=[], post_call_evaluators=[], default_strategy="hard_blok"
+            )
 
     @pytest.mark.parametrize(
         "strategy",
@@ -704,7 +756,9 @@ class TestInterceptorInit:
     )
     def test_valid_default_strategies_accepted(self, strategy: str) -> None:
         """All StrategyType values should be accepted without error."""
-        interceptor = Interceptor(engines=[], default_strategy=strategy)
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[], default_strategy=strategy
+        )
         assert interceptor._default_strategy == strategy
 
 
@@ -717,11 +771,15 @@ class TestSessionEviction:
 
     async def test_session_evicted_after_ttl(self):
         """Sessions older than TTL are cleaned up on next run_pre_call."""
-        slow_engine = _mock_engine(
+        slow_evaluator = _mock_engine(
             name="async_ttl",
             delay=0.01,
         )
-        interceptor = Interceptor(engines=[slow_engine], session_ttl=1)
+        interceptor = Interceptor(
+            pre_call_evaluators=[],
+            post_call_evaluators=[slow_evaluator],
+            session_ttl=1,
+        )
 
         await interceptor.run_post_call("old-session", _request(), {"r": 1}, REQUEST_ID)
         await asyncio.sleep(0.05)
@@ -736,11 +794,15 @@ class TestSessionEviction:
 
     async def test_max_sessions_eviction(self):
         """When max_sessions is exceeded, oldest sessions are evicted."""
-        async_engine = _mock_engine(
+        async_evaluator = _mock_engine(
             name="evict_cap",
             delay=0.01,
         )
-        interceptor = Interceptor(engines=[async_engine], max_sessions=2)
+        interceptor = Interceptor(
+            pre_call_evaluators=[],
+            post_call_evaluators=[async_evaluator],
+            max_sessions=2,
+        )
 
         await interceptor.run_post_call("session-1", _request(), {"r": 1}, REQUEST_ID)
         await asyncio.sleep(0.05)
@@ -758,11 +820,13 @@ class TestSessionEviction:
 
     async def test_cleanup_session_removes_timestamp(self):
         """cleanup_session removes both tasks and timestamp."""
-        slow_engine = _mock_engine(
+        slow_evaluator = _mock_engine(
             name="cleanup_ts",
             delay=5.0,
         )
-        interceptor = Interceptor(engines=[slow_engine])
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[slow_evaluator]
+        )
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
         assert SESSION in interceptor._sessions
@@ -773,65 +837,14 @@ class TestSessionEviction:
 
 
 # ===========================================================================
-# Async task cap tests
-# ===========================================================================
-
-
-class TestAsyncTaskCap:
-
-    async def test_task_cap_drops_oldest(self):
-        """When task cap is reached, oldest task is cancelled."""
-        slow_engine = _mock_engine(
-            name="capped",
-            delay=5.0,
-        )
-        interceptor = Interceptor(engines=[slow_engine], max_async_tasks_per_session=2)
-
-        # Start 3 tasks — cap is 2, so first should be cancelled
-        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
-        await interceptor.run_post_call(SESSION, _request(), {"r": 2}, REQUEST_ID)
-        await interceptor.run_post_call(SESSION, _request(), {"r": 3}, REQUEST_ID)
-
-        tasks = interceptor._sessions.get(SESSION)
-        # Should have at most 2 active tasks
-        active = [t for t in tasks if not t.done()]
-        assert len(active) <= 2
-
-        await interceptor.shutdown()
-
-    async def test_completed_tasks_pruned_before_cap_check(self):
-        """Completed tasks are pruned before enforcing the cap."""
-        fast_engine = _mock_engine(
-            name="fast",
-            delay=0.01,
-        )
-        interceptor = Interceptor(engines=[fast_engine], max_async_tasks_per_session=2)
-
-        # Start a task and let it complete
-        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
-        await asyncio.sleep(0.05)
-
-        # Start two more — the completed one should be pruned, so no drop needed
-        await interceptor.run_post_call(SESSION, _request(), {"r": 2}, REQUEST_ID)
-        await interceptor.run_post_call(SESSION, _request(), {"r": 3}, REQUEST_ID)
-
-        # Should not have exceeded cap since first task completed
-        tasks = interceptor._sessions.get(SESSION) or []
-        active = [t for t in tasks if not t.done()]
-        assert len(active) <= 2
-
-        await interceptor.shutdown()
-
-
-# ===========================================================================
-# Context passing to engines
+# Context passing to evaluators
 # ===========================================================================
 
 
 class TestAsyncContextPassing:
 
     async def test_async_post_call_receives_context(self):
-        """Async POST_CALL engines receive context with user_request_id."""
+        """Async POST_CALL evaluators receive context with user_request_id."""
         received_context: dict[str, Any] = {}
 
         async def _evaluate_response(
@@ -843,10 +856,12 @@ class TestAsyncContextPassing:
             received_context.update(context or {})
             return EngineResult(decision=Decision.ALLOW)
 
-        engine = _mock_engine(name="ctx_engine")
-        engine.evaluate_response = AsyncMock(side_effect=_evaluate_response)
+        evaluator = _mock_engine(name="ctx_engine")
+        evaluator.evaluate_response = AsyncMock(side_effect=_evaluate_response)
 
-        interceptor = Interceptor(engines=[engine])
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[evaluator]
+        )
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, "req-ctx-001")
         await asyncio.sleep(0.05)
@@ -854,7 +869,7 @@ class TestAsyncContextPassing:
         assert received_context.get("user_request_id") == "req-ctx-001"
 
     async def test_sync_pre_call_receives_context(self):
-        """Sync PRE_CALL engines receive context with user_request_id."""
+        """Sync PRE_CALL evaluators receive context with user_request_id."""
         received_context: dict[str, Any] = {}
 
         async def _evaluate_request(
@@ -865,10 +880,12 @@ class TestAsyncContextPassing:
             received_context.update(context or {})
             return EngineResult(decision=Decision.ALLOW)
 
-        engine = _mock_engine(name="ctx_pre")
-        engine.evaluate_request = AsyncMock(side_effect=_evaluate_request)
+        evaluator = _mock_engine(name="ctx_pre")
+        evaluator.evaluate_request = AsyncMock(side_effect=_evaluate_request)
 
-        interceptor = Interceptor(engines=[engine])
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator], post_call_evaluators=[]
+        )
 
         await interceptor.run_pre_call(SESSION, _request(), "req-ctx-002")
 
@@ -884,11 +901,11 @@ class TestFailAction:
 
     async def test_default_fail_action_is_intervene(self):
         """Default fail_action is 'intervene' — INTERVENE stays INTERVENE."""
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             message="Stay on topic",
         )
-        interceptor = Interceptor(engines=[engine])
+        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
 
         result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
 
@@ -897,11 +914,13 @@ class TestFailAction:
 
     async def test_fail_action_block_upgrades_intervene_pre_call(self):
         """fail_action='block' upgrades INTERVENE to BLOCK on PRE_CALL."""
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             message="violation",
         )
-        interceptor = Interceptor(engines=[engine], fail_action="block")
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator], post_call_evaluators=[], fail_action="block"
+        )
 
         result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
 
@@ -910,11 +929,16 @@ class TestFailAction:
 
     async def test_fail_action_block_upgrades_intervene_post_call(self):
         """fail_action='block' upgrades INTERVENE to BLOCK on POST_CALL."""
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             message="violation",
         )
-        interceptor = Interceptor(engines=[engine], post_call_mode="sync", fail_action="block")
+        interceptor = Interceptor(
+            pre_call_evaluators=[],
+            post_call_evaluators=[evaluator],
+            mode="sync",
+            fail_action="block",
+        )
 
         result = await interceptor.run_post_call(
             SESSION, _request(), {"answer": "bad"}, REQUEST_ID
@@ -925,10 +949,12 @@ class TestFailAction:
 
     async def test_fail_action_block_does_not_affect_allow(self):
         """fail_action='block' does not upgrade ALLOW decisions."""
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.ALLOW,
         )
-        interceptor = Interceptor(engines=[engine], fail_action="block")
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator], post_call_evaluators=[], fail_action="block"
+        )
 
         result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
 
@@ -936,13 +962,17 @@ class TestFailAction:
 
     async def test_fail_action_block_upgrades_async_intervene(self):
         """fail_action='block' upgrades async INTERVENE to BLOCK on next request."""
-        async_engine = _mock_engine(
+        async_evaluator = _mock_engine(
             name="async_guide",
             decision=Decision.INTERVENE,
             message="async violation",
             delay=0.01,
         )
-        interceptor = Interceptor(engines=[async_engine], fail_action="block")
+        interceptor = Interceptor(
+            pre_call_evaluators=[],
+            post_call_evaluators=[async_evaluator],
+            fail_action="block",
+        )
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
         await asyncio.sleep(0.05)
@@ -954,11 +984,13 @@ class TestFailAction:
 
     async def test_fail_action_shadow_downgrades_block_pre_call(self):
         """fail_action='shadow' downgrades BLOCK to ALLOW on PRE_CALL."""
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.BLOCK,
             message="blocked",
         )
-        interceptor = Interceptor(engines=[engine], fail_action="shadow")
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator], post_call_evaluators=[], fail_action="shadow"
+        )
 
         result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
 
@@ -967,11 +999,13 @@ class TestFailAction:
 
     async def test_fail_action_shadow_downgrades_intervene_pre_call(self):
         """fail_action='shadow' downgrades INTERVENE to ALLOW — no modifications."""
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.INTERVENE,
             message="Stay on topic",
         )
-        interceptor = Interceptor(engines=[engine], fail_action="shadow")
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator], post_call_evaluators=[], fail_action="shadow"
+        )
 
         result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
 
@@ -980,11 +1014,16 @@ class TestFailAction:
 
     async def test_fail_action_shadow_downgrades_block_post_call(self):
         """fail_action='shadow' downgrades BLOCK to ALLOW on POST_CALL."""
-        engine = _mock_engine(
+        evaluator = _mock_engine(
             decision=Decision.BLOCK,
             message="blocked",
         )
-        interceptor = Interceptor(engines=[engine], post_call_mode="sync", fail_action="shadow")
+        interceptor = Interceptor(
+            pre_call_evaluators=[],
+            post_call_evaluators=[evaluator],
+            mode="sync",
+            fail_action="shadow",
+        )
 
         result = await interceptor.run_post_call(
             SESSION, _request(), {"answer": "bad"}, REQUEST_ID
@@ -995,13 +1034,17 @@ class TestFailAction:
 
     async def test_fail_action_shadow_downgrades_async_intervene(self):
         """fail_action='shadow' downgrades async INTERVENE — no modification on next request."""
-        async_engine = _mock_engine(
+        async_evaluator = _mock_engine(
             name="async_guide",
             decision=Decision.INTERVENE,
             message="async violation",
             delay=0.01,
         )
-        interceptor = Interceptor(engines=[async_engine], fail_action="shadow")
+        interceptor = Interceptor(
+            pre_call_evaluators=[],
+            post_call_evaluators=[async_evaluator],
+            fail_action="shadow",
+        )
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
         await asyncio.sleep(0.05)
@@ -1010,3 +1053,262 @@ class TestFailAction:
 
         assert result.allowed is True
         assert result.modified_data is None
+
+
+# ===========================================================================
+# max_intervention_attempts escalation tests
+# ===========================================================================
+
+
+class TestMaxInterventionAttempts:
+
+    async def test_escalation_after_max_attempts(self):
+        """After max_intervention_attempts INTERVENEs, next INTERVENE becomes BLOCK."""
+        evaluator = _mock_engine(
+            decision=Decision.INTERVENE,
+            message="guidance",
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator],
+            post_call_evaluators=[],
+            max_intervention_attempts=2,
+        )
+
+        # First INTERVENE — allowed (count=1)
+        result1 = await interceptor.run_pre_call(SESSION, _request(), "req-001")
+        assert result1.allowed is True
+        assert result1.modified_data is not None
+
+        # Second INTERVENE — allowed (count=2, at limit)
+        result2 = await interceptor.run_pre_call(SESSION, _request(), "req-002")
+        assert result2.allowed is True
+        assert result2.modified_data is not None
+
+        # Third INTERVENE — escalated to BLOCK (count=3, exceeds limit)
+        result3 = await interceptor.run_pre_call(SESSION, _request(), "req-003")
+        assert result3.allowed is False
+        assert result3.message == "guidance"
+
+    async def test_escalation_default_max_is_three(self):
+        """Default max_intervention_attempts is 3."""
+        evaluator = _mock_engine(
+            decision=Decision.INTERVENE,
+            message="guidance",
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator], post_call_evaluators=[]
+        )
+
+        # First three should be allowed
+        for i in range(3):
+            result = await interceptor.run_pre_call(SESSION, _request(), f"req-{i}")
+            assert result.allowed is True
+
+        # Fourth should be blocked
+        result = await interceptor.run_pre_call(SESSION, _request(), "req-4")
+        assert result.allowed is False
+
+    async def test_escalation_per_session(self):
+        """Intervention count is tracked per session independently."""
+        evaluator = _mock_engine(
+            decision=Decision.INTERVENE,
+            message="guidance",
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator],
+            post_call_evaluators=[],
+            max_intervention_attempts=1,
+        )
+
+        # Session A: first INTERVENE allowed
+        result_a1 = await interceptor.run_pre_call("session-a", _request(), "req-a1")
+        assert result_a1.allowed is True
+
+        # Session B: first INTERVENE allowed (independent counter)
+        result_b1 = await interceptor.run_pre_call("session-b", _request(), "req-b1")
+        assert result_b1.allowed is True
+
+        # Session A: second INTERVENE escalated to BLOCK
+        result_a2 = await interceptor.run_pre_call("session-a", _request(), "req-a2")
+        assert result_a2.allowed is False
+
+        # Session B: second INTERVENE also escalated (its own count)
+        result_b2 = await interceptor.run_pre_call("session-b", _request(), "req-b2")
+        assert result_b2.allowed is False
+
+    async def test_cleanup_session_resets_intervention_count(self):
+        """Cleaning up a session resets its intervention count."""
+        evaluator = _mock_engine(
+            decision=Decision.INTERVENE,
+            message="guidance",
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator],
+            post_call_evaluators=[],
+            max_intervention_attempts=1,
+        )
+
+        # Use up the intervention allowance
+        result1 = await interceptor.run_pre_call(SESSION, _request(), "req-001")
+        assert result1.allowed is True
+
+        # Escalated
+        result2 = await interceptor.run_pre_call(SESSION, _request(), "req-002")
+        assert result2.allowed is False
+
+        # Cleanup resets the counter
+        await interceptor.cleanup_session(SESSION)
+
+        # Should be allowed again
+        result3 = await interceptor.run_pre_call(SESSION, _request(), "req-003")
+        assert result3.allowed is True
+
+    async def test_allow_decisions_do_not_increment_counter(self):
+        """ALLOW decisions should not affect the intervention counter."""
+        allow_eval = _mock_engine(name="allower", decision=Decision.ALLOW)
+        intervene_eval = _mock_engine(
+            name="intervener",
+            decision=Decision.INTERVENE,
+            message="guidance",
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[allow_eval],
+            post_call_evaluators=[],
+            max_intervention_attempts=1,
+        )
+
+        # ALLOW does not increment counter
+        await interceptor.run_pre_call(SESSION, _request(), "req-001")
+        await interceptor.run_pre_call(SESSION, _request(), "req-002")
+
+        # Now switch to an intervening evaluator
+        interceptor._sync_pre_call_evaluators = [intervene_eval]
+
+        # First INTERVENE should still be allowed
+        result = await interceptor.run_pre_call(SESSION, _request(), "req-003")
+        assert result.allowed is True
+
+    async def test_escalation_with_async_intervene(self):
+        """Async INTERVENE results also count toward max_intervention_attempts."""
+        async_eval = _mock_engine(
+            name="async_guide",
+            decision=Decision.INTERVENE,
+            message="async guidance",
+            delay=0.01,
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[],
+            post_call_evaluators=[async_eval],
+            max_intervention_attempts=1,
+        )
+
+        # First async INTERVENE
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, "req-001")
+        await asyncio.sleep(0.05)
+        result1 = await interceptor.run_pre_call(SESSION, _request(), "req-002")
+        assert result1.allowed is True
+        assert result1.modified_data is not None
+
+        # Second async INTERVENE — should escalate to BLOCK
+        await interceptor.run_post_call(SESSION, _request(), {"r": 2}, "req-003")
+        await asyncio.sleep(0.05)
+        result2 = await interceptor.run_pre_call(SESSION, _request(), "req-004")
+        assert result2.allowed is False
+
+
+# ===========================================================================
+# Separate pre_call / post_call evaluator lists
+# ===========================================================================
+
+
+class TestSeparateEvaluatorLists:
+
+    async def test_empty_pre_call_with_populated_post_call(self):
+        """Empty pre_call list with populated post_call works correctly."""
+        post_eval = _mock_engine(name="post_only", decision=Decision.ALLOW)
+        interceptor = Interceptor(
+            pre_call_evaluators=[],
+            post_call_evaluators=[post_eval],
+            mode="sync",
+        )
+
+        # Pre-call: no evaluators, should pass through
+        pre_result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+        assert pre_result.allowed is True
+        assert pre_result.metadata["results"] == []
+
+        # Post-call: evaluator runs
+        post_result = await interceptor.run_post_call(
+            SESSION, _request(), {"r": 1}, REQUEST_ID
+        )
+        assert post_result.allowed is True
+        assert len(post_result.metadata["results"]) == 1
+        assert post_result.metadata["results"][0]["checker"] == "post_only"
+
+    async def test_populated_pre_call_with_empty_post_call(self):
+        """Populated pre_call with empty post_call works correctly."""
+        pre_eval = _mock_engine(name="pre_only", decision=Decision.ALLOW)
+        interceptor = Interceptor(
+            pre_call_evaluators=[pre_eval],
+            post_call_evaluators=[],
+            mode="sync",
+        )
+
+        # Pre-call: evaluator runs
+        pre_result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+        assert pre_result.allowed is True
+        assert len(pre_result.metadata["results"]) == 1
+        assert pre_result.metadata["results"][0]["checker"] == "pre_only"
+
+        # Post-call: no evaluators
+        post_result = await interceptor.run_post_call(
+            SESSION, _request(), {"r": 1}, REQUEST_ID
+        )
+        assert post_result.allowed is True
+        assert post_result.metadata["results"] == []
+
+    async def test_different_evaluators_for_each_phase(self):
+        """Different evaluators can be assigned to pre_call and post_call."""
+        pre_eval = _mock_engine(name="pre_checker", decision=Decision.ALLOW)
+        post_eval = _mock_engine(
+            name="post_checker",
+            decision=Decision.INTERVENE,
+            message="post-call issue",
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[pre_eval],
+            post_call_evaluators=[post_eval],
+            mode="sync",
+        )
+
+        # Pre-call uses only pre_eval
+        pre_result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+        assert pre_result.allowed is True
+        assert len(pre_result.metadata["results"]) == 1
+        assert pre_result.metadata["results"][0]["checker"] == "pre_checker"
+
+        # Post-call uses only post_eval
+        post_result = await interceptor.run_post_call(
+            SESSION, _request(), {"r": 1}, REQUEST_ID
+        )
+        assert post_result.allowed is True
+        assert post_result.modified_data is not None
+        interventions = post_result.modified_data["_interventions"]
+        assert len(interventions) == 1
+        assert interventions[0]["checker"] == "post_checker"
+
+    async def test_pre_call_evaluator_not_used_in_post_call(self):
+        """Pre-call evaluator's evaluate_response is never called during post_call."""
+        pre_eval = _mock_engine(name="pre_only", decision=Decision.BLOCK, message="should not fire")
+        interceptor = Interceptor(
+            pre_call_evaluators=[pre_eval],
+            post_call_evaluators=[],
+            mode="sync",
+        )
+
+        # Post-call should not use the pre_call evaluator
+        post_result = await interceptor.run_post_call(
+            SESSION, _request(), {"r": 1}, REQUEST_ID
+        )
+        assert post_result.allowed is True
+        pre_eval.evaluate_response.assert_not_called()

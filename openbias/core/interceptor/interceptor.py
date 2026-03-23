@@ -1,8 +1,8 @@
 """
 Interceptor orchestrator.
 
-Manages the execution of policy engines at PRE_CALL and POST_CALL phases,
-handles async engine task management, and applies interventions.
+Manages the execution of policy evaluators at PRE_CALL and POST_CALL phases,
+handles async evaluator task management, and applies interventions.
 """
 
 import asyncio
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class _PendingResult:
-    """Internal: pairs an EngineResult with the engine name that produced it."""
+    """Internal: pairs an EngineResult with the evaluator name that produced it."""
 
     engine_name: str
     result: EngineResult
@@ -34,13 +34,14 @@ class _PendingResult:
 
 class Interceptor:
     """
-    Orchestrator for running policy engines during LLM request lifecycle.
+    Orchestrator for running policy evaluators during LLM request lifecycle.
 
     Manages:
-    - Sync engines that block and must complete (ALLOW or BLOCK only)
-    - Async engines that run in background with results applied next request
+    - Sync evaluators that block and must complete (ALLOW or BLOCK only)
+    - Async evaluators that run in background with results applied next request
     - Pending async results per session
     - Modification merging for deferred INTERVENE decisions
+    - Per-session intervention count tracking with escalation to BLOCK
     """
 
     # Defaults for session memory management
@@ -50,25 +51,26 @@ class Interceptor:
 
     def __init__(
         self,
-        engines: list[PolicyEngine],
-        post_call_mode: str = "async",
+        pre_call_evaluators: list[PolicyEngine],
+        post_call_evaluators: list[PolicyEngine],
+        mode: str = "async",
         default_strategy: str = "user_message_inject",
         fail_action: Literal["intervene", "block", "shadow"] = "intervene",
+        max_intervention_attempts: int = 3,
         session_ttl: int | None = None,
         max_sessions: int | None = None,
-        max_async_tasks_per_session: int | None = None,
     ):
         # PRE_CALL is always sync
-        self._sync_pre_call: list[PolicyEngine] = list(engines)
+        self._sync_pre_call_evaluators: list[PolicyEngine] = list(pre_call_evaluators)
 
-        # POST_CALL mode depends on post_call_mode param
-        self._sync_post_call: list[PolicyEngine] = []
-        self._async_post_call: list[PolicyEngine] = []
+        # POST_CALL mode depends on mode param
+        self._sync_post_call_evaluators: list[PolicyEngine] = []
+        self._async_post_call_evaluators: list[PolicyEngine] = []
 
-        if post_call_mode == "async":
-            self._async_post_call = list(engines)
+        if mode == "async":
+            self._async_post_call_evaluators = list(post_call_evaluators)
         else:
-            self._sync_post_call = list(engines)
+            self._sync_post_call_evaluators = list(post_call_evaluators)
 
         # Intervention strategy
         valid_strategies = {s.value for s in StrategyType}
@@ -79,13 +81,10 @@ class Interceptor:
             )
         self._default_strategy = default_strategy
         self._fail_action = fail_action
+        self._max_intervention_attempts = max_intervention_attempts
 
-        # Session memory management
-        self._max_async_tasks = (
-            max_async_tasks_per_session
-            if max_async_tasks_per_session is not None
-            else self.DEFAULT_MAX_ASYNC_TASKS_PER_SESSION
-        )
+        # Per-session intervention count tracking
+        self._intervention_counts: dict[str, int] = {}
 
         # Temporary storage for collected-but-not-yet-confirmed async results
         self._last_collected: dict[str, list[asyncio.Task[_PendingResult]]] = {}
@@ -97,9 +96,9 @@ class Interceptor:
         )
 
         logger.info(
-            f"Interceptor initialized: {len(self._sync_pre_call)} sync pre-call, "
-            f"{len(self._sync_post_call)} sync post-call, "
-            f"{len(self._async_post_call)} async post-call"
+            f"Interceptor initialized: {len(self._sync_pre_call_evaluators)} sync pre-call, "
+            f"{len(self._sync_post_call_evaluators)} sync post-call, "
+            f"{len(self._async_post_call_evaluators)} async post-call"
         )
 
     async def run_pre_call(
@@ -114,7 +113,7 @@ class Interceptor:
         1. Apply pending async results from previous request
            - BLOCK -> block this request
            - INTERVENE -> merge modified_data into request
-        2. Run sync PRE_CALL engines (gate only: ALLOW or BLOCK)
+        2. Run sync PRE_CALL evaluators (gate only: ALLOW or BLOCK)
         3. Return result with possibly modified request_data
         """
         self._sessions.touch(session_id)
@@ -127,14 +126,14 @@ class Interceptor:
         pending_results = self._collect_completed_async(session_id)
         for processed_count, pending in enumerate(pending_results, start=1):
             result = pending.result
-            decision = self._effective_decision(result.decision)
+            decision = self._effective_decision(result.decision, session_id)
             all_metadata["results"].append(
                 {"checker": pending.engine_name, "decision": decision.value}
             )
 
             if decision == Decision.BLOCK:
                 logger.warning(
-                    f"Request blocked by async engine '{pending.engine_name}': "
+                    f"Request blocked by async evaluator '{pending.engine_name}': "
                     f"{result.message}"
                 )
                 # Only confirm tasks up to and including the blocking one.
@@ -165,24 +164,24 @@ class Interceptor:
         # Async results processed successfully — remove from session store
         self._confirm_collected(session_id)
 
-        # Step 2: Run sync PRE_CALL engines
-        # Note: INTERVENE results accumulate — each engine sees the already-modified
-        # request_data from prior engines. Order in engines list matters.
-        for engine in self._sync_pre_call:
+        # Step 2: Run sync PRE_CALL evaluators
+        # Note: INTERVENE results accumulate — each evaluator sees the already-modified
+        # request_data from prior evaluators. Order in evaluators list matters.
+        for evaluator in self._sync_pre_call_evaluators:
             try:
-                result = await engine.evaluate_request(
+                result = await evaluator.evaluate_request(
                     session_id=session_id,
                     request_data=modified_data,
                     context={"user_request_id": user_request_id},
                 )
-                decision = self._effective_decision(result.decision)
+                decision = self._effective_decision(result.decision, session_id)
                 all_metadata["results"].append(
-                    {"checker": engine.name, "decision": decision.value}
+                    {"checker": evaluator.name, "decision": decision.value}
                 )
 
                 if decision == Decision.BLOCK:
                     logger.warning(
-                        f"Request blocked by sync engine '{engine.name}': "
+                        f"Request blocked by sync evaluator '{evaluator.name}': "
                         f"{result.message}"
                     )
                     return InterceptionResult(
@@ -194,23 +193,23 @@ class Interceptor:
                 if decision == Decision.INTERVENE:
                     if result.modified_messages is not None:
                         logger.info(
-                            f"Applying sync message replacement from '{engine.name}'"
+                            f"Applying sync message replacement from '{evaluator.name}'"
                         )
                         modified_data = dict(modified_data)
                         modified_data["messages"] = result.modified_messages
                     elif result.message:
                         logger.info(
-                            f"Applying sync intervention from '{engine.name}'"
+                            f"Applying sync intervention from '{evaluator.name}'"
                         )
                         modified_data = self._apply_intervention(
                             modified_data, result.message, self._default_strategy
                         )
 
             except Exception as e:
-                logger.error(f"Engine '{engine.name}' failed: {e}")
+                logger.error(f"Evaluator '{evaluator.name}' failed: {e}")
                 # Fail-open: log and continue instead of blocking
                 all_metadata["results"].append(
-                    {"checker": engine.name, "decision": "error", "error": str(e)}
+                    {"checker": evaluator.name, "decision": "error", "error": str(e)}
                 )
 
         return InterceptionResult(
@@ -229,8 +228,8 @@ class Interceptor:
         """
         Run POST_CALL phase.
 
-        1. Run sync POST_CALL engines (ALLOW, BLOCK, or INTERVENE)
-        2. Start async POST_CALL engines in background (don't wait)
+        1. Run sync POST_CALL evaluators (ALLOW, BLOCK, or INTERVENE)
+        2. Start async POST_CALL evaluators in background (don't wait)
         3. Return result with optional modified_data for response modification
         """
         self._sessions.touch(session_id)
@@ -239,23 +238,23 @@ class Interceptor:
         all_metadata: dict[str, Any] = {"results": [], "interventions": []}
         modified_data: dict[str, Any] | None = None
 
-        # Step 1: Run sync POST_CALL engines
-        for engine in self._sync_post_call:
+        # Step 1: Run sync POST_CALL evaluators
+        for evaluator in self._sync_post_call_evaluators:
             try:
-                result = await engine.evaluate_response(
+                result = await evaluator.evaluate_response(
                     session_id=session_id,
                     response_data=response_data,
                     request_data=request_data,
                     context={"user_request_id": user_request_id},
                 )
-                decision = self._effective_decision(result.decision)
+                decision = self._effective_decision(result.decision, session_id)
                 all_metadata["results"].append(
-                    {"checker": engine.name, "decision": decision.value}
+                    {"checker": evaluator.name, "decision": decision.value}
                 )
 
                 if decision == Decision.BLOCK:
                     logger.warning(
-                        f"Response blocked by sync engine '{engine.name}': "
+                        f"Response blocked by sync evaluator '{evaluator.name}': "
                         f"{result.message}"
                     )
                     return InterceptionResult(
@@ -266,22 +265,22 @@ class Interceptor:
 
                 if decision == Decision.INTERVENE:
                     logger.info(
-                        f"Sync POST_CALL engine '{engine.name}' returned INTERVENE: "
+                        f"Sync POST_CALL evaluator '{evaluator.name}' returned INTERVENE: "
                         f"{result.message}"
                     )
                     intervention_info: dict[str, Any] = {
-                        "checker": engine.name,
+                        "checker": evaluator.name,
                         "message": result.message,
                     }
                     if result.modified_messages is not None:
                         intervention_info["has_modified_messages"] = True
                     all_metadata["interventions"].append(intervention_info)
-                    # Store the engine result for the hooks layer to act on
+                    # Store the evaluator result for the hooks layer to act on
                     if modified_data is None:
                         modified_data = {}
                     modified_data.setdefault("_interventions", []).append(
                         {
-                            "checker": engine.name,
+                            "checker": evaluator.name,
                             "message": result.message,
                             "modified_messages": result.modified_messages,
                             "metadata": result.metadata,
@@ -289,15 +288,15 @@ class Interceptor:
                     )
 
             except Exception as e:
-                logger.error(f"Engine '{engine.name}' failed: {e}")
+                logger.error(f"Evaluator '{evaluator.name}' failed: {e}")
                 all_metadata["results"].append(
-                    {"checker": engine.name, "decision": "error", "error": str(e)}
+                    {"checker": evaluator.name, "decision": "error", "error": str(e)}
                 )
 
-        # Step 2: Start async POST_CALL engines in background
-        for engine in self._async_post_call:
-            self._start_async_engine(
-                engine, session_id, request_data, response_data,
+        # Step 2: Start async POST_CALL evaluators in background
+        for evaluator in self._async_post_call_evaluators:
+            self._start_async_evaluator(
+                evaluator, session_id, request_data, response_data,
                 context={"user_request_id": user_request_id},
             )
 
@@ -307,14 +306,27 @@ class Interceptor:
             metadata=all_metadata,
         )
 
-    def _effective_decision(self, decision: Decision) -> Decision:
-        """Map engine decision based on fail_action policy."""
+    def _effective_decision(self, decision: Decision, session_id: str) -> Decision:
+        """Map evaluator decision based on fail_action policy and intervention count."""
         if self._fail_action == "shadow":
             if decision != Decision.ALLOW:
                 logger.info("Shadow mode: downgrading %s to allow", decision.value)
             return Decision.ALLOW
+
         if decision == Decision.INTERVENE and self._fail_action == "block":
             return Decision.BLOCK
+
+        # Escalate INTERVENE to BLOCK when max_intervention_attempts exceeded
+        if decision == Decision.INTERVENE:
+            count = self._intervention_counts.get(session_id, 0) + 1
+            self._intervention_counts[session_id] = count
+            if count > self._max_intervention_attempts:
+                logger.warning(
+                    f"Session {session_id} exceeded max intervention attempts "
+                    f"({self._max_intervention_attempts}), escalating to BLOCK"
+                )
+                return Decision.BLOCK
+
         return decision
 
     def _collect_completed_async(self, session_id: str) -> list[_PendingResult]:
@@ -338,7 +350,7 @@ class Interceptor:
                     result = task.result()
                     results.append(result)
                 except asyncio.CancelledError:
-                    logger.warning("Async engine task was cancelled")
+                    logger.warning("Async evaluator task was cancelled")
                     results.append(
                         _PendingResult(
                             engine_name="async_task_cancelled",
@@ -350,7 +362,7 @@ class Interceptor:
                         )
                     )
                 except Exception as e:
-                    logger.error(f"Async engine task failed: {e}")
+                    logger.error(f"Async evaluator task failed: {e}")
                     results.append(
                         _PendingResult(
                             engine_name="async_task_error",
@@ -402,39 +414,39 @@ class Interceptor:
         else:
             self._sessions.remove(session_id)
 
-    def _start_async_engine(
+    def _start_async_evaluator(
         self,
-        engine: PolicyEngine,
+        evaluator: PolicyEngine,
         session_id: str,
         request_data: dict[str, Any],
         response_data: Any,
         context: dict[str, Any] | None = None,
     ) -> None:
-        """Start an async engine task in the background."""
+        """Start an async evaluator task in the background."""
 
-        async def run_engine() -> _PendingResult:
+        async def run_evaluator() -> _PendingResult:
             try:
                 if response_data is None:
-                    result = await engine.evaluate_request(
+                    result = await evaluator.evaluate_request(
                         session_id=session_id,
                         request_data=request_data,
                         context=context,
                     )
                 else:
-                    result = await engine.evaluate_response(
+                    result = await evaluator.evaluate_response(
                         session_id=session_id,
                         response_data=response_data,
                         request_data=request_data,
                         context=context,
                     )
-                return _PendingResult(engine_name=engine.name, result=result)
+                return _PendingResult(engine_name=evaluator.name, result=result)
             except Exception as e:
-                logger.error(f"Async engine '{engine.name}' failed: {e}")
+                logger.error(f"Async evaluator '{evaluator.name}' failed: {e}")
                 return _PendingResult(
-                    engine_name=engine.name,
+                    engine_name=evaluator.name,
                     result=EngineResult(
                         decision=Decision.ALLOW,
-                        message=f"Async engine error: {e}",
+                        message=f"Async evaluator error: {e}",
                         metadata={"error": str(e)},
                     ),
                 )
@@ -448,19 +460,19 @@ class Interceptor:
         # Prune completed tasks before checking the cap
         tasks[:] = [t for t in tasks if not t.done()]
 
-        if len(tasks) >= self._max_async_tasks:
+        if len(tasks) >= self.DEFAULT_MAX_ASYNC_TASKS_PER_SESSION:
             logger.warning(
-                f"Async task cap ({self._max_async_tasks}) reached for session "
+                f"Async task cap ({self.DEFAULT_MAX_ASYNC_TASKS_PER_SESSION}) reached for session "
                 f"{session_id}, dropping oldest task"
             )
             oldest = tasks.pop(0)
             if not oldest.done():
                 oldest.cancel()
 
-        task = asyncio.create_task(run_engine())
+        task = asyncio.create_task(run_evaluator())
         tasks.append(task)
 
-        logger.debug(f"Started async engine '{engine.name}' for session {session_id}")
+        logger.debug(f"Started async evaluator '{evaluator.name}' for session {session_id}")
 
     def _apply_intervention(
         self,
@@ -509,6 +521,9 @@ class Interceptor:
             for task in tasks:
                 if not task.done():
                     task.cancel()
+
+        # Clear intervention count for this session
+        self._intervention_counts.pop(session_id, None)
 
         logger.debug(f"Cleaned up session {session_id}")
 
