@@ -472,6 +472,27 @@ class TestEvaluatorYamlMapping:
         ev = result["evaluators"][0]
         assert ev["config"]["config_path"] == "/etc/openbias/workflow.yaml"
 
+    def test_nemo_evaluator_policy_resolved(self):
+        """NeMo evaluator with policy path gets resolved relative to config file."""
+        from pathlib import Path
+        config_file = Path("/etc/openbias/openbias.yaml")
+        source = self._build_source(
+            {
+                "evaluators": [
+                    {
+                        "name": "nemo-rails",
+                        "type": "nemo",
+                        "phase": "post_call",
+                        "policy": "./nemo_config/",
+                    },
+                ],
+            },
+            config_file=config_file,
+        )
+        result = source._map_to_settings()
+        ev = result["evaluators"][0]
+        assert ev["config"]["config_path"] == "/etc/openbias/nemo_config"
+
     def test_fsm_evaluator_extra_keys(self):
         """FSM evaluator extra keys go into config."""
         source = self._build_source({
