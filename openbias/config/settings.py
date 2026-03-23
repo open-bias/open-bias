@@ -265,8 +265,35 @@ class YamlConfigSource(PydanticBaseSettingsSource):
     # (everything else goes into the config dict).
     _EVALUATOR_FIELD_KEYS = frozenset({"name", "type", "phase"})
 
-    # Judge evaluator keys that receive special handling
-    _JUDGE_EVALUATOR_SPECIAL_KEYS = frozenset({"model", "policies", "rubric"})
+    def _map_common_fields(self, data: dict[str, Any], result: dict[str, Any]) -> None:
+        """Map proxy, debug/log_level, and tracing fields shared by both mapping paths."""
+        # Proxy fields
+        if "port" in data:
+            result.setdefault("proxy", {})["port"] = data["port"]
+        if "host" in data:
+            result.setdefault("proxy", {})["host"] = data["host"]
+        if "model" in data:
+            result.setdefault("proxy", {})["default_model"] = data["model"]
+
+        # Direct passthrough
+        if "debug" in data:
+            result["debug"] = data["debug"]
+        if "log_level" in data:
+            result["log_level"] = data["log_level"]
+
+        # Tracing (tracing.* -> otel.*)
+        tracing_cfg = data.get("tracing", {})
+        if isinstance(tracing_cfg, dict) and tracing_cfg:
+            otel = result.setdefault("otel", {})
+            if "type" in tracing_cfg:
+                tracing_type = tracing_cfg["type"]
+                otel["exporter_type"] = tracing_type
+                otel["enabled"] = tracing_type != "none"
+            for k in ("endpoint", "service_name", "insecure",
+                      "langfuse_public_key", "langfuse_secret_key",
+                      "langfuse_host", "redact_content"):
+                if k in tracing_cfg:
+                    otel[k] = tracing_cfg[k]
 
     def _map_evaluators(self, data: dict[str, Any]) -> dict[str, Any]:
         """Map new evaluator-based YAML format to Settings structure.
@@ -285,33 +312,8 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             if key in data:
                 result[key] = data[key]
 
-        # Proxy fields (same as old path)
-        if "port" in data:
-            result.setdefault("proxy", {})["port"] = data["port"]
-        if "host" in data:
-            result.setdefault("proxy", {})["host"] = data["host"]
-        if "model" in data:
-            result.setdefault("proxy", {})["default_model"] = data["model"]
-
-        # Direct passthrough
-        if "debug" in data:
-            result["debug"] = data["debug"]
-        if "log_level" in data:
-            result["log_level"] = data["log_level"]
-
-        # Tracing (same as old path)
-        tracing_cfg = data.get("tracing", {})
-        if isinstance(tracing_cfg, dict) and tracing_cfg:
-            otel = result.setdefault("otel", {})
-            if "type" in tracing_cfg:
-                tracing_type = tracing_cfg["type"]
-                otel["exporter_type"] = tracing_type
-                otel["enabled"] = tracing_type != "none"
-            for k in ("endpoint", "service_name", "insecure",
-                      "langfuse_public_key", "langfuse_secret_key",
-                      "langfuse_host", "redact_content"):
-                if k in tracing_cfg:
-                    otel[k] = tracing_cfg[k]
+        # Shared proxy, debug/log_level, and tracing mapping
+        self._map_common_fields(data, result)
 
         # Build evaluators list
         evaluators: list[dict[str, Any]] = []
@@ -380,10 +382,6 @@ class YamlConfigSource(PydanticBaseSettingsSource):
                 "engine"
             ]
 
-        # model -> proxy.default_model
-        if "model" in data:
-            result.setdefault("proxy", {})["default_model"] = data["model"]
-
         # policy -> config_path (string) or inline_policy (list/dict)
         if "policy" in data:
             policy_val = data["policy"]
@@ -414,21 +412,8 @@ class YamlConfigSource(PydanticBaseSettingsSource):
         if "fail_open" in data:
             result.setdefault("policy", {})["fail_open"] = data["fail_open"]
 
-        # port -> proxy.port
-        if "port" in data:
-            result.setdefault("proxy", {})["port"] = data["port"]
-
-        # host -> proxy.host
-        if "host" in data:
-            result.setdefault("proxy", {})["host"] = data["host"]
-
-        # debug
-        if "debug" in data:
-            result["debug"] = data["debug"]
-
-        # log_level
-        if "log_level" in data:
-            result["log_level"] = data["log_level"]
+        # Shared proxy, debug/log_level, and tracing mapping
+        self._map_common_fields(data, result)
 
         # -----------------------------------------------------------------
         # Engine-specific sections -> policy.engine.config.*
@@ -495,37 +480,6 @@ class YamlConfigSource(PydanticBaseSettingsSource):
                 if k == "workflow_path" or k == "config_path":
                     v = self._resolve_path(v)
                 engine_config[k] = v
-
-        # -----------------------------------------------------------------
-        # Tracing / observability
-        # -----------------------------------------------------------------
-
-        # tracing.* -> otel.*
-        tracing_cfg = data.get("tracing", {})
-        if isinstance(tracing_cfg, dict) and tracing_cfg:
-            otel = result.setdefault("otel", {})
-            if "type" in tracing_cfg:
-                tracing_type = tracing_cfg["type"]
-                otel["exporter_type"] = tracing_type
-                if tracing_type == "none":
-                    otel["enabled"] = False
-                else:
-                    otel["enabled"] = True
-            if "endpoint" in tracing_cfg:
-                otel["endpoint"] = tracing_cfg["endpoint"]
-            if "service_name" in tracing_cfg:
-                otel["service_name"] = tracing_cfg["service_name"]
-            if "insecure" in tracing_cfg:
-                otel["insecure"] = tracing_cfg["insecure"]
-            # Langfuse-specific settings
-            if "langfuse_public_key" in tracing_cfg:
-                otel["langfuse_public_key"] = tracing_cfg["langfuse_public_key"]
-            if "langfuse_secret_key" in tracing_cfg:
-                otel["langfuse_secret_key"] = tracing_cfg["langfuse_secret_key"]
-            if "langfuse_host" in tracing_cfg:
-                otel["langfuse_host"] = tracing_cfg["langfuse_host"]
-            if "redact_content" in tracing_cfg:
-                otel["redact_content"] = tracing_cfg["redact_content"]
 
         return result
 
