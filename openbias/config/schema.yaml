@@ -19,138 +19,135 @@
 # Global Settings
 # ---------------------------------------------------------------------------
 
-# REQUIRED. Policy engine type.
-# Built-in: judge | llm | fsm | nemo
-engine: judge
+# Evaluation mode: sync | async (default: async)
+# In async mode, evaluators run without blocking the response.
+mode: async
 
-# Optional. Global default LLM model for engines that need one.
-# If omitted, auto-detected from whichever API key is present.
-# Engines can override this in their own section.
-model: gemini/gemini-2.5-flash
+# Action when a policy violation is detected: block | intervene | shadow
+# (default: intervene)
+fail_action: intervene
 
-# Optional. Proxy server settings.
-port: 4000            # default: 4000
-host: 0.0.0.0         # default: 0.0.0.0
+# Maximum number of intervention attempts before giving up (default: 3)
+max_intervention_attempts: 3
 
-# Optional. Debugging.
-debug: false           # default: false
-log_level: INFO        # default: INFO
+# Intervention strategy: system_prompt_append | user_message_inject
+# (default: user_message_inject)
+strategy: user_message_inject
+
+# Session management (optional)
+session_ttl: 3600          # session time-to-live in seconds
+max_sessions: 1000         # maximum concurrent sessions
 
 # ---------------------------------------------------------------------------
-# Policy — engine-agnostic policy reference
+# Proxy Settings
+# ---------------------------------------------------------------------------
+
+port: 4000                 # default: 4000
+host: 0.0.0.0              # default: 0.0.0.0
+model: gemini/gemini-2.5-flash  # global default LLM for the proxy target
+
+# ---------------------------------------------------------------------------
+# Debug Settings
+# ---------------------------------------------------------------------------
+
+debug: false               # default: false
+log_level: INFO            # default: INFO
+
+# ---------------------------------------------------------------------------
+# Evaluators — the multi-evaluator pipeline
 # ---------------------------------------------------------------------------
 #
-# Three forms:
+# Each evaluator entry has three standard fields:
+#   name  — a unique label for this evaluator (default: "unnamed")
+#   type  — engine type: judge | fsm | llm | nemo (default: "judge")
+#   phase — when to run: pre_call | post_call (default: "post_call")
 #
-# 1. File/directory path (string) — passed as config_path to the engine:
-#    policy: ./customer_support.yaml
-#    policy: ./nemo_config/
+# All other keys are collected into the evaluator's `config` dict, with
+# certain shorthands automatically mapped by the YAML parser:
 #
-# 2. Inline rules (list) — judge engine only:
-#    policy:
-#      - "No financial advice"
-#      - "Be professional"
+#   Judge shorthands:
+#     model: "x"      → config.models: [{name: "primary", model: "x"}]
+#     policies: [...]  → config.inline_policy: [...]
+#     rubric: "x"      → config.default_rubric: "x"
 #
-# 3. Inline rubrics (list of dicts) — judge engine only:
-#    policy:
-#      - name: my_rubric
-#        description: Custom rubric
-#        criteria:
-#          - name: tone
-#            description: Professional tone
-#            scale: binary
+#   FSM shorthand:
+#     policy: "./x"    → config.config_path: "./x" (resolved to absolute path)
+#
+#   All other keys pass through to config unchanged.
+#
 
-# ---------------------------------------------------------------------------
-# Judge Engine — engine: judge
-# ---------------------------------------------------------------------------
-judge:
-  # LLM model for the judge (overrides global `model`).
-  model: anthropic/claude-sonnet-4-5
+evaluators:
 
-  # What happens when a policy violation is detected: block | intervene | shadow (default: intervene)
-  fail_action: block
+  # --- Judge evaluator (type: judge) ---
+  #
+  # Evaluates responses against policy rules using a separate LLM as judge.
+  #
+  - name: safety-screen
+    type: judge
+    phase: pre_call
+    # Shorthand: sets the judge model (mapped to config.models list)
+    model: anthropic/claude-sonnet-4-5
+    # Shorthand: inline policy rules (mapped to config.inline_policy)
+    policies:
+      - "No harmful content"
+      - "No PII leaks"
+    # Additional judge config keys (passed through to config dict):
+    # rubric: agent_behavior       # shorthand for config.default_rubric
+    # custom_rubrics_path: ./rubrics/  # path to custom rubric YAML files
+    # verbose: true                # log raw judge prompt + response
 
-  # Pre-call evaluation (evaluate requests BEFORE the LLM call)
-  pre_call_enabled: false      # default: false
-  pre_call_rubric: safety      # default: safety
+  - name: behavior-eval
+    type: judge
+    phase: post_call
+    # Shorthand: sets the default rubric for evaluation
+    rubric: agent_behavior
 
-  # Rubrics
-  default_rubric: agent_behavior          # default: agent_behavior
-  conversation_rubric: conversation_policy # default: conversation_policy
-  custom_rubrics_path: ./rubrics/          # path to custom rubric YAML files
+  # --- FSM evaluator (type: fsm) ---
+  #
+  # Deterministic workflow enforcement using finite state machines.
+  #
+  - name: workflow-guard
+    type: fsm
+    phase: post_call
+    # Shorthand: path to workflow YAML file (mapped to config.config_path)
+    policy: ./workflow.yaml
+    # Optional classifier config (passed through to config dict):
+    # classifier:
+    #   model_name: all-MiniLM-L6-v2   # sentence-transformers model
+    #   backend: pytorch               # pytorch | onnx
+    #   similarity_threshold: 0.7      # minimum similarity score
+    #   cache_embeddings: true         # cache computed embeddings
+    #   device: cpu                    # cpu | cuda
 
-  # Conversation evaluation
-  conversation_eval_interval: 5  # run conversation eval every N turns
+  # --- LLM evaluator (type: llm) ---
+  #
+  # LLM-based state classification and constraint evaluation.
+  #
+  # - name: llm-guard
+  #   type: llm
+  #   phase: post_call
+  #   model: gemini/gemini-2.5-flash
+  #   temperature: 0.0               # default: 0.0
+  #   max_tokens: 1024               # default: 1024
+  #   timeout: 10.0                  # default: 10.0 seconds
+  #   confident_threshold: 0.8       # state classification threshold
+  #   uncertain_threshold: 0.5       # uncertainty threshold
+  #   temporal_weight: 0.55          # drift detection weight
+  #   cooldown_turns: 2              # turns between constraint checks
+  #   max_constraints_per_batch: 5   # batch size for constraint eval
 
-  # Advanced: explicit model config (overrides `model` above)
-  # models:
-  #   - name: primary
-  #     model: anthropic/claude-sonnet-4-5
-  #     temperature: 0.0
-  #     max_tokens: 2048
-  #     timeout: 15.0
-
-# ---------------------------------------------------------------------------
-# LLM Engine — engine: llm
-# ---------------------------------------------------------------------------
-# Requires `policy:` pointing to a workflow YAML file.
-llm:
-  # LLM model for state classification (overrides global `model`).
-  model: gemini/gemini-2.5-flash
-
-  # LLM parameters
-  temperature: 0.0               # default: 0.0
-  max_tokens: 1024               # default: 1024
-  timeout: 10.0                  # default: 10.0 (seconds)
-
-  # State classification
-  confident_threshold: 0.8       # default: 0.8
-  uncertain_threshold: 0.5       # default: 0.5
-
-  # Drift detection
-  temporal_weight: 0.55          # default: 0.55
-
-  # Constraint evaluation
-  cooldown_turns: 2              # default: 2
-  max_constraints_per_batch: 5   # default: 5
-
-  # Intervention settings (engine-specific overrides)
-  intervention:
-    default_strategy: user_message_inject  # system_prompt_append | user_message_inject
-    max_intervention_attempts: 3           # default: 3
-    include_headers: true                  # default: true
-
-# ---------------------------------------------------------------------------
-# FSM Engine — engine: fsm
-# ---------------------------------------------------------------------------
-# Requires `policy:` pointing to a workflow YAML file.
-fsm:
-  # State classifier configuration (embedding-based classification)
-  classifier:
-    model_name: all-MiniLM-L6-v2   # sentence-transformers model (default: all-MiniLM-L6-v2)
-    backend: pytorch               # pytorch | onnx (default: pytorch)
-    similarity_threshold: 0.7      # minimum similarity score (default: 0.7)
-    cache_embeddings: true         # cache computed embeddings (default: true)
-    device: cpu                    # inference device: cpu | cuda (default: cpu)
-
-  # Intervention settings
-  intervention:
-    default_strategy: system_prompt_append  # system_prompt_append | user_message_inject
-    max_intervention_attempts: 3            # default: 3
-    include_headers: true                   # default: true
-
-# ---------------------------------------------------------------------------
-# NeMo Guardrails Engine — engine: nemo
-# ---------------------------------------------------------------------------
-# Requires `policy:` pointing to a NeMo config directory.
-nemo:
-  # Failure behavior when NeMo evaluation errors
-  fail_closed: false             # default: false (fail open = warn on error)
-
-  # Which rails to enable (omit to use all configured in NeMo config)
-  # rails:
-  #   - input
-  #   - output
+  # --- NeMo Guardrails evaluator (type: nemo) ---
+  #
+  # Integrates NVIDIA NeMo Guardrails for input/output rail enforcement.
+  #
+  # - name: nemo-rails
+  #   type: nemo
+  #   phase: post_call
+  #   policy: ./nemo_config/         # path to NeMo config directory
+  #   fail_closed: false             # deny on NeMo errors (default: false = warn)
+  #   rails:                         # which rails to enable (omit for all)
+  #     - input
+  #     - output
 
 # ---------------------------------------------------------------------------
 # Tracing / Observability
@@ -170,10 +167,25 @@ tracing:
 # Eval — openbias eval
 # ---------------------------------------------------------------------------
 # Used by `openbias eval` to run offline scenario-based evaluation.
-# The engine under test is determined by the top-level `engine` key.
 eval:
   # Glob patterns for scenario JSON files, resolved relative to this config file.
-  # Each matched file must be a valid scenario (see docs/eval.md for schema).
   scenarios:
     - ./eval/scenarios/*.json     # single directory
     # - ./eval/scenarios/**/*.json  # recursive glob
+
+# ---------------------------------------------------------------------------
+# Backward Compatibility
+# ---------------------------------------------------------------------------
+#
+# The old single-engine format is still supported:
+#
+#   engine: judge
+#   policy:
+#     - "No harmful content"
+#   judge:
+#     model: anthropic/claude-sonnet-4-5
+#     fail_action: block
+#
+# When the YAML parser sees `engine:` without `evaluators:`, it uses the
+# legacy mapping path to convert to the internal Settings structure.
+# New configs should use the evaluators format above.

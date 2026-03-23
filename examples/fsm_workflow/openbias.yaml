@@ -1,8 +1,12 @@
-# FSM engine config — deterministic workflow enforcement.
+# FSM evaluator config — deterministic workflow enforcement.
 #
-# The model field is for the semantic classifier fallback (embedding similarity).
-# If omitted, auto-detected from API keys like every other engine.
+# The FSM engine uses embedding-based semantic classification to match
+# conversation turns to workflow states. If omitted, the classifier model
+# is auto-detected from API keys.
 
-engine: fsm
-policy: ./customer_support.yaml
 port: 4000
+
+evaluators:
+  - name: customer-support
+    type: fsm
+    policy: ./customer_support.yaml

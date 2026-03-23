@@ -1,9 +1,12 @@
-engine: nemo
-policy: ./nemo_config/
+# NeMo Guardrails evaluator config — integrates NVIDIA NeMo rails.
+
 port: 4000
 
-# nemo:
-#   fail_closed: false  # uncomment to deny on NeMo errors instead of warn
+evaluators:
+  - name: nemo-rails
+    type: nemo
+    policy: ./nemo_config/
+    # fail_closed: false      # uncomment to deny on NeMo errors instead of warn
 
 tracing:
   type: none
