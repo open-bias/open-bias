@@ -942,12 +942,7 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
     6. _pre_call_impl returns an Exception object
     """
     from openbias.proxy.hooks import Callback
-    from openbias.core.interceptor import (
-        CheckerMode,
-        CheckPhase,
-        Interceptor,
-        PolicyEngineChecker,
-    )
+    from openbias.core.interceptor import Interceptor
     from openbias.policy.protocols import Decision, EngineResult
 
     # Build settings with fail_action="block"
@@ -973,14 +968,9 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
         )
     )
 
-    # Build a real Interceptor with a real PolicyEngineChecker and fail_action="block"
-    checker = PolicyEngineChecker(
-        engine=mock_engine,
-        phase=CheckPhase.PRE_CALL,
-        mode=CheckerMode.SYNC,
-    )
+    # Build a real Interceptor with fail_action="block"
     interceptor = Interceptor(
-        [checker],
+        engines=[mock_engine],
         default_strategy="user_message_inject",
         fail_action="block",
     )
