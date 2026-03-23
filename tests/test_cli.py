@@ -364,6 +364,180 @@ class TestCompileCommand:
             )
 
 
+class TestTriggerCommand:
+    def test_trigger_help(self):
+        result, output = _invoke(["trigger", "--help"])
+        assert result.exit_code == 0
+        assert "usage" in output.lower() or "Usage" in output
+
+    def test_trigger_no_config(self):
+        """trigger without openbias.yaml should show error with openbias init hint."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            buf = StringIO()
+            from openbias.cli_ui import console
+            old_file = console.file
+            console.file = buf
+            try:
+                result = runner.invoke(main, ["trigger"])
+            finally:
+                console.file = old_file
+            combined = result.output + buf.getvalue()
+            assert result.exit_code != 0
+            assert "openbias init" in combined
+
+    def test_trigger_success(self):
+        """trigger with valid config should show ALLOW output."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("openbias.yaml").write_text(
+                "engine: judge\nmodel: gpt-4o-mini\n"
+                "policy:\n  - 'Be professional'\n"
+                "tracing:\n  type: none\n"
+            )
+
+            import asyncio
+            from unittest.mock import AsyncMock
+
+            mock_proxy = MagicMock()
+            mock_proxy.initialize = AsyncMock()
+            mock_proxy.completion = AsyncMock(return_value={
+                "choices": [{"message": {"content": "Hello, I am an AI assistant."}}]
+            })
+            mock_callback = MagicMock()
+            mock_callback.shutdown = AsyncMock()
+            mock_callback._policy_engine = MagicMock()  # not None — prevents pass-through warning
+            mock_proxy._callback = mock_callback
+
+            mock_proxy_class = MagicMock(return_value=mock_proxy)
+
+            mock_settings = MagicMock()
+            mock_settings.policy.engine.type = "judge"
+            mock_settings.proxy.default_model = "gpt-4o-mini"
+            mock_settings.policy.fail_action = "block"
+            mock_settings.validate = MagicMock()
+
+            mock_settings_class = MagicMock(return_value=mock_settings)
+
+            buf = StringIO()
+            from openbias.cli_ui import console
+            old_file = console.file
+            console.file = buf
+            try:
+                with patch("openbias.config.settings.Settings", mock_settings_class):
+                    with patch("openbias.proxy.server.Proxy", mock_proxy_class):
+                        result = runner.invoke(main, ["trigger"])
+            finally:
+                console.file = old_file
+
+            combined = result.output + buf.getvalue()
+            assert result.exit_code == 0
+            assert "ALLOW" in combined
+
+    def test_trigger_error(self):
+        """trigger when completion raises should print error cleanly."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("openbias.yaml").write_text(
+                "engine: judge\nmodel: gpt-4o-mini\n"
+                "policy:\n  - 'Be professional'\n"
+                "tracing:\n  type: none\n"
+            )
+
+            from unittest.mock import AsyncMock
+
+            mock_proxy = MagicMock()
+            mock_proxy.initialize = AsyncMock()
+            mock_proxy.completion = AsyncMock(side_effect=RuntimeError("API call failed"))
+            mock_callback = MagicMock()
+            mock_callback.shutdown = AsyncMock()
+            mock_callback._policy_engine = MagicMock()
+            mock_proxy._callback = mock_callback
+
+            mock_proxy_class = MagicMock(return_value=mock_proxy)
+
+            mock_settings = MagicMock()
+            mock_settings.policy.engine.type = "judge"
+            mock_settings.proxy.default_model = "gpt-4o-mini"
+            mock_settings.policy.fail_action = "block"
+            mock_settings.validate = MagicMock()
+
+            mock_settings_class = MagicMock(return_value=mock_settings)
+
+            buf = StringIO()
+            from openbias.cli_ui import console
+            old_file = console.file
+            console.file = buf
+            try:
+                with patch("openbias.config.settings.Settings", mock_settings_class):
+                    with patch("openbias.proxy.server.Proxy", mock_proxy_class):
+                        result = runner.invoke(main, ["trigger"])
+            finally:
+                console.file = old_file
+
+            combined = result.output + buf.getvalue()
+            # Should exit 0 (trigger handles errors internally, prints them)
+            assert "Error" in combined or "API call failed" in combined
+
+    def test_trigger_custom_message(self):
+        """--message flag should be passed through to the completion call."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("openbias.yaml").write_text(
+                "engine: judge\nmodel: gpt-4o-mini\n"
+                "policy:\n  - 'Be professional'\n"
+                "tracing:\n  type: none\n"
+            )
+
+            from unittest.mock import AsyncMock
+
+            completion_calls = []
+
+            async def fake_completion(**kwargs):
+                completion_calls.append(kwargs)
+                return {"choices": [{"message": {"content": "Understood."}}]}
+
+            mock_proxy = MagicMock()
+            mock_proxy.initialize = AsyncMock()
+            mock_proxy.completion = fake_completion
+            mock_callback = MagicMock()
+            mock_callback.shutdown = AsyncMock()
+            mock_callback._policy_engine = MagicMock()
+            mock_proxy._callback = mock_callback
+
+            mock_proxy_class = MagicMock(return_value=mock_proxy)
+
+            mock_settings = MagicMock()
+            mock_settings.policy.engine.type = "judge"
+            mock_settings.proxy.default_model = "gpt-4o-mini"
+            mock_settings.policy.fail_action = "block"
+            mock_settings.validate = MagicMock()
+
+            mock_settings_class = MagicMock(return_value=mock_settings)
+
+            custom_msg = "Tell me about the weather"
+
+            buf = StringIO()
+            from openbias.cli_ui import console
+            old_file = console.file
+            console.file = buf
+            try:
+                with patch("openbias.config.settings.Settings", mock_settings_class):
+                    with patch("openbias.proxy.server.Proxy", mock_proxy_class):
+                        result = runner.invoke(main, ["trigger", "--message", custom_msg])
+            finally:
+                console.file = old_file
+
+            assert result.exit_code == 0
+            assert len(completion_calls) == 1
+            messages = completion_calls[0]["messages"]
+            assert any(
+                m.get("content") == custom_msg
+                for m in messages
+                if isinstance(m, dict)
+            )
+
+
 class TestHelpOutput:
     def test_main_help(self):
         result, _ = _invoke(["--help"])
