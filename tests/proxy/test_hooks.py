@@ -1125,27 +1125,17 @@ async def test_initialize_partial_failure_shuts_down_created_engines(mock_settin
 
 
 async def test_pre_call_runs_only_pre_call_evaluators_end_to_end(
-    mock_api_key, mock_cache
+    mock_settings, mock_api_key, mock_cache
 ):
     """During pre_call, only pre_call evaluators run; post_call evaluators are not consulted."""
     from openbias.proxy.hooks import Callback
     from openbias.core.interceptor import Interceptor
     from openbias.policy.protocols import Decision, EngineResult
 
-    settings = MagicMock()
-    settings.fail_open = True
-    settings.hook_timeout_seconds = 5.0
-    settings.fail_action = "intervene"
-    settings.strategy = "user_message_inject"
-    settings.mode = "sync"
-    settings.max_intervention_attempts = 3
-    settings.session_ttl = 3600
-    settings.max_sessions = 10000
-    settings.evaluators = []
-    settings.otel.enabled = False
-    settings.debug = False
+    mock_settings.hook_timeout_seconds = 5.0
+    mock_settings.mode = "sync"
 
-    cb = Callback(settings=settings)
+    cb = Callback(settings=mock_settings)
     cb._tracer = None
 
     # Pre-call evaluator that returns INTERVENE
@@ -1204,6 +1194,10 @@ async def test_pre_call_runs_only_pre_call_evaluators_end_to_end(
     assert not isinstance(result, Exception), (
         f"Expected modified data from INTERVENE, got Exception: {result}"
     )
+    # Verify the intervention was actually applied (user message injected)
+    assert isinstance(result, dict)
+    contents = [m["content"] for m in result["messages"]]
+    assert any("pre-call intervention" in c for c in contents)
 
 
 async def test_shutdown_shuts_down_all_evaluators(mock_settings):
