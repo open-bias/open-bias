@@ -4,7 +4,7 @@ Open Bias is a transparent proxy between your application and LLM providers. It 
 
 ```
 ┌─────────────┐    ┌───────────────────────────────────────────┐    ┌─────────────┐
-│  Your App   │───▶│              OPEN BIAS                │───▶│ LLM Provider│
+│  Your App   │───▶│              OPEN BIAS                    │───▶│ LLM Provider│
 │             │    │  ┌────────-┐  ┌─────────────┐             │    │             │
 │             │◀───│  │ Hooks   │─▶│ Interceptor │             │◀───│             │
 └─────────────┘    │  │safe_hook│  │ ┌─────────┐ │             │    └─────────────┘
