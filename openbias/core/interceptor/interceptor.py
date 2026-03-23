@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 class _PendingResult:
     """Internal: pairs an EngineResult with the evaluator name that produced it."""
 
-    engine_name: str
+    evaluator_name: str
     result: EngineResult
 
 
@@ -47,8 +47,6 @@ class Interceptor:
     # Defaults for session memory management
     DEFAULT_SESSION_TTL = 3600  # 1 hour
     DEFAULT_MAX_SESSIONS = 10_000
-    DEFAULT_MAX_ASYNC_TASKS_PER_SESSION = 50
-
     def __init__(
         self,
         pre_call_evaluators: list[PolicyEngine],
@@ -128,12 +126,12 @@ class Interceptor:
             result = pending.result
             decision = self._effective_decision(result.decision, session_id)
             all_metadata["results"].append(
-                {"checker": pending.engine_name, "decision": decision.value}
+                {"checker": pending.evaluator_name, "decision": decision.value}
             )
 
             if decision == Decision.BLOCK:
                 logger.warning(
-                    f"Request blocked by async evaluator '{pending.engine_name}': "
+                    f"Request blocked by async evaluator '{pending.evaluator_name}': "
                     f"{result.message}"
                 )
                 # Only confirm tasks up to and including the blocking one.
@@ -149,13 +147,13 @@ class Interceptor:
             if decision == Decision.INTERVENE:
                 if result.modified_messages is not None:
                     logger.info(
-                        f"Applying async message replacement from '{pending.engine_name}'"
+                        f"Applying async message replacement from '{pending.evaluator_name}'"
                     )
                     modified_data = dict(modified_data)
                     modified_data["messages"] = result.modified_messages
                 elif result.message:
                     logger.info(
-                        f"Applying async intervention from '{pending.engine_name}'"
+                        f"Applying async intervention from '{pending.evaluator_name}'"
                     )
                     modified_data = self._apply_intervention(
                         modified_data, result.message, self._default_strategy
@@ -353,10 +351,10 @@ class Interceptor:
                     logger.warning("Async evaluator task was cancelled")
                     results.append(
                         _PendingResult(
-                            engine_name="async_task_cancelled",
+                            evaluator_name="async_evaluator_cancelled",
                             result=EngineResult(
                                 decision=Decision.ALLOW,
-                                message="Async task cancelled",
+                                message="Async evaluator cancelled",
                                 metadata={},
                             ),
                         )
@@ -365,10 +363,10 @@ class Interceptor:
                     logger.error(f"Async evaluator task failed: {e}")
                     results.append(
                         _PendingResult(
-                            engine_name="async_task_error",
+                            evaluator_name="async_evaluator_error",
                             result=EngineResult(
                                 decision=Decision.ALLOW,
-                                message=f"Async task error: {e}",
+                                message=f"Async evaluator error: {e}",
                                 metadata={"error": str(e)},
                             ),
                         )
@@ -439,11 +437,11 @@ class Interceptor:
                         request_data=request_data,
                         context=context,
                     )
-                return _PendingResult(engine_name=evaluator.name, result=result)
+                return _PendingResult(evaluator_name=evaluator.name, result=result)
             except Exception as e:
                 logger.error(f"Async evaluator '{evaluator.name}' failed: {e}")
                 return _PendingResult(
-                    engine_name=evaluator.name,
+                    evaluator_name=evaluator.name,
                     result=EngineResult(
                         decision=Decision.ALLOW,
                         message=f"Async evaluator error: {e}",
@@ -457,17 +455,8 @@ class Interceptor:
             tasks = []
             self._sessions.put(session_id, tasks)
 
-        # Prune completed tasks before checking the cap
+        # Prune completed tasks
         tasks[:] = [t for t in tasks if not t.done()]
-
-        if len(tasks) >= self.DEFAULT_MAX_ASYNC_TASKS_PER_SESSION:
-            logger.warning(
-                f"Async task cap ({self.DEFAULT_MAX_ASYNC_TASKS_PER_SESSION}) reached for session "
-                f"{session_id}, dropping oldest task"
-            )
-            oldest = tasks.pop(0)
-            if not oldest.done():
-                oldest.cancel()
 
         task = asyncio.create_task(run_evaluator())
         tasks.append(task)
