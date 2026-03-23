@@ -100,30 +100,30 @@ class ClassifierConfig(BaseModel):
     device: str = "cpu"
 
 
+class EvaluatorConfig(BaseModel):
+    """Configuration for a single evaluator in the pipeline."""
+    name: str
+    type: str = "judge"
+    phase: Literal["pre_call", "post_call"] = "post_call"
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
 class PolicyEngineConfig(BaseModel):
     """Configuration for a single policy engine.
 
-    The 'type' field accepts any engine registered via @register_engine
-    in the PolicyEngineRegistry (see openbias/policy/registry.py).
-
-    Built-in engine types include: fsm, nemo, llm, judge.
-    Custom engines are automatically supported once registered.
-
-    The 'config' field contains engine-specific configuration.
+    .. deprecated::
+        Use EvaluatorConfig instead. This class is kept as a backward-compatible
+        shim and will be removed in a future refactor step.
     """
 
-    # Accepts any registered engine type — not hard-coded to a fixed set.
-    # See PolicyEngineRegistry.list_engines() for available types at runtime.
     type: str = "judge"
     enabled: bool = True
-    # Unified configuration path
     config_path: str | None = None
     config: dict[str, Any] = Field(default_factory=dict)
 
     def model_dump(self, **kwargs):
         """Custom dump to merge config_path into config dict for engines."""
         data = super().model_dump(**kwargs)
-        # If data.get("config_path") is set, use it to populate/override config dict
         if data.get("config_path"):
             data["config"]["config_path"] = data["config_path"]
         return data
@@ -132,60 +132,18 @@ class PolicyEngineConfig(BaseModel):
 class PolicyConfig(BaseModel):
     """Policy system configuration.
 
-    Supports multiple policy engines with different mechanisms:
-    - FSM for workflow enforcement
-    - NeMo Guardrails for content moderation
-    - Judge for LLM-based evaluation
-
-    Examples:
-        # Judge (default)
-        policy:
-          engine:
-            type: judge
-
-        # FSM only
-        policy:
-          engine:
-            type: fsm
-            config:
-              workflow_path: ./workflow.yaml
-
-        # NeMo only
-        policy:
-          engine:
-            type: nemo
-            config:
-              config_path: ./nemo_config/
+    .. deprecated::
+        Fields have been flattened onto Settings. This class is kept as a
+        backward-compatible shim and will be removed in a future refactor step.
     """
 
-    # Primary engine configuration
     engine: PolicyEngineConfig = Field(default_factory=PolicyEngineConfig)
-
-    # Default strategy when not specified in workflow
     default_strategy: Literal[
         "system_prompt_append", "user_message_inject"
     ] = "user_message_inject"
-
-    # What happens when a policy violation is detected.
-    # "intervene": modify the next request to steer the agent (default)
-    # "block": reject the request outright
-    # "shadow": log findings but take no action
     fail_action: Literal["intervene", "block", "shadow"] = "intervene"
-
-    # Fallback behavior when engine evaluation fails
-    # True = allow request on error (fail open)
-    # False = deny request on error (fail closed)
     fail_open: bool = True
-
-    # Maximum time (seconds) any hook is allowed to run before fail-open timeout.
-    # Set generously since interceptor checks may involve LLM calls.
     hook_timeout_seconds: float = 30.0
-
-    # POST_CALL checker execution mode.
-    # "async" (default): checkers run in background, results deferred to next request.
-    #   Zero latency impact but cannot enforce on the current response.
-    # "sync": checkers block the response, enabling BLOCK/INTERVENE on current response.
-    #   Adds latency (depends on engine) but enables real-time enforcement.
     post_call_mode: Literal["sync", "async"] = "async"
 
 
@@ -281,6 +239,14 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             "post_call_mode",
             "fail_action",
             "fail_open",
+            "hook_timeout_seconds",
+            # New evaluator-pipeline keys
+            "mode",
+            "evaluators",
+            "max_intervention_attempts",
+            "strategy",
+            "session_ttl",
+            "max_sessions",
             # Engine-specific sections are handled below
             "judge",
             "llm",
@@ -295,6 +261,101 @@ class YamlConfigSource(PydanticBaseSettingsSource):
     # Keys within llm: that need renaming for the engine config
     _LLM_KEY_RENAMES = {"model": "llm_model"}
 
+    # Keys extracted from each evaluator entry as EvaluatorConfig fields
+    # (everything else goes into the config dict).
+    _EVALUATOR_FIELD_KEYS = frozenset({"name", "type", "phase"})
+
+    # Judge evaluator keys that receive special handling
+    _JUDGE_EVALUATOR_SPECIAL_KEYS = frozenset({"model", "policies", "rubric"})
+
+    def _map_evaluators(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Map new evaluator-based YAML format to Settings structure.
+
+        When ``evaluators`` key is present, this path is used exclusively.
+        It populates flat pipeline fields directly (no policy shim).
+        """
+        result: dict[str, Any] = {}
+
+        # Direct top-level pipeline fields
+        _FLAT_KEYS = (
+            "mode", "fail_action", "max_intervention_attempts", "strategy",
+            "session_ttl", "max_sessions", "fail_open", "hook_timeout_seconds",
+        )
+        for key in _FLAT_KEYS:
+            if key in data:
+                result[key] = data[key]
+
+        # Proxy fields (same as old path)
+        if "port" in data:
+            result.setdefault("proxy", {})["port"] = data["port"]
+        if "host" in data:
+            result.setdefault("proxy", {})["host"] = data["host"]
+        if "model" in data:
+            result.setdefault("proxy", {})["default_model"] = data["model"]
+
+        # Direct passthrough
+        if "debug" in data:
+            result["debug"] = data["debug"]
+        if "log_level" in data:
+            result["log_level"] = data["log_level"]
+
+        # Tracing (same as old path)
+        tracing_cfg = data.get("tracing", {})
+        if isinstance(tracing_cfg, dict) and tracing_cfg:
+            otel = result.setdefault("otel", {})
+            if "type" in tracing_cfg:
+                tracing_type = tracing_cfg["type"]
+                otel["exporter_type"] = tracing_type
+                otel["enabled"] = tracing_type != "none"
+            for k in ("endpoint", "service_name", "insecure",
+                      "langfuse_public_key", "langfuse_secret_key",
+                      "langfuse_host", "redact_content"):
+                if k in tracing_cfg:
+                    otel[k] = tracing_cfg[k]
+
+        # Build evaluators list
+        evaluators: list[dict[str, Any]] = []
+        for entry in data.get("evaluators", []):
+            if not isinstance(entry, dict):
+                continue
+
+            ev: dict[str, Any] = {
+                "name": entry.get("name", "unnamed"),
+                "type": entry.get("type", "judge"),
+                "phase": entry.get("phase", "post_call"),
+            }
+
+            # Collect remaining keys into config
+            config: dict[str, Any] = {}
+            ev_type = ev["type"]
+
+            for k, v in entry.items():
+                if k in self._EVALUATOR_FIELD_KEYS:
+                    continue
+
+                if ev_type == "judge":
+                    if k == "model":
+                        config["models"] = [{"name": "primary", "model": v}]
+                        continue
+                    if k == "policies":
+                        config["inline_policy"] = v
+                        continue
+                    if k == "rubric":
+                        config["default_rubric"] = v
+                        continue
+
+                if ev_type == "fsm" and k == "policy":
+                    config["config_path"] = self._resolve_path(v)
+                    continue
+
+                config[k] = v
+
+            ev["config"] = config
+            evaluators.append(ev)
+
+        result["evaluators"] = evaluators
+        return result
+
     def _map_to_settings(self) -> dict[str, Any]:
         """Map simplified YAML keys to nested Settings structure.
 
@@ -305,6 +366,12 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             return {}
 
         data = self._yaml_data
+
+        # New evaluator-based format: when "evaluators" key is present,
+        # use the new mapping path exclusively.
+        if "evaluators" in data:
+            return self._map_evaluators(data)
+
         result: dict[str, Any] = {}
 
         # engine -> policy.engine.type
@@ -509,7 +576,20 @@ class Settings(BaseSettings):
     otel: OTelConfig = Field(default_factory=OTelConfig)
     proxy: ProxyConfig = Field(default_factory=ProxyConfig)
 
-    # Policy engine configuration
+    # --- Evaluator pipeline (flattened from former PolicyConfig) ---
+    mode: Literal["sync", "async"] = "async"
+    fail_action: Literal["intervene", "block", "shadow"] = "intervene"
+    max_intervention_attempts: int = 3
+    strategy: Literal["system_prompt_append", "user_message_inject"] = "user_message_inject"
+    session_ttl: int = 3600
+    max_sessions: int = 10000
+    fail_open: bool = True
+    hook_timeout_seconds: float = 30.0
+    evaluators: list[EvaluatorConfig] = Field(default_factory=list)
+
+    # Backward-compatible field — still populated by YamlConfigSource which
+    # emits {"policy": {...}}.  Consumers access settings.policy.engine.type etc.
+    # Will be removed in Steps 3-4 when YAML mapping and consumers are updated.
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
 
     # API Keys (loaded from env vars or .env file)
@@ -528,7 +608,25 @@ class Settings(BaseSettings):
             super().__init__(**kwargs)
         finally:
             _config_path_var.reset(_token)
-        
+
+        # Sync flat fields from the policy shim so new-style access works.
+        # Only overwrite if the flat field was NOT explicitly passed by the caller.
+        # Skip entirely when evaluators are populated (new format sets flat fields
+        # directly, no policy shim involved).
+        # The policy field is still populated by YamlConfigSource which emits
+        # {"policy": {...}} format.  This sync will be removed in Steps 3-4.
+        if not self.evaluators:
+            if "mode" not in kwargs:
+                self.mode = self.policy.post_call_mode
+            if "fail_action" not in kwargs:
+                self.fail_action = self.policy.fail_action
+            if "strategy" not in kwargs:
+                self.strategy = self.policy.default_strategy
+            if "fail_open" not in kwargs:
+                self.fail_open = self.policy.fail_open
+            if "hook_timeout_seconds" not in kwargs:
+                self.hook_timeout_seconds = self.policy.hook_timeout_seconds
+
         # Sync API keys to os.environ for downstream libraries (LiteLLM, LangChain)
         # This allows us to use .env files without explicit load_dotenv() in CLI
         self._sync_env_var("OPENAI_API_KEY", self.openai_api_key)
@@ -654,24 +752,24 @@ class Settings(BaseSettings):
 
     def validate(self) -> None:
         """Validate configuration logic."""
+        # Use the policy shim to access engine config (works for both old and new paths)
+        policy = self.policy
+
         # 1. Check if policy config path exists
-        # Check both the unified 'config_path' field and within the 'config' dictionary
-        policy_config_path = self.policy.engine.config_path or self.policy.engine.config.get("config_path")
-        
+        policy_config_path = policy.engine.config_path or policy.engine.config.get("config_path")
+
         if policy_config_path and not Path(policy_config_path).exists():
             raise ValueError(
                 f"Policy configuration file not found: {policy_config_path}"
             )
 
         # FSM engine is purely local — no LLM model or API keys required.
-        if self.policy.engine.type == "fsm":
+        if policy.engine.type == "fsm":
             return
 
         default_model = self.proxy.default_model
 
         if not default_model:
-            # If no model is set (and auto-detection failed because no keys were found),
-            # we must enforce that the user provides at least one key or sets a model manually.
             raise ValueError(
                 "No LLM API keys detected. Please set one of OPENAI_API_KEY, ANTHROPIC_API_KEY, "
                 "or GEMINI_API_KEY."
