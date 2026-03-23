@@ -166,6 +166,80 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
 
 @main.command()
 @click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to openbias.yaml config file",
+)
+@click.option(
+    "--message",
+    "-m",
+    type=str,
+    default=None,
+    help="Custom message to send (default: built-in test message)",
+)
+@click.option(
+    "--debug/--no-debug",
+    default=False,
+    help="Enable debug logging",
+)
+def trigger(config: Path, message: str, debug: bool) -> None:
+    """Send a synthetic request through the policy pipeline.
+
+    Initializes the proxy without starting an HTTP server and fires a
+    single completion call so you can verify your policy configuration
+    end-to-end.
+
+    Examples:
+
+        openbias trigger
+        openbias trigger --message "Tell me something interesting"
+        openbias trigger -c examples/judge/openbias.yaml
+    """
+    import asyncio
+
+    setup_logging(debug)
+
+    from openbias.config.settings import Settings
+
+    # Gate: require openbias.yaml (or explicit --config) before doing anything.
+    if config is None:
+        from pathlib import Path as _Path
+        _yaml_candidates = [_Path("openbias.yaml"), _Path("openbias.yml")]
+        _env_path = os.environ.get("OBIAS_CONFIG")
+        if _env_path:
+            _yaml_candidates.insert(0, _Path(_env_path))
+        if not any(p.is_file() for p in _yaml_candidates):
+            error(
+                "No openbias.yaml found in the current directory.",
+                hint="Run: openbias init",
+            )
+            raise SystemExit(1)
+
+    try:
+        with spinner("Loading configuration..."):
+            settings = Settings(
+                _config_path=str(config) if config else None,
+                debug=debug,
+            )
+            settings.validate()
+    except SystemExit:
+        raise
+    except Exception as e:
+        error(str(e), hint="Check your openbias.yaml or run: openbias init")
+        if debug:
+            import traceback
+            traceback.print_exc()
+        raise SystemExit(1)
+
+    from openbias.cli_trigger import run_trigger
+
+    asyncio.run(run_trigger(settings=settings, message=message, debug=debug))
+
+
+@main.command()
+@click.option(
     "--quick",
     "-q",
     is_flag=True,
