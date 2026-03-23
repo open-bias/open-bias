@@ -105,8 +105,7 @@ tests/
 ├── config/                        # Config/settings tests
 ├── core/
 │   ├── interceptor/
-│   │   ├── test_interceptor.py    # Interceptor orchestration
-│   │   └── test_adapters.py       # PolicyEngineChecker adapter
+│   │   └── test_interceptor.py    # Interceptor orchestration
 │   ├── test_intervention.py       # Strategy tests
 │   └── test_session.py
 ├── eval/                          # Offline scenario-based evaluation
@@ -208,24 +207,7 @@ Import the engine in `__init__.py` to trigger registration:
 from .engine import MyPolicyEngine
 ```
 
-The `Interceptor` automatically wraps registered engines as `PolicyEngineChecker` instances. No changes to the proxy layer needed.
-
-### Adding a Checker
-
-All checkers are `PolicyEngineChecker` instances wrapping a `PolicyEngine`. Create a new engine (see above) and register it via `PolicyEngineChecker`:
-
-```python
-from openbias.core.interceptor.adapters import PolicyEngineChecker
-from openbias.core.interceptor.types import CheckPhase, CheckerMode
-
-checker = PolicyEngineChecker(
-    engine=my_engine,
-    phase=CheckPhase.POST_CALL,
-    mode=CheckerMode.ASYNC,  # Runs in background, results applied next request
-)
-```
-
-Register it in `Callback._get_interceptor()` in `openbias/proxy/hooks.py`.
+The `Interceptor` accepts registered engines directly via `Interceptor(engines=[engine])`. No adapter layer needed.
 
 ### Adding a Constraint Type (FSM Engine)
 

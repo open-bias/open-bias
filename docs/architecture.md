@@ -51,7 +51,7 @@ Orchestration layer between hooks and policy engines. Runs checkers in two phase
 
 `run_post_call`: runs sync POST_CALL checkers, starts async POST_CALL checkers (results applied on next request).
 
-Policy engines are wrapped as `PolicyEngineChecker` instances via `adapters.py`. The hook layer doesn't know engine internals.
+Policy engines are passed directly to the `Interceptor` — no adapter layer.
 
 ### Policy Engines (`openbias/policy/`)
 
