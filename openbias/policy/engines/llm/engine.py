@@ -148,17 +148,10 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             max_constraints_per_batch=config.get("max_constraints_per_batch", 5),
         )
         
-        intervention_cfg = config.get("intervention", {})
         self._intervention_engine = InterventionHandler(
             self._workflow,
-            cooldown_turns=config.get("cooldown_turns", intervention_cfg.get("cooldown_turns", 2)),
-            max_intervention_attempts=intervention_cfg.get("max_intervention_attempts", 3),
-        )
-        
-        # Session memory management
-        self._sessions.configure(
-            ttl=int(config["session_ttl"]) if "session_ttl" in config else None,
-            max_sessions=int(config["max_sessions"]) if "max_sessions" in config else None,
+            cooldown_turns=config.get("cooldown_turns", 2),
+            max_intervention_attempts=config.get("max_intervention_attempts", 3),
         )
 
         self._initialized = True

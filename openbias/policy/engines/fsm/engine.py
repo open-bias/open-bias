@@ -117,10 +117,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
             )
 
         sm_kwargs: dict[str, Any] = {}
-        if "session_ttl" in config:
-            sm_kwargs["session_ttl"] = config["session_ttl"]
-        if "max_sessions" in config:
-            sm_kwargs["max_sessions"] = config["max_sessions"]
         if "max_history" in config:
             sm_kwargs["max_history"] = config["max_history"]
         self._state_machine = WorkflowStateMachine(self._workflow, **sm_kwargs)
