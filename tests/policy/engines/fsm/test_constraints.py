@@ -3,13 +3,13 @@
 import pytest
 from datetime import datetime, timezone
 
-from opensentinel.policy.engines.fsm.workflow.constraints import (
+from openbias.policy.engines.fsm.workflow.constraints import (
     ConstraintEvaluator,
     ConstraintViolation,
     EvaluationResult,
 )
-from opensentinel.policy.engines.fsm.workflow.schema import Constraint, ConstraintType
-from opensentinel.policy.engines.fsm.workflow.state_machine import SessionState, StateHistoryEntry
+from openbias.policy.engines.fsm.workflow.schema import Constraint, ConstraintType
+from openbias.policy.engines.fsm.workflow.state_machine import SessionState, StateHistoryEntry
 
 
 def make_session(states: list[str]) -> SessionState:

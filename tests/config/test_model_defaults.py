@@ -1,8 +1,8 @@
 
 import os
 import pytest
-from opensentinel.config.settings import SentinelSettings
-from opensentinel.cli_init import detect_available_model
+from openbias.config.settings import Settings
+from openbias.cli_init import detect_available_model
 
 
 class TestDetectAvailableModel:
@@ -71,7 +71,7 @@ class TestModelDefaults:
         monkeypatch.delenv("TOGETHERAI_API_KEY", raising=False)
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
 
-        settings = SentinelSettings(_env_file=None)
+        settings = Settings(_env_file=None)
 
         with pytest.raises(ValueError, match="No LLM API keys detected"):
             settings.validate()
@@ -83,7 +83,7 @@ class TestModelDefaults:
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
         monkeypatch.setenv("GEMINI_API_KEY", "dummy_key")
 
-        settings = SentinelSettings(_env_file=None)
+        settings = Settings(_env_file=None)
 
         # Model auto-detected from available API key
         assert settings.proxy.default_model == "gemini/gemini-2.5-flash"
@@ -92,7 +92,7 @@ class TestModelDefaults:
         """Explicitly set model should be preserved."""
         monkeypatch.setenv("OPENAI_API_KEY", "dummy_key")
 
-        settings = SentinelSettings(
+        settings = Settings(
             proxy={"default_model": "custom/model"},
             _env_file=None,
         )

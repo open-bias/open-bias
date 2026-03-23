@@ -3,7 +3,7 @@ Tests for pairwise bias mitigation.
 """
 
 import pytest
-from opensentinel.policy.engines.judge.bias import (
+from openbias.policy.engines.judge.bias import (
     randomize_positions,
     demap_winner,
     demap_pairwise_scores,

@@ -4,7 +4,7 @@ Tests for LLMClient.
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from opensentinel.policy.engines.llm.llm_client import LLMClient, LLMClientError
+from openbias.policy.engines.llm.llm_client import LLMClient, LLMClientError
 
 
 @pytest.fixture

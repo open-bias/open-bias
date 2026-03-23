@@ -82,13 +82,13 @@ Conversation where the assistant violates policy, gets corrected, and returns to
 ```
 evals/
 ├── <engine_type>/
-│   ├── osentinel.yaml       # Engine config + eval settings
+│   ├── openbias.yaml       # Engine config + eval settings
 │   ├── happy_path.json
 │   ├── policy_violation.json
 │   └── edge_case.json
 ```
 
-## Config: `osentinel.yaml`
+## Config: `openbias.yaml`
 
 Each eval directory needs a config file. Minimal example:
 
@@ -131,14 +131,14 @@ Mock responses are consumed **sequentially across all scenarios, sorted alphabet
 
 ### CLI
 ```bash
-osentinel eval                              # Run from evals/ directory
-osentinel eval --config evals/judge/osentinel.yaml  # Specific config
+openbias eval                              # Run from evals/ directory
+openbias eval --config evals/judge/openbias.yaml  # Specific config
 ```
 
 ### In Tests (pytest)
 ```python
-from opensentinel.eval.runner import EvalRunner
-from opensentinel.eval.mocks import apply_mock_provider
+from openbias.eval.runner import EvalRunner
+from openbias.eval.mocks import apply_mock_provider
 
 async def test_my_scenario():
     engine = PolicyEngineRegistry.create("judge")
@@ -170,7 +170,7 @@ See [references/cheatsheet.md](references/cheatsheet.md) for mock response forma
 
 | File | What to look at |
 |------|----------------|
-| `opensentinel/eval/runner.py` | `EvalRunner`, `TurnResult`, `EvalResult` |
-| `opensentinel/eval/mocks.py` | `apply_mock_provider`, `MockResponseSequence` |
+| `openbias/eval/runner.py` | `EvalRunner`, `TurnResult`, `EvalResult` |
+| `openbias/eval/mocks.py` | `apply_mock_provider`, `MockResponseSequence` |
 | `evals/judge/` | Judge eval scenarios and config |
 | `evals/fsm/` | FSM eval scenarios (no mocks needed) |

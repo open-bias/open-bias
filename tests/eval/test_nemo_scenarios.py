@@ -17,9 +17,9 @@ if "nemoguardrails" not in sys.modules:
 else:
     mock_nemo = sys.modules["nemoguardrails"]
 
-from opensentinel.eval.runner import EvalRunner
-from opensentinel.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
-from opensentinel.policy.protocols import Decision
+from openbias.eval.runner import EvalRunner
+from openbias.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
+from openbias.policy.protocols import Decision
 
 EVALS_DIR = Path(__file__).resolve().parent.parent.parent / "evals" / "nemo"
 

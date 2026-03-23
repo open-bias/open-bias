@@ -1,9 +1,9 @@
-"""Tests for opensentinel.cli_ui module."""
+"""Tests for openbias.cli_ui module."""
 
 from io import StringIO
 from unittest.mock import patch
 
-from opensentinel.cli_ui import (
+from openbias.cli_ui import (
     _panel_width,
     banner,
     config_panel,
@@ -36,7 +36,7 @@ def _capture_output(fn, *args, **kwargs):
 class TestOutputHelpers:
     def test_banner_contains_version(self):
         output = _capture_output(banner, "1.2.3")
-        assert "Open Sentinel" in output
+        assert "Open Bias" in output
         assert "1.2.3" in output
 
     def test_banner_contains_description(self):
@@ -132,68 +132,68 @@ class TestPanelWidth:
 class TestInputHelpers:
     """Test that input wrappers handle None (Ctrl-C) correctly."""
 
-    @patch("opensentinel.cli_ui.questionary")
+    @patch("openbias.cli_ui.questionary")
     def test_select_exits_on_none(self, mock_q):
         mock_q.select.return_value.ask.return_value = None
         import pytest
 
         with pytest.raises(SystemExit):
-            from opensentinel.cli_ui import select
+            from openbias.cli_ui import select
 
             select("Pick one", [{"name": "a", "value": "a"}])
 
-    @patch("opensentinel.cli_ui.questionary")
+    @patch("openbias.cli_ui.questionary")
     def test_confirm_exits_on_none(self, mock_q):
         mock_q.confirm.return_value.ask.return_value = None
         import pytest
 
         with pytest.raises(SystemExit):
-            from opensentinel.cli_ui import confirm
+            from openbias.cli_ui import confirm
 
             confirm("Sure?")
 
-    @patch("opensentinel.cli_ui.questionary")
+    @patch("openbias.cli_ui.questionary")
     def test_text_exits_on_none(self, mock_q):
         mock_q.text.return_value.ask.return_value = None
         import pytest
 
         with pytest.raises(SystemExit):
-            from opensentinel.cli_ui import text
+            from openbias.cli_ui import text
 
             text("Enter something")
 
-    @patch("opensentinel.cli_ui.questionary")
+    @patch("openbias.cli_ui.questionary")
     def test_select_returns_value(self, mock_q):
         mock_q.select.return_value.ask.return_value = "judge"
-        from opensentinel.cli_ui import select
+        from openbias.cli_ui import select
 
         result = select("Pick engine", [{"name": "judge", "value": "judge"}])
         assert result == "judge"
 
-    @patch("opensentinel.cli_ui.questionary")
+    @patch("openbias.cli_ui.questionary")
     def test_confirm_returns_bool(self, mock_q):
         mock_q.confirm.return_value.ask.return_value = True
-        from opensentinel.cli_ui import confirm
+        from openbias.cli_ui import confirm
 
         result = confirm("Sure?")
         assert result is True
 
-    @patch("opensentinel.cli_ui.questionary")
+    @patch("openbias.cli_ui.questionary")
     def test_text_returns_string(self, mock_q):
         mock_q.text.return_value.ask.return_value = "hello"
-        from opensentinel.cli_ui import text
+        from openbias.cli_ui import text
 
         result = text("Enter something")
         assert result == "hello"
 
 
 class TestIsInteractive:
-    @patch("opensentinel.cli_ui.sys")
+    @patch("openbias.cli_ui.sys")
     def test_interactive_when_tty(self, mock_sys):
         mock_sys.stdin.isatty.return_value = True
         assert is_interactive() is True
 
-    @patch("opensentinel.cli_ui.sys")
+    @patch("openbias.cli_ui.sys")
     def test_not_interactive_when_not_tty(self, mock_sys):
         mock_sys.stdin.isatty.return_value = False
         assert is_interactive() is False

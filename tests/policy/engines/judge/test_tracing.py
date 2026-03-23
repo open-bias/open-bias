@@ -5,8 +5,8 @@ Tests for judge engine OTEL tracing integration.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
-from opensentinel.policy.protocols import Decision
+from openbias.policy.engines.judge.engine import JudgePolicyEngine
+from openbias.policy.protocols import Decision
 
 
 @pytest.fixture

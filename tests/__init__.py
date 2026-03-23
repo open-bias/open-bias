@@ -1,1 +1,1 @@
-"""Open Sentinel tests."""
+"""Open Bias tests."""

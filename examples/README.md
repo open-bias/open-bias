@@ -1,11 +1,11 @@
 # Examples
 
-Each example is a self-contained directory with an `osentinel.yaml` config and a Python client script. Start the proxy in one terminal, run the client in another.
+Each example is a self-contained directory with an `openbias.yaml` config and a Python client script. Start the proxy in one terminal, run the client in another.
 
 **Provider-agnostic**: every example auto-detects the model from whichever API key you have set. Set exactly one of `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `ANTHROPIC_API_KEY`.
 
 ```
-Your App  ──►  Open Sentinel (:4000)  ──►  LLM Provider
+Your App  ──►  Open Bias (:4000)  ──►  LLM Provider
                      │
               pre_call_hook    → apply deferred interventions (μs)
               LLM call         → forwarded unmodified via LiteLLM
@@ -26,7 +26,7 @@ The smallest possible demo. ~30 lines of client code, 3 policy rules. Shows the 
 ```bash
 cd examples/quickstart
 export OPENAI_API_KEY=...    # or GEMINI_API_KEY, ANTHROPIC_API_KEY
-osentinel serve              # terminal 1
+openbias serve              # terminal 1
 python quickstart.py         # terminal 2
 ```
 
@@ -43,7 +43,7 @@ A coding assistant that gets hit with a prompt injection attack. The judge engin
 ```bash
 cd examples/judge
 export OPENAI_API_KEY=...    # or GEMINI_API_KEY, ANTHROPIC_API_KEY
-osentinel serve
+openbias serve
 python prompt_injection.py
 ```
 
@@ -60,7 +60,7 @@ A customer support agent with a precedence constraint: identity verification mus
 ```bash
 cd examples/fsm_workflow
 export OPENAI_API_KEY=...    # or GEMINI_API_KEY, ANTHROPIC_API_KEY
-osentinel serve
+openbias serve
 python workflow_enforcement.py
 ```
 
@@ -73,10 +73,10 @@ python workflow_enforcement.py
 Wraps NVIDIA NeMo Guardrails as a policy engine. Input rails run pre-call (jailbreak detection, PII filtering), output rails run post-call (toxicity, topical control). Fail-open by default — if NeMo throws, the request passes through with a warning.
 
 ```bash
-pip install 'opensentinel[nemo]'   # extra dependency
+pip install 'openbias[nemo]'   # extra dependency
 cd examples/nemo_guardrails
 export OPENAI_API_KEY=...    # or GEMINI_API_KEY, ANTHROPIC_API_KEY
-osentinel serve
+openbias serve
 python content_safety.py
 ```
 
@@ -84,7 +84,7 @@ python content_safety.py
 
 ## Common patterns
 
-**Session tracking**: Pass `X-Sentinel-Session-ID` header (or set `x-sentinel-session-id` in `default_headers`) to group requests into a conversation. Without it, Open Sentinel falls back to: `metadata.session_id` → `metadata.run_id` → `user` field → `thread_id` → hash of first message → random UUID.
+**Session tracking**: Pass `X-OpenBias-Session-ID` header (or set `x-openbias-session-id` in `default_headers`) to group requests into a conversation. Without it, Open Bias falls back to: `metadata.session_id` → `metadata.run_id` → `user` field → `thread_id` → hash of first message → random UUID.
 
 **Model strings**: Use [LiteLLM format](https://docs.litellm.ai/docs/providers) — `gpt-4o-mini`, `gemini/gemini-2.5-flash`, `anthropic/claude-sonnet-4-5`, etc. The proxy routes to the right provider based on the prefix.
 

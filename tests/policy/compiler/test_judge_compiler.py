@@ -1,29 +1,29 @@
 import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
-from opensentinel.policy.compiler.protocol import CompilationResult
-from opensentinel.policy.engines.judge.compiler import JudgeCompiler
+from openbias.policy.compiler.protocol import CompilationResult
+from openbias.policy.engines.judge.compiler import JudgeCompiler
 
 @pytest.fixture
 def judge_compiler():
     return JudgeCompiler(model="gpt-4o-mini", api_key="test-key")
 
 async def test_judge_compiler_registration():
-    from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
+    from openbias.policy.engines.judge.engine import JudgePolicyEngine
     engine = JudgePolicyEngine()
     compiler = engine.get_compiler()
     assert isinstance(compiler, JudgeCompiler)
 
 def test_get_compiler_via_engine():
     """get_compiler() via engine instance should return a JudgeCompiler."""
-    from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
+    from openbias.policy.engines.judge.engine import JudgePolicyEngine
     engine = JudgePolicyEngine()
     compiler = engine.get_compiler()
     assert isinstance(compiler, JudgeCompiler)
 
 def test_get_compiler_forwards_kwargs():
     """get_compiler(model=..., api_key=...) should forward to JudgeCompiler."""
-    from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
+    from openbias.policy.engines.judge.engine import JudgePolicyEngine
     engine = JudgePolicyEngine()
     compiler = engine.get_compiler(model="gpt-4o", api_key="sk-test", base_url="http://localhost:8080")
     assert isinstance(compiler, JudgeCompiler)
@@ -98,7 +98,7 @@ async def test_parse_empty_response_fails(judge_compiler):
     assert not result.success
     assert "No rubrics generated" in result.errors[0]
 
-@patch("opensentinel.policy.compiler.base.LLMPolicyCompiler._call_llm")
+@patch("openbias.policy.compiler.base.LLMPolicyCompiler._call_llm")
 async def test_compile_integration(mock_call, judge_compiler):
     mock_call.return_value = '{"rubrics": [{"name": "test", "criteria": [{"name": "c1"}]}]}'
     

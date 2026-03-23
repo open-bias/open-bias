@@ -1,5 +1,5 @@
 """
-Open Sentinel — Content Safety Rails (NeMo Engine)
+Open Bias — Content Safety Rails (NeMo Engine)
 
 Demonstrates NVIDIA NeMo Guardrails as a policy engine. NeMo provides
 content safety rails (jailbreak detection, PII filtering, toxicity) and
@@ -22,17 +22,17 @@ Fail-open by default:
   down production is worse than one that misses a violation.
 
 Prerequisites:
-  pip install 'opensentinel[nemo]'
+  pip install 'openbias[nemo]'
 
 Note on providers:
   NeMo Guardrails has its own model config (config/config.yml) for the
   rails evaluation LLM. The MODEL below is for the agent's LLM — it goes
-  through Open Sentinel's proxy. Both are independently configurable.
+  through Open Bias's proxy. Both are independently configurable.
 
 Run:
   cd examples/nemo_guardrails
   export <PROVIDER>_API_KEY=...
-  osentinel serve
+  openbias serve
   python content_safety.py
 """
 
@@ -60,13 +60,13 @@ if not MODEL:
     sys.exit(1)
 
 # -- Config ------------------------------------------------------------------
-PROXY_URL = os.getenv("OSNTL_URL", "http://localhost:4000/v1")
+PROXY_URL = os.getenv("OBIAS_URL", "http://localhost:4000/v1")
 SESSION_ID = "nemo-demo-001"
 
 client = OpenAI(
     base_url=PROXY_URL,
     api_key=API_KEY,
-    default_headers={"x-sentinel-session-id": SESSION_ID},
+    default_headers={"x-openbias-session-id": SESSION_ID},
 )
 
 print(f"Using model: {MODEL}\n")
@@ -115,5 +115,5 @@ for i, user_input in enumerate(turns, 1):
             print(f"  ✗ Error: {e}")
 
 print(f"\n{'━' * 70}")
-print("  Done. Check osentinel server logs for NeMo rail evaluations.")
+print("  Done. Check openbias server logs for NeMo rail evaluations.")
 print(f"{'━' * 70}\n")

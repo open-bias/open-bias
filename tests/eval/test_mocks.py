@@ -1,4 +1,4 @@
-"""Unit tests for opensentinel.eval.mocks."""
+"""Unit tests for openbias.eval.mocks."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 import logging
 from unittest.mock import MagicMock
 
-from opensentinel.eval.mocks import MockResponseSequence, apply_mock_provider
+from openbias.eval.mocks import MockResponseSequence, apply_mock_provider
 
 # ---------------------------------------------------------------------------
 # MockResponseSequence
@@ -105,7 +105,7 @@ class TestApplyMockProvider:
 
     def test_judge_engine_without_client_logs_warning(self, caplog):
         engine = MagicMock(spec=[])  # no _client attribute
-        with caplog.at_level(logging.WARNING, logger="opensentinel.eval.mocks"):
+        with caplog.at_level(logging.WARNING, logger="openbias.eval.mocks"):
             apply_mock_provider(engine, "judge", responses=['{}'])
         assert "cannot apply mock" in caplog.text.lower()
 

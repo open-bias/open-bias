@@ -3,8 +3,8 @@
 ## Setup
 
 ```bash
-git clone https://github.com/open-sentinel/open-sentinel.git
-cd open-sentinel
+git clone https://github.com/open-bias/open-bias.git
+cd open-bias
 pip install -e ".[dev]"
 ```
 
@@ -12,7 +12,7 @@ Verify:
 
 ```bash
 pytest
-osentinel --help
+openbias --help
 ```
 
 ## Making Changes
@@ -39,9 +39,9 @@ See [docs/developing.md](docs/developing.md) for naming conventions, file organi
 
 ## Adding a Policy Engine
 
-OpenSentinel's engine system is pluggable. The short version:
+OpenBias's engine system is pluggable. The short version:
 
-1. Create a new directory under `opensentinel/policy/engines/your_engine/`.
+1. Create a new directory under `openbias/policy/engines/your_engine/`.
 2. Implement the `PolicyEngine` protocol.
 3. Register it with `@register_engine("your_engine")`.
 4. Add a README in the engine directory.
@@ -57,7 +57,7 @@ Full walkthrough with code examples: [docs/developing.md](docs/developing.md#ext
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/open-sentinel/open-sentinel/issues). Include:
+Use [GitHub Issues](https://github.com/open-bias/open-bias/issues). Include:
 
 - What you did (steps to reproduce).
 - What you expected.

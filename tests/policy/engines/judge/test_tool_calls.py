@@ -4,14 +4,14 @@ Tests for tool call awareness in the judge engine.
 
 import pytest
 
-from opensentinel.core.utils import extract_tool_calls
-from opensentinel.policy.engines.judge import JudgePolicyEngine
-from opensentinel.policy.engines.judge.prompts import (
+from openbias.core.utils import extract_tool_calls
+from openbias.policy.engines.judge import JudgePolicyEngine
+from openbias.policy.engines.judge.prompts import (
     format_conversation_block,
     format_tool_calls_block,
     _classify_tool_operation,
 )
-from opensentinel.policy.protocols import Decision
+from openbias.policy.protocols import Decision
 
 
 class TestExtractToolCalls:

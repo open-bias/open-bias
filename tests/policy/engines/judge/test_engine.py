@@ -6,16 +6,16 @@ import time
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from opensentinel.core.utils import extract_response_content
-from opensentinel.policy.engines.judge import JudgePolicyEngine
-from opensentinel.policy.engines.judge.models import (
+from openbias.core.utils import extract_response_content
+from openbias.policy.engines.judge import JudgePolicyEngine
+from openbias.policy.engines.judge.models import (
     JudgeVerdict,
     VerdictAction,
     EvaluationScope,
     JudgeScore,
 )
-from opensentinel.policy.protocols import Decision
-from opensentinel.policy.registry import PolicyEngineRegistry
+from openbias.policy.protocols import Decision
+from openbias.policy.registry import PolicyEngineRegistry
 
 
 @pytest.fixture
@@ -784,7 +784,7 @@ class TestInterventionEscalation:
         managed by the engine's evaluate_response() to avoid double-counting
         when multiple verdicts are recorded per evaluation.
         """
-        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+        from openbias.policy.engines.judge.models import JudgeSessionContext
         session = JudgeSessionContext(session_id="test")
 
         # Record a verdict with criterion failures
@@ -812,7 +812,7 @@ class TestInterventionEscalation:
 
     def test_session_context_no_tracking_on_pass(self):
         """Passing verdicts should not affect intervention tracking."""
-        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+        from openbias.policy.engines.judge.models import JudgeSessionContext
         session = JudgeSessionContext(session_id="test")
 
         verdict = JudgeVerdict(
@@ -833,7 +833,7 @@ class TestInterventionEscalation:
 
     def test_intervene_without_criterion_failures_no_count(self):
         """record_verdict does not increment intervention_count (engine does)."""
-        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+        from openbias.policy.engines.judge.models import JudgeSessionContext
         session = JudgeSessionContext(session_id="test")
 
         verdict = JudgeVerdict(
@@ -853,7 +853,7 @@ class TestInterventionEscalation:
 
     def test_block_without_criterion_failures_no_count(self):
         """record_verdict does not increment intervention_count (engine does)."""
-        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+        from openbias.policy.engines.judge.models import JudgeSessionContext
         session = JudgeSessionContext(session_id="test")
 
         verdict = JudgeVerdict(
@@ -875,7 +875,7 @@ class TestInterventionEscalation:
         """Intervention count cap (3) triggers on composite-only verdicts
         (no criterion_failures) via direct session model testing.
         """
-        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+        from openbias.policy.engines.judge.models import JudgeSessionContext
         session = JudgeSessionContext(session_id="test")
 
         # Simulate 4 evaluations each with an INTERVENE verdict.
@@ -909,7 +909,7 @@ class TestInterventionEscalation:
         met, but the decision was already BLOCK — no actual upgrade occurred,
         so escalation metadata would be misleading.
         """
-        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+        from openbias.policy.engines.judge.models import JudgeSessionContext
 
         session = JudgeSessionContext(session_id="esc-nonworst")
         # Record that "no_pii" was flagged in a prior intervention
@@ -958,7 +958,7 @@ class TestInterventionEscalation:
         escalation should upgrade the decision from INTERVENE to BLOCK and
         include escalation metadata.
         """
-        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+        from openbias.policy.engines.judge.models import JudgeSessionContext
 
         session = JudgeSessionContext(session_id="esc-upgrade")
         session.last_intervention_criteria = {"no_pii"}
@@ -1001,7 +1001,7 @@ class TestInterventionEscalation:
 
     def test_no_escalation_when_all_verdicts_pass(self):
         """No escalation when all verdicts are PASS."""
-        from opensentinel.policy.engines.judge.models import JudgeSessionContext
+        from openbias.policy.engines.judge.models import JudgeSessionContext
 
         session = JudgeSessionContext(session_id="all-pass")
         engine = JudgePolicyEngine()
@@ -1158,7 +1158,7 @@ class TestRubricIsolation:
 
     async def test_inline_policy_doesnt_corrupt_builtins(self):
         """Registering an inline_policy should not modify built-in rubrics globally."""
-        from opensentinel.policy.engines.judge.rubrics import RubricRegistry
+        from openbias.policy.engines.judge.rubrics import RubricRegistry
 
         engine = JudgePolicyEngine()
         await engine.initialize({
@@ -1186,7 +1186,7 @@ class TestInterventionCountBehavior:
         counter, sessions that already received a block will prematurely
         escalate subsequent INTERVENE decisions.
         """
-        from opensentinel.policy.protocols import EngineResult
+        from openbias.policy.protocols import EngineResult
         await engine.initialize(judge_config)
         engine._client.call_judge = AsyncMock(return_value=_failing_judge_response())
 
@@ -1209,7 +1209,7 @@ class TestInterventionCountBehavior:
         self, engine, judge_config, sample_request, sample_response
     ):
         """INTERVENE decisions must increment intervention_count."""
-        from opensentinel.policy.protocols import EngineResult
+        from openbias.policy.protocols import EngineResult
         await engine.initialize(judge_config)
         engine._client.call_judge = AsyncMock(return_value=_failing_judge_response())
 

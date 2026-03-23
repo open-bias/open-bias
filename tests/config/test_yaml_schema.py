@@ -2,11 +2,11 @@
 Tests for YamlConfigSource._map_to_settings() — full YAML schema coverage.
 
 Verifies that every engine-specific YAML section maps correctly into
-the SentinelSettings structure per opensentinel/config/schema.yaml.
+the Settings structure per openbias/config/schema.yaml.
 """
 
 import pytest
-from opensentinel.config.settings import YamlConfigSource
+from openbias.config.settings import YamlConfigSource
 
 
 def _build_source(yaml_data):
@@ -378,7 +378,7 @@ class TestClassifierMapping:
 
 class TestCombinedYAML:
     def test_full_judge_config(self):
-        """Test a realistic full judge osentinel.yaml."""
+        """Test a realistic full judge openbias.yaml."""
         result = _build_source(
             {
                 "engine": "judge",
@@ -401,7 +401,7 @@ class TestCombinedYAML:
         assert result["otel"]["enabled"] is False
 
     def test_full_llm_config(self):
-        """Test a realistic full LLM engine osentinel.yaml."""
+        """Test a realistic full LLM engine openbias.yaml."""
         result = _build_source(
             {
                 "engine": "llm",

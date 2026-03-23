@@ -9,8 +9,8 @@ import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from opensentinel.policy.engines.nemo.compiler import NemoCompiler
-from opensentinel.policy.compiler.protocol import CompilationResult
+from openbias.policy.engines.nemo.compiler import NemoCompiler
+from openbias.policy.compiler.protocol import CompilationResult
 
 
 @pytest.fixture
@@ -68,7 +68,7 @@ class TestNemoCompilerProperties:
         assert compiler.engine_type == "nemo"
 
     def test_is_policy_compiler(self, compiler):
-        from opensentinel.policy.compiler.protocol import PolicyCompiler
+        from openbias.policy.compiler.protocol import PolicyCompiler
 
         assert isinstance(compiler, PolicyCompiler)
 

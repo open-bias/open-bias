@@ -8,17 +8,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **`osentinel init -q`**: Quick (non-interactive) init — auto-detects your API key and writes a minimal config in one shot.
+- **`openbias init -q`**: Quick (non-interactive) init — auto-detects your API key and writes a minimal config in one shot.
 - **CLI output formatting**: Rich-formatted console output for all CLI commands (headings, YAML previews, success/error indicators).
 - **Model auto-detection**: Automatically resolves the best LLM model from whichever API key is present (`OPENAI_API_KEY` → `gpt-4o-mini`, `GEMINI_API_KEY` → `gemini/gemini-2.5-flash`, etc.).
-- **Model & API-key validation**: `osentinel serve` and `osentinel init` now validate that the required API key exists for the configured model before starting.
-- **YAML as single source of truth**: `osentinel.yaml` is now the primary configuration surface. Removed the `OSNTL_*` environment-variable prefix; API keys are still read from env vars / `.env`.
-- **Path resolution**: Relative paths in `osentinel.yaml` (e.g. `policy: ./workflow.yaml`) are resolved relative to the config file location.
-- **Config validation at startup**: `osentinel serve` checks that referenced policy files exist and that the required API key is present; exits with a clear error if not.
+- **Model & API-key validation**: `openbias serve` and `openbias init` now validate that the required API key exists for the configured model before starting.
+- **YAML as single source of truth**: `openbias.yaml` is now the primary configuration surface. Removed the `OBIAS_*` environment-variable prefix; API keys are still read from env vars / `.env`.
+- **Path resolution**: Relative paths in `openbias.yaml` (e.g. `policy: ./workflow.yaml`) are resolved relative to the config file location.
+- **Config validation at startup**: `openbias serve` checks that referenced policy files exist and that the required API key is present; exits with a clear error if not.
 - **API-key syncing**: Keys loaded from `.env` are synced into `os.environ` so downstream libraries (LiteLLM, LangChain) work without explicit `load_dotenv()`.
 - **Langfuse env-var aliases**: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` are read directly from the environment alongside YAML config.
-- **Engine-specific `osentinel compile`**: The policy compiler now accepts `--engine` to target a specific engine format (judge, fsm, llm, nemo).
-- **`docs/configuration.md`**: Full configuration reference for `osentinel.yaml`.
+- **Engine-specific `openbias compile`**: The policy compiler now accepts `--engine` to target a specific engine format (judge, fsm, llm, nemo).
+- **`docs/configuration.md`**: Full configuration reference for `openbias.yaml`.
 
 ### Changed
 
@@ -33,7 +33,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Judge engine: score clamping, criterion failure checks, JSON validation, timezone-aware timestamps.
 - Session ID propagation for internal LLM calls in the Judge engine.
-- `intervention` and `classifier` YAML sections now correctly map to `SentinelSettings`.
+- `intervention` and `classifier` YAML sections now correctly map to `Settings`.
 
 ## 0.1.0 (alpha)
 
@@ -47,8 +47,8 @@ Initial release.
 - **LLM engine**: classifies conversation state and detects drift using LLM-based reasoning.
 - **NeMo engine**: integrates NVIDIA NeMo Guardrails for content safety and dialog rails.
 - **Composite engine**: runs multiple engines in parallel, merges results (most restrictive wins).
-- **Policy compiler**: translates natural language policies to engine-specific YAML via `osentinel compile`.
-- **CLI**: `osentinel init`, `osentinel serve`, `osentinel compile`, `osentinel validate`, `osentinel info`.
+- **Policy compiler**: translates natural language policies to engine-specific YAML via `openbias compile`.
+- **CLI**: `openbias init`, `openbias serve`, `openbias compile`, `openbias validate`, `openbias info`.
 - **OpenTelemetry tracing**: spans for every proxy call, policy evaluation, and intervention. Console, OTLP, and Langfuse backends.
 - Fail-open design: hook failures pass the request through unmodified. Only intentional blocks propagate.
 - Deferred intervention: violations detected async are applied as prompt injections on the next turn.

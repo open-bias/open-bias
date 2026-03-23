@@ -44,7 +44,7 @@ class TestQuickstart:
         assert _has_import(tree, "openai")
 
     def test_config_exists(self):
-        assert (EXAMPLES_DIR / "quickstart" / "osentinel.yaml").exists()
+        assert (EXAMPLES_DIR / "quickstart" / "openbias.yaml").exists()
 
 
 class TestPromptInjection:
@@ -54,7 +54,7 @@ class TestPromptInjection:
         assert _has_import(tree, "openai")
 
     def test_config_exists(self):
-        assert (EXAMPLES_DIR / "judge" / "osentinel.yaml").exists()
+        assert (EXAMPLES_DIR / "judge" / "openbias.yaml").exists()
 
 
 class TestWorkflowEnforcement:
@@ -65,7 +65,7 @@ class TestWorkflowEnforcement:
         assert _has_import(tree, "openai")
 
     def test_config_exists(self):
-        assert (EXAMPLES_DIR / "fsm_workflow" / "osentinel.yaml").exists()
+        assert (EXAMPLES_DIR / "fsm_workflow" / "openbias.yaml").exists()
         assert (EXAMPLES_DIR / "fsm_workflow" / "customer_support.yaml").exists()
 
 
@@ -76,4 +76,4 @@ class TestContentSafety:
         assert _has_import(tree, "openai")
 
     def test_config_exists(self):
-        assert (EXAMPLES_DIR / "nemo_guardrails" / "osentinel.yaml").exists()
+        assert (EXAMPLES_DIR / "nemo_guardrails" / "openbias.yaml").exists()

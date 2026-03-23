@@ -1,12 +1,12 @@
-"""Tests for fail-open hardening of Open Sentinel proxy hooks."""
+"""Tests for fail-open hardening of Open Bias proxy hooks."""
 
 import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 
-from opensentinel.core.intervention.strategies import WorkflowViolationError
-from opensentinel.proxy.hooks import safe_hook, _fail_open_counter, get_fail_open_counts
+from openbias.core.intervention.strategies import WorkflowViolationError
+from openbias.proxy.hooks import safe_hook, _fail_open_counter, get_fail_open_counts
 
 
 # ---------------------------------------------------------------------------
@@ -161,13 +161,13 @@ async def test_safe_hook_fail_closed_success_still_works():
 
 
 # ---------------------------------------------------------------------------
-# Integration tests: SentinelCallback hooks with fail-open
+# Integration tests: Callback hooks with fail-open
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
 def mock_settings():
-    """Create mock SentinelSettings for testing."""
+    """Create mock Settings for testing."""
     settings = MagicMock()
     settings.policy.fail_open = True
     settings.policy.hook_timeout_seconds = 0.1  # Aggressive timeout for tests
@@ -178,11 +178,11 @@ def mock_settings():
 
 @pytest.fixture
 def callback(mock_settings):
-    """Create SentinelCallback with mocked settings."""
-    with patch("opensentinel.proxy.hooks.SentinelSettings", return_value=mock_settings):
-        from opensentinel.proxy.hooks import SentinelCallback
+    """Create Callback with mocked settings."""
+    with patch("openbias.proxy.hooks.Settings", return_value=mock_settings):
+        from openbias.proxy.hooks import Callback
 
-        cb = SentinelCallback(settings=mock_settings)
+        cb = Callback(settings=mock_settings)
         # Ensure tracer is None
         cb._tracer = None
         return cb
@@ -269,7 +269,7 @@ async def test_pre_call_hook_returns_exception_on_block(
     callback, mock_api_key, mock_cache
 ):
     """When interceptor blocks, _pre_call_impl returns an Exception object (not raises)."""
-    from opensentinel.core.interceptor.types import InterceptionResult
+    from openbias.core.interceptor.types import InterceptionResult
 
     data = {"messages": [{"role": "user", "content": "hello"}]}
 
@@ -290,7 +290,7 @@ async def test_post_call_hook_block_raises_workflow_violation(
     callback, mock_api_key
 ):
     """When sync POST_CALL checker blocks, WorkflowViolationError propagates."""
-    from opensentinel.core.interceptor.types import InterceptionResult
+    from openbias.core.interceptor.types import InterceptionResult
 
     data = {"messages": [{"role": "user", "content": "hello"}]}
     response = MagicMock()
@@ -314,7 +314,7 @@ async def test_post_call_intervention_modifies_returned_response(
     callback, mock_api_key
 ):
     """POST_CALL intervention modifies the response returned by the hook."""
-    from opensentinel.core.interceptor.types import InterceptionResult
+    from openbias.core.interceptor.types import InterceptionResult
     from litellm import ModelResponse
 
     response = ModelResponse(
@@ -357,7 +357,7 @@ async def test_post_call_intervention_replaces_response_content(
     callback, mock_api_key
 ):
     """POST_CALL intervention with modified_messages replaces response content entirely."""
-    from opensentinel.core.interceptor.types import InterceptionResult
+    from openbias.core.interceptor.types import InterceptionResult
     from litellm import ModelResponse
 
     response = ModelResponse(
@@ -445,13 +445,13 @@ async def test_log_failure_event_exception_is_swallowed(callback):
 
 
 # ---------------------------------------------------------------------------
-# Eager startup initialization tests: SentinelCallback.initialize()
+# Eager startup initialization tests: Callback.initialize()
 # ---------------------------------------------------------------------------
 
 
 async def test_callback_initialize_raises_on_bad_engine_config(mock_settings):
     """initialize() raises immediately when the engine fails to initialize."""
-    from opensentinel.proxy.hooks import SentinelCallback
+    from openbias.proxy.hooks import Callback
 
     # Simulate a judge engine with models configured (non-skip path)
     mock_settings.get_policy_config.return_value = {
@@ -459,10 +459,10 @@ async def test_callback_initialize_raises_on_bad_engine_config(mock_settings):
         "config": {"models": [{"name": "primary", "model": "gpt-4o"}]},
     }
 
-    cb = SentinelCallback(settings=mock_settings)
+    cb = Callback(settings=mock_settings)
 
     with patch(
-        "opensentinel.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
         new=AsyncMock(side_effect=ValueError("bad model config")),
     ):
         with pytest.raises(ValueError, match="bad model config"):
@@ -471,7 +471,7 @@ async def test_callback_initialize_raises_on_bad_engine_config(mock_settings):
 
 async def test_callback_initialize_sets_engine_on_success(mock_settings):
     """initialize() eagerly sets the policy engine when config is valid."""
-    from opensentinel.proxy.hooks import SentinelCallback
+    from openbias.proxy.hooks import Callback
 
     mock_engine = MagicMock()
     mock_engine.name = "mock-judge"
@@ -484,10 +484,10 @@ async def test_callback_initialize_sets_engine_on_success(mock_settings):
     mock_settings.policy.default_strategy = "user_message_inject"
     mock_settings.policy.fail_action = "intervene"
 
-    cb = SentinelCallback(settings=mock_settings)
+    cb = Callback(settings=mock_settings)
 
     with patch(
-        "opensentinel.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
         new=AsyncMock(return_value=mock_engine),
     ):
         await cb.initialize()
@@ -499,7 +499,7 @@ async def test_callback_initialize_sets_engine_on_success(mock_settings):
 
 async def test_callback_initialize_skips_unconfigured_engine(mock_settings):
     """initialize() skips the engine and stays None when no config is provided."""
-    from opensentinel.proxy.hooks import SentinelCallback
+    from openbias.proxy.hooks import Callback
 
     # Judge engine with no models — should be skipped
     mock_settings.get_policy_config.return_value = {
@@ -510,10 +510,10 @@ async def test_callback_initialize_skips_unconfigured_engine(mock_settings):
     mock_settings.policy.default_strategy = "pass"
     mock_settings.policy.fail_action = "pass"
 
-    cb = SentinelCallback(settings=mock_settings)
+    cb = Callback(settings=mock_settings)
 
     with patch(
-        "opensentinel.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
         new=AsyncMock(),
     ) as mock_create:
         await cb.initialize()
@@ -525,7 +525,7 @@ async def test_callback_initialize_skips_unconfigured_engine(mock_settings):
 
 async def test_callback_initialize_idempotent(mock_settings):
     """Calling initialize() twice does not re-initialize the engine."""
-    from opensentinel.proxy.hooks import SentinelCallback
+    from openbias.proxy.hooks import Callback
 
     mock_engine = MagicMock()
     mock_engine.name = "mock-judge"
@@ -538,10 +538,10 @@ async def test_callback_initialize_idempotent(mock_settings):
     mock_settings.policy.default_strategy = "user_message_inject"
     mock_settings.policy.fail_action = "intervene"
 
-    cb = SentinelCallback(settings=mock_settings)
+    cb = Callback(settings=mock_settings)
 
     with patch(
-        "opensentinel.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
         new=AsyncMock(return_value=mock_engine),
     ) as mock_create:
         await cb.initialize()
@@ -558,13 +558,13 @@ async def test_callback_initialize_idempotent(mock_settings):
 
 async def test_compute_hook_timeout_no_engine(mock_settings):
     """Without an engine, effective timeout equals the configured value."""
-    from opensentinel.proxy.hooks import SentinelCallback
+    from openbias.proxy.hooks import Callback
 
     mock_settings.policy.hook_timeout_seconds = 30.0
     mock_settings.get_policy_config.return_value = {"type": "judge", "config": {}}
     mock_settings.policy.post_call_mode = "async"
 
-    cb = SentinelCallback(settings=mock_settings)
+    cb = Callback(settings=mock_settings)
     cb._policy_engine = None
 
     assert cb._compute_hook_timeout() == 30.0
@@ -573,10 +573,10 @@ async def test_compute_hook_timeout_no_engine(mock_settings):
 
 async def test_compute_hook_timeout_engine_without_timeout_attr(mock_settings):
     """Engines that don't expose a 'timeout' attribute use the configured value."""
-    from opensentinel.proxy.hooks import SentinelCallback
+    from openbias.proxy.hooks import Callback
 
     mock_settings.policy.hook_timeout_seconds = 30.0
-    cb = SentinelCallback(settings=mock_settings)
+    cb = Callback(settings=mock_settings)
 
     engine = MagicMock(spec=[])  # no 'timeout' attribute at all
     cb._policy_engine = engine
@@ -586,10 +586,10 @@ async def test_compute_hook_timeout_engine_without_timeout_attr(mock_settings):
 
 async def test_compute_hook_timeout_engine_timeout_within_configured(mock_settings):
     """When engine timeout + buffer <= configured, no adjustment is made."""
-    from opensentinel.proxy.hooks import SentinelCallback
+    from openbias.proxy.hooks import Callback
 
     mock_settings.policy.hook_timeout_seconds = 30.0
-    cb = SentinelCallback(settings=mock_settings)
+    cb = Callback(settings=mock_settings)
 
     engine = MagicMock()
     engine.timeout = 15.0  # 15 + 5 = 20 < 30 → no change
@@ -600,10 +600,10 @@ async def test_compute_hook_timeout_engine_timeout_within_configured(mock_settin
 
 async def test_compute_hook_timeout_engine_timeout_exceeds_configured(mock_settings):
     """When engine timeout + buffer > configured, effective timeout is auto-adjusted."""
-    from opensentinel.proxy.hooks import SentinelCallback
+    from openbias.proxy.hooks import Callback
 
     mock_settings.policy.hook_timeout_seconds = 10.0
-    cb = SentinelCallback(settings=mock_settings)
+    cb = Callback(settings=mock_settings)
 
     engine = MagicMock()
     engine.timeout = 20.0  # 20 + 5 = 25 > 10 → adjust
@@ -615,16 +615,16 @@ async def test_compute_hook_timeout_engine_timeout_exceeds_configured(mock_setti
 async def test_compute_hook_timeout_logs_warning_when_adjusting(mock_settings, caplog):
     """A warning is logged when the timeout is auto-adjusted upward."""
     import logging
-    from opensentinel.proxy.hooks import SentinelCallback
+    from openbias.proxy.hooks import Callback
 
     mock_settings.policy.hook_timeout_seconds = 10.0
-    cb = SentinelCallback(settings=mock_settings)
+    cb = Callback(settings=mock_settings)
 
     engine = MagicMock()
     engine.timeout = 20.0
     cb._policy_engine = engine
 
-    with caplog.at_level(logging.WARNING, logger="opensentinel.proxy.hooks"):
+    with caplog.at_level(logging.WARNING, logger="openbias.proxy.hooks"):
         result = cb._compute_hook_timeout()
 
     assert result == 25.0
@@ -635,10 +635,10 @@ async def test_compute_hook_timeout_logs_warning_when_adjusting(mock_settings, c
 
 async def test_compute_hook_timeout_non_numeric_engine_timeout(mock_settings):
     """Non-numeric engine timeout is ignored and configured value is used."""
-    from opensentinel.proxy.hooks import SentinelCallback
+    from openbias.proxy.hooks import Callback
 
     mock_settings.policy.hook_timeout_seconds = 30.0
-    cb = SentinelCallback(settings=mock_settings)
+    cb = Callback(settings=mock_settings)
 
     engine = MagicMock()
     engine.timeout = "not-a-number"
@@ -649,7 +649,7 @@ async def test_compute_hook_timeout_non_numeric_engine_timeout(mock_settings):
 
 async def test_effective_hook_timeout_updated_after_eager_init(mock_settings):
     """After initialize(), _effective_hook_timeout reflects the engine configuration."""
-    from opensentinel.proxy.hooks import SentinelCallback
+    from openbias.proxy.hooks import Callback
 
     mock_settings.policy.hook_timeout_seconds = 10.0
     mock_settings.get_policy_config.return_value = {
@@ -664,11 +664,11 @@ async def test_effective_hook_timeout_updated_after_eager_init(mock_settings):
     mock_engine.name = "mock-judge"
     mock_engine.timeout = 20.0  # 20 + 5 = 25 > 10 → should adjust
 
-    cb = SentinelCallback(settings=mock_settings)
+    cb = Callback(settings=mock_settings)
     assert cb._effective_hook_timeout == 10.0  # pre-init: configured value
 
     with patch(
-        "opensentinel.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
         new=AsyncMock(return_value=mock_engine),
     ):
         await cb.initialize()
@@ -678,7 +678,7 @@ async def test_effective_hook_timeout_updated_after_eager_init(mock_settings):
 
 async def test_effective_hook_timeout_updated_after_lazy_init(mock_settings):
     """After lazy _get_interceptor(), _effective_hook_timeout is updated."""
-    from opensentinel.proxy.hooks import SentinelCallback
+    from openbias.proxy.hooks import Callback
 
     mock_settings.policy.hook_timeout_seconds = 10.0
     mock_settings.get_policy_config.return_value = {
@@ -693,11 +693,11 @@ async def test_effective_hook_timeout_updated_after_lazy_init(mock_settings):
     mock_engine.name = "mock-judge"
     mock_engine.timeout = 20.0  # triggers auto-adjust
 
-    cb = SentinelCallback(settings=mock_settings)
+    cb = Callback(settings=mock_settings)
     assert cb._effective_hook_timeout == 10.0
 
     with patch(
-        "opensentinel.policy.registry.PolicyEngineRegistry.create_and_initialize",
+        "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
         new=AsyncMock(return_value=mock_engine),
     ):
         await cb._get_interceptor()
@@ -712,7 +712,7 @@ async def test_effective_hook_timeout_updated_after_lazy_init(mock_settings):
 
 def test_judge_engine_timeout_no_client():
     """Before initialization, judge engine timeout returns 0.0."""
-    from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
+    from openbias.policy.engines.judge.engine import JudgePolicyEngine
 
     engine = JudgePolicyEngine()
     assert engine.timeout == 0.0
@@ -720,8 +720,8 @@ def test_judge_engine_timeout_no_client():
 
 def test_judge_engine_timeout_single_model():
     """Judge engine timeout accounts for retries: timeout * (max_retries + 1)."""
-    from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
-    from opensentinel.policy.engines.judge.client import JudgeClient
+    from openbias.policy.engines.judge.engine import JudgePolicyEngine
+    from openbias.policy.engines.judge.client import JudgeClient
 
     engine = JudgePolicyEngine()
     engine._client = JudgeClient()
@@ -733,8 +733,8 @@ def test_judge_engine_timeout_single_model():
 
 def test_judge_engine_timeout_multiple_models_returns_max():
     """Judge engine timeout returns the max worst-case across all models."""
-    from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
-    from opensentinel.policy.engines.judge.client import JudgeClient
+    from openbias.policy.engines.judge.engine import JudgePolicyEngine
+    from openbias.policy.engines.judge.client import JudgeClient
 
     engine = JudgePolicyEngine()
     engine._client = JudgeClient()
@@ -747,8 +747,8 @@ def test_judge_engine_timeout_multiple_models_returns_max():
 
 def test_judge_engine_timeout_empty_client():
     """Judge engine with an empty client (no models) returns 0.0."""
-    from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
-    from opensentinel.policy.engines.judge.client import JudgeClient
+    from openbias.policy.engines.judge.engine import JudgePolicyEngine
+    from openbias.policy.engines.judge.client import JudgeClient
 
     engine = JudgePolicyEngine()
     engine._client = JudgeClient()  # no models added
@@ -781,7 +781,7 @@ async def test_post_call_traces_once_when_both_hooks_fire(callback, mock_api_key
     await callback._post_call_success_impl(data, mock_api_key, response)
 
     # Verify the traced flag was set
-    assert data.get("metadata", {}).get("_opensentinel_traced") is True
+    assert data.get("metadata", {}).get("_openbias_traced") is True
 
     # Simulate _log_success_impl running for the same request data
     now = datetime.now(timezone.utc)
@@ -792,7 +792,7 @@ async def test_post_call_traces_once_when_both_hooks_fire(callback, mock_api_key
 
 
 async def test_post_call_guard_skips_tracing_if_already_traced(callback, mock_api_key):
-    """_post_call_success_impl does not call log_llm_call when _opensentinel_traced is set."""
+    """_post_call_success_impl does not call log_llm_call when _openbias_traced is set."""
     mock_tracer = MagicMock()
     callback._tracer = mock_tracer
     callback._get_interceptor = AsyncMock(return_value=None)
@@ -802,7 +802,7 @@ async def test_post_call_guard_skips_tracing_if_already_traced(callback, mock_ap
     data: dict = {
         "messages": [{"role": "user", "content": "hi"}],
         "model": "gpt-4o",
-        "metadata": {"_opensentinel_traced": True},
+        "metadata": {"_openbias_traced": True},
     }
     response = MagicMock()
     response.model = "gpt-4o"
@@ -814,7 +814,7 @@ async def test_post_call_guard_skips_tracing_if_already_traced(callback, mock_ap
 
 
 async def test_log_success_impl_guard_returns_early_if_traced(callback):
-    """_log_success_impl returns early when _opensentinel_traced flag is set."""
+    """_log_success_impl returns early when _openbias_traced flag is set."""
     from datetime import datetime, timezone
 
     mock_tracer = MagicMock()
@@ -824,7 +824,7 @@ async def test_log_success_impl_guard_returns_early_if_traced(callback):
 
     kwargs: dict = {
         "messages": [{"role": "user", "content": "hi"}],
-        "metadata": {"_opensentinel_traced": True},
+        "metadata": {"_openbias_traced": True},
     }
     now = datetime.now(timezone.utc)
 
@@ -842,7 +842,7 @@ async def test_log_success_impl_guard_returns_early_if_traced(callback):
 async def test_pre_call_generates_uuid_request_id(callback, mock_api_key, mock_cache):
     """_pre_call_impl generates a UUID and stores it in data metadata."""
     import uuid as uuid_mod
-    from opensentinel.core.interceptor.types import InterceptionResult
+    from openbias.core.interceptor.types import InterceptionResult
 
     data: dict = {"messages": [{"role": "user", "content": "hello"}], "model": "gpt-4"}
 
@@ -856,7 +856,7 @@ async def test_pre_call_generates_uuid_request_id(callback, mock_api_key, mock_c
     await callback.async_pre_call_hook(mock_api_key, mock_cache, data, "completion")
 
     # Verify UUID was stored in metadata
-    request_id = data["metadata"]["_opensentinel_request_id"]
+    request_id = data["metadata"]["_openbias_request_id"]
     # Should be a valid UUID4 string
     parsed = uuid_mod.UUID(request_id, version=4)
     assert str(parsed) == request_id
@@ -869,13 +869,13 @@ async def test_pre_call_generates_uuid_request_id(callback, mock_api_key, mock_c
 async def test_post_call_reuses_uuid_from_pre_call(callback, mock_api_key):
     """_post_call_success_impl reads the UUID stored by _pre_call_impl."""
     import uuid as uuid_mod
-    from opensentinel.core.interceptor.types import InterceptionResult
+    from openbias.core.interceptor.types import InterceptionResult
 
     stored_id = str(uuid_mod.uuid4())
     data: dict = {
         "messages": [{"role": "user", "content": "hello"}],
         "model": "gpt-4",
-        "metadata": {"_opensentinel_request_id": stored_id},
+        "metadata": {"_openbias_request_id": stored_id},
     }
     response = MagicMock()
     response.choices = []
@@ -897,7 +897,7 @@ async def test_post_call_reuses_uuid_from_pre_call(callback, mock_api_key):
 async def test_post_call_generates_fallback_uuid_when_missing(callback, mock_api_key):
     """_post_call_success_impl generates a new UUID if metadata has no stored ID."""
     import uuid as uuid_mod
-    from opensentinel.core.interceptor.types import InterceptionResult
+    from openbias.core.interceptor.types import InterceptionResult
 
     data: dict = {
         "messages": [{"role": "user", "content": "hello"}],
@@ -941,14 +941,14 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
     5. Interceptor.run_pre_call returns InterceptionResult(allowed=False)
     6. _pre_call_impl returns an Exception object
     """
-    from opensentinel.proxy.hooks import SentinelCallback
-    from opensentinel.core.interceptor import (
+    from openbias.proxy.hooks import Callback
+    from openbias.core.interceptor import (
         CheckerMode,
         CheckPhase,
         Interceptor,
         PolicyEngineChecker,
     )
-    from opensentinel.policy.protocols import Decision, EngineResult
+    from openbias.policy.protocols import Decision, EngineResult
 
     # Build settings with fail_action="block"
     settings = MagicMock()
@@ -960,7 +960,7 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
     settings.otel.enabled = False
     settings.debug = False
 
-    cb = SentinelCallback(settings=settings)
+    cb = Callback(settings=settings)
     cb._tracer = None
 
     # Create a mock policy engine that returns INTERVENE

@@ -1,5 +1,5 @@
 """
-Open Sentinel — Workflow Enforcement (FSM Engine)
+Open Bias — Workflow Enforcement (FSM Engine)
 
 Demonstrates deterministic workflow enforcement using a finite state machine
 with LTL-lite temporal constraints. A customer support agent is required to
@@ -38,7 +38,7 @@ Provider-agnostic:
 Run:
   cd examples/fsm_workflow
   export <PROVIDER>_API_KEY=...
-  osentinel serve                      # terminal 1
+  openbias serve                      # terminal 1
   python workflow_enforcement.py       # terminal 2
 """
 
@@ -67,7 +67,7 @@ if not MODEL:
     sys.exit(1)
 
 # -- Config ------------------------------------------------------------------
-PROXY_URL = os.getenv("OSNTL_URL", "http://localhost:4000/v1")
+PROXY_URL = os.getenv("OBIAS_URL", "http://localhost:4000/v1")
 SESSION_ID = "fsm-demo-001"
 
 client = OpenAI(base_url=PROXY_URL, api_key=API_KEY)
@@ -210,7 +210,7 @@ for i, user_input in enumerate(turns, 1):
             messages=messages,
             tools=tools,
             tool_choice="auto",
-            extra_headers={"X-Sentinel-Session-ID": SESSION_ID},
+            extra_headers={"X-OpenBias-Session-ID": SESSION_ID},
         )
         msg = response.choices[0].message
         messages.append(msg)
@@ -233,7 +233,7 @@ for i, user_input in enumerate(turns, 1):
                 messages=messages,
                 tools=tools,
                 tool_choice="auto",
-                extra_headers={"X-Sentinel-Session-ID": SESSION_ID},
+                extra_headers={"X-OpenBias-Session-ID": SESSION_ID},
             )
             msg = response.choices[0].message
             messages.append(msg)
@@ -247,5 +247,5 @@ for i, user_input in enumerate(turns, 1):
             print(f"  ✗ Error: {e}")
 
 print(f"\n{'━' * 70}")
-print("  Done. Check osentinel server logs for FSM state transitions + constraint checks.")
+print("  Done. Check openbias server logs for FSM state transitions + constraint checks.")
 print(f"{'━' * 70}\n")

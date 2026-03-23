@@ -1,7 +1,7 @@
 """Tests for _detect_engine_type heuristic in cli.py."""
 
 
-from opensentinel.cli import _detect_engine_type
+from openbias.cli import _detect_engine_type
 
 
 class TestDetectEngineType:

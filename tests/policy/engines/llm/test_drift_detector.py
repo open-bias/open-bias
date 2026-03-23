@@ -5,9 +5,9 @@ Tests for DriftDetector.
 from unittest.mock import patch
 
 import pytest
-from opensentinel.policy.engines.llm.drift_detector import DriftDetector
-from opensentinel.policy.engines.llm.models import SessionContext, DriftLevel
-from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+from openbias.policy.engines.llm.drift_detector import DriftDetector
+from openbias.policy.engines.llm.models import SessionContext, DriftLevel
+from openbias.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
 
 @pytest.fixture
@@ -197,7 +197,7 @@ class TestCentroidCaching:
     def test_failed_centroid_not_retried(self, detector):
         """Centroid computation should not retry after failure."""
         with patch(
-            "opensentinel.policy.engines.llm.drift_detector.DriftDetector._get_centroid",
+            "openbias.policy.engines.llm.drift_detector.DriftDetector._get_centroid",
             wraps=detector._get_centroid,
         ):
             # Force an ImportError on the lazy import
@@ -238,7 +238,7 @@ class TestDriftLevels:
 
     def test_drift_level_from_scores(self):
         """Test drift level determination from composite score."""
-        from opensentinel.policy.engines.llm.models import DriftScores
+        from openbias.policy.engines.llm.models import DriftScores
         
         # Nominal
         d1 = DriftScores.from_scores(0.1, 0.2)

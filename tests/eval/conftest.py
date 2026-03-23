@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from opensentinel.eval.runner import EvalResult, TurnResult
-from opensentinel.policy.protocols import Decision, EngineResult
+from openbias.eval.runner import EvalResult, TurnResult
+from openbias.policy.protocols import Decision, EngineResult
 
 
 def make_turn(

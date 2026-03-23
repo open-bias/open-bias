@@ -1,10 +1,10 @@
-"""Tests for opensentinel.core.utils response extraction utilities."""
+"""Tests for openbias.core.utils response extraction utilities."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
-from opensentinel.core.utils import (
+from openbias.core.utils import (
     extract_response_content,
     extract_tool_call_names,
     extract_tool_calls,

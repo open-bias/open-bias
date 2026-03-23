@@ -5,10 +5,10 @@ Tests for LLMConstraintEvaluator.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from opensentinel.policy.engines.llm.constraint_evaluator import LLMConstraintEvaluator
-from opensentinel.policy.engines.llm.llm_client import LLMClient, LLMClientError
-from opensentinel.policy.engines.llm.models import SessionContext, ConstraintEvaluation
-from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+from openbias.policy.engines.llm.constraint_evaluator import LLMConstraintEvaluator
+from openbias.policy.engines.llm.llm_client import LLMClient, LLMClientError
+from openbias.policy.engines.llm.models import SessionContext, ConstraintEvaluation
+from openbias.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
 
 @pytest.fixture
@@ -243,7 +243,7 @@ class TestResponseConstraintSelection:
 
     def _make_session(self, states: list[str]) -> SessionContext:
         """Build a session with the given ordered list of to_states as history."""
-        from opensentinel.policy.engines.llm.models import ConfidenceTier
+        from openbias.policy.engines.llm.models import ConfidenceTier
         session = SessionContext(
             session_id="test",
             workflow_name="response-test-workflow",
@@ -287,7 +287,7 @@ class TestResponseConstraintSelection:
 
     def test_response_self_match_not_satisfied(self, mock_llm_client):
         """RESPONSE constraint where trigger == target is never self-satisfied."""
-        from opensentinel.policy.engines.llm.models import ConfidenceTier
+        from openbias.policy.engines.llm.models import ConfidenceTier
         workflow = WorkflowDefinition(
             name="self-match-workflow",
             states=[

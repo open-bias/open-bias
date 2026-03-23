@@ -5,15 +5,15 @@ Tests for session context in judge prompts.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from opensentinel.policy.engines.judge.models import (
+from openbias.policy.engines.judge.models import (
     JudgeSessionContext,
     JudgeVerdict,
     JudgeScore,
     VerdictAction,
     EvaluationScope,
 )
-from opensentinel.policy.engines.judge.prompts import format_session_context_block
-from opensentinel.policy.engines.judge import JudgePolicyEngine
+from openbias.policy.engines.judge.prompts import format_session_context_block
+from openbias.policy.engines.judge import JudgePolicyEngine
 
 
 class TestFormatSessionContextBlock:

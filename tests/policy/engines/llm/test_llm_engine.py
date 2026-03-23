@@ -4,9 +4,9 @@ Tests for LLMPolicyEngine.
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from opensentinel.policy.engines.llm import LLMPolicyEngine
-from opensentinel.policy.engines.llm.models import ConfidenceTier, SessionContext
-from opensentinel.policy.protocols import Decision
+from openbias.policy.engines.llm import LLMPolicyEngine
+from openbias.policy.engines.llm.models import ConfidenceTier, SessionContext
+from openbias.policy.protocols import Decision
 
 
 @pytest.fixture

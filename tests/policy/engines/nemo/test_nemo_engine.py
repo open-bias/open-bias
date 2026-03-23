@@ -7,8 +7,8 @@ import sys
 mock_nemo = MagicMock()
 sys.modules["nemoguardrails"] = mock_nemo
 
-from opensentinel.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
-from opensentinel.policy.protocols import Decision
+from openbias.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
+from openbias.policy.protocols import Decision
 
 
 def _make_result(activated_rails: list | None = None) -> MagicMock:

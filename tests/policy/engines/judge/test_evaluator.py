@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from opensentinel.policy.engines.judge.client import JudgeClient
-from opensentinel.policy.engines.judge.evaluator import JudgeEvaluator, _predominant_scale
-from opensentinel.policy.engines.judge.models import (
+from openbias.policy.engines.judge.client import JudgeClient
+from openbias.policy.engines.judge.evaluator import JudgeEvaluator, _predominant_scale
+from openbias.policy.engines.judge.models import (
     EvaluationScope,
     EvaluationType,
     Rubric,
@@ -191,7 +191,7 @@ class TestEvaluateConversation:
         format_conversation_block only increments turn for non-system, non-tool messages.
         evaluate_conversation must use the same filter so the header count matches reality.
         """
-        from opensentinel.policy.engines.judge.prompts import format_conversation_block
+        from openbias.policy.engines.judge.prompts import format_conversation_block
 
         conversation_with_tools = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -273,7 +273,7 @@ class TestEvaluatePairwise:
 
 class TestCompositeScoring:
     def test_weighted_composite(self, evaluator):
-        from opensentinel.policy.engines.judge.models import JudgeScore
+        from openbias.policy.engines.judge.models import JudgeScore
 
         scores = [
             JudgeScore(criterion="a", score=5, max_score=5, reasoning="ok"),  # normalized 1.0
@@ -287,7 +287,7 @@ class TestCompositeScoring:
         assert composite == 0.5
 
     def test_weighted_composite_unequal_weights(self, evaluator):
-        from opensentinel.policy.engines.judge.models import JudgeScore
+        from openbias.policy.engines.judge.models import JudgeScore
 
         scores = [
             JudgeScore(criterion="a", score=5, max_score=5, reasoning="ok"),  # normalized 1.0
@@ -305,7 +305,7 @@ class TestCompositeScoring:
 
     def test_zero_confidence_fills_excluded(self, evaluator):
         """Synthetic fills (confidence=0.0) should not drag down composite score."""
-        from opensentinel.policy.engines.judge.models import JudgeScore
+        from openbias.policy.engines.judge.models import JudgeScore
 
         scores = [
             JudgeScore(criterion="a", score=5, max_score=5, reasoning="ok", confidence=0.9),  # normalized 1.0
@@ -325,7 +325,7 @@ class TestCompositeScoring:
 
     def test_all_zero_confidence_returns_zero(self, evaluator):
         """If all scores have confidence=0.0, composite should be 0.0 (not division by zero)."""
-        from opensentinel.policy.engines.judge.models import JudgeScore
+        from openbias.policy.engines.judge.models import JudgeScore
 
         scores = [
             JudgeScore(criterion="a", score=1, max_score=5, reasoning="fill", confidence=0.0),

@@ -62,7 +62,7 @@ Uses an LLM to evaluate every agent response against configurable rubrics. The j
 | `safety` | turn | binary | Harm, PII, unauthorized actions |
 | `conversation_policy` | conversation | 5-point | Goal progression, consistency, drift |
 
-Custom rubrics are defined as YAML files. See the [judge engine README](../opensentinel/policy/engines/judge/README.md) for the rubric schema.
+Custom rubrics are defined as YAML files. See the [judge engine README](../openbias/policy/engines/judge/README.md) for the rubric schema.
 
 ### Sync vs async modes
 
@@ -90,10 +90,10 @@ Full configuration reference: [docs/configuration.md](configuration.md#judge-eng
 
 You can generate judge rubrics from natural language using the CLI:
 ```bash
-osentinel compile "be professional, never leak PII" --engine judge -o policy.yaml
+openbias compile "be professional, never leak PII" --engine judge -o policy.yaml
 ```
 
-Deep dive: [opensentinel/policy/engines/judge/README.md](../opensentinel/policy/engines/judge/README.md)
+Deep dive: [openbias/policy/engines/judge/README.md](../openbias/policy/engines/judge/README.md)
 
 ---
 
@@ -159,10 +159,10 @@ Full configuration reference: [docs/configuration.md](configuration.md#fsm-engin
 
 You can generate FSM workflows from sequence descriptions:
 ```bash
-osentinel compile "verify identity before refunds" --engine fsm -o workflow.yaml
+openbias compile "verify identity before refunds" --engine fsm -o workflow.yaml
 ```
 
-Deep dive: [opensentinel/policy/engines/fsm/README.md](../opensentinel/policy/engines/fsm/README.md)
+Deep dive: [openbias/policy/engines/fsm/README.md](../openbias/policy/engines/fsm/README.md)
 
 ---
 
@@ -208,7 +208,7 @@ llm:
 
 Full configuration reference: [docs/configuration.md](configuration.md#llm-engine)
 
-Deep dive: [opensentinel/policy/engines/llm/README.md](../opensentinel/policy/engines/llm/README.md)
+Deep dive: [openbias/policy/engines/llm/README.md](../openbias/policy/engines/llm/README.md)
 
 ---
 
@@ -234,7 +234,7 @@ Wraps NVIDIA's [NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails) as a
 ### Prerequisites
 
 ```bash
-pip install 'opensentinel[nemo]'
+pip install 'openbias[nemo]'
 ```
 
 ### Fail-open vs fail-closed
@@ -245,8 +245,8 @@ pip install 'opensentinel[nemo]'
 ### Bridge actions
 
 The engine registers two custom NeMo actions for use in Colang flows:
-- `sentinel_log_violation`: Logs a violation through OpenSentinel's logging system
-- `sentinel_request_intervention`: Requests an OpenSentinel intervention from within a Colang flow
+- `openbias_log_violation`: Logs a violation through OpenBias's logging system
+- `openbias_request_intervention`: Requests an OpenBias intervention from within a Colang flow
 
 ### Minimal config
 
@@ -261,9 +261,9 @@ Full configuration reference: [docs/configuration.md](configuration.md#nemo-guar
 
 You can generate NeMo configurations (Colang flows + config.yml):
 ```bash
-osentinel compile "block hacking requests" --engine nemo -o ./nemo_config
+openbias compile "block hacking requests" --engine nemo -o ./nemo_config
 ```
 
-Deep dive: [opensentinel/policy/engines/nemo/README.md](../opensentinel/policy/engines/nemo/README.md)
+Deep dive: [openbias/policy/engines/nemo/README.md](../openbias/policy/engines/nemo/README.md)
 
 

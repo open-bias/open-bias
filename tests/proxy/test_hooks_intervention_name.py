@@ -9,14 +9,14 @@ import asyncio
 from typing import Any
 from unittest.mock import MagicMock
 
-from opensentinel.core.interceptor import (
+from openbias.core.interceptor import (
     CheckerMode,
     CheckPhase,
     Decision,
     EngineResult,
     Interceptor,
 )
-from opensentinel.core.interceptor.adapters import PolicyEngineChecker
+from openbias.core.interceptor.adapters import PolicyEngineChecker
 
 # ---------------------------------------------------------------------------
 # Helpers

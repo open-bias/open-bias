@@ -1,10 +1,10 @@
 # Architecture
 
-Open Sentinel is a transparent proxy between your application and LLM providers. It intercepts every call, evaluates it against policy engines, and intervenes when violations are detected.
+Open Bias is a transparent proxy between your application and LLM providers. It intercepts every call, evaluates it against policy engines, and intervenes when violations are detected.
 
 ```
 ┌─────────────┐    ┌───────────────────────────────────────────┐    ┌─────────────┐
-│  Your App   │───▶│              OPEN SENTINEL                │───▶│ LLM Provider│
+│  Your App   │───▶│              OPEN BIAS                │───▶│ LLM Provider│
 │             │    │  ┌────────-┐  ┌─────────────┐             │    │             │
 │             │◀───│  │ Hooks   │─▶│ Interceptor │             │◀───│             │
 └─────────────┘    │  │safe_hook│  │ ┌─────────┐ │             │    └─────────────┘
@@ -27,12 +27,12 @@ Open Sentinel is a transparent proxy between your application and LLM providers.
 
 ## Components
 
-### Proxy Layer (`opensentinel/proxy/`)
+### Proxy Layer (`openbias/proxy/`)
 
 Wraps LiteLLM to intercept all LLM traffic.
 
-- **`server.py`** -- `SentinelProxy`. Main entry point. Wraps LiteLLM Router with Open Sentinel callbacks.
-- **`hooks.py`** -- `SentinelCallback`. Implements LiteLLM's `CustomLogger` interface. Four hooks:
+- **`server.py`** -- `Proxy`. Main entry point. Wraps LiteLLM Router with Open Bias callbacks.
+- **`hooks.py`** -- `Callback`. Implements LiteLLM's `CustomLogger` interface. Four hooks:
 
 | Hook | Timing | Purpose |
 |------|--------|---------|
@@ -41,9 +41,9 @@ Wraps LiteLLM to intercept all LLM traffic.
 | `async_post_call_success_hook` | After LLM response | Run POST_CALL checkers, start async checkers, complete trace |
 | `async_post_call_failure_hook` | After LLM error | Log failure |
 
-- **`middleware.py`** -- Session ID extraction. Priority: `x-sentinel-session-id` header > `metadata.session_id` > `metadata.run_id` (LangChain) > `user` field > `thread_id` > hash of first message > random UUID.
+- **`middleware.py`** -- Session ID extraction. Priority: `x-openbias-session-id` header > `metadata.session_id` > `metadata.run_id` (LangChain) > `user` field > `thread_id` > hash of first message > random UUID.
 
-### Interceptor (`opensentinel/core/interceptor/`)
+### Interceptor (`openbias/core/interceptor/`)
 
 Orchestration layer between hooks and policy engines. Runs checkers in two phases (PRE_CALL, POST_CALL) with two execution modes (SYNC, ASYNC).
 
@@ -53,13 +53,13 @@ Orchestration layer between hooks and policy engines. Runs checkers in two phase
 
 Policy engines are wrapped as `PolicyEngineChecker` instances via `adapters.py`. The hook layer doesn't know engine internals.
 
-### Policy Engines (`opensentinel/policy/`)
+### Policy Engines (`openbias/policy/`)
 
 All engines implement the `PolicyEngine` protocol (`protocols.py`): `initialize`, `evaluate_request`, `evaluate_response`, `get_session_state`, `reset_session`, `shutdown`. Engines register via `@register_engine("type")` and are created through `PolicyEngineRegistry`.
 
-Engine-specific docs: [engines.md](engines.md). Engine-specific READMEs live in each engine's source directory under `opensentinel/policy/engines/`.
+Engine-specific docs: [engines.md](engines.md). Engine-specific READMEs live in each engine's source directory under `openbias/policy/engines/`.
 
-### Intervention Strategies (`opensentinel/core/intervention/`)
+### Intervention Strategies (`openbias/core/intervention/`)
 
 | Strategy | Mechanism |
 |----------|-----------|
@@ -67,9 +67,9 @@ Engine-specific docs: [engines.md](engines.md). Engine-specific READMEs live in 
 | `USER_MESSAGE_INJECT` | Inserts a `[System Note]` as user message |
 | `RESPONSE_MODIFICATION` | Modifies current response content or tool calls |
 
-### Tracing (`opensentinel/tracing/`)
+### Tracing (`openbias/tracing/`)
 
-`SentinelTracer` provides session-aware OpenTelemetry tracing. Spans are grouped by session. Uses GenAI semantic conventions (`gen_ai.request.model`, `gen_ai.usage.prompt_tokens`). Supports OTLP and Langfuse backends.
+`Tracer` provides session-aware OpenTelemetry tracing. Spans are grouped by session. Uses GenAI semantic conventions (`gen_ai.request.model`, `gen_ai.usage.prompt_tokens`). Supports OTLP and Langfuse backends.
 
 ## Data Flows
 

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from opensentinel.policy.engines.fsm.workflow.state_machine import (
+from openbias.policy.engines.fsm.workflow.state_machine import (
     SessionState,
     TransitionResult,
     WorkflowStateMachine,
@@ -158,7 +158,7 @@ class TestSessionState:
 
     def test_get_state_sequence(self):
         """Test getting state sequence from history."""
-        from opensentinel.policy.engines.fsm.workflow.state_machine import StateHistoryEntry
+        from openbias.policy.engines.fsm.workflow.state_machine import StateHistoryEntry
 
         session = SessionState(
             session_id="test",
@@ -287,7 +287,7 @@ class TestMaxHistory:
         # start(1) -> middle(2) -> reset -> start(1) -> middle(2) -> ...
         # Instead, let's just verify the cap works with direct history manipulation
         session = await machine.get_or_create_session("s1")
-        from opensentinel.policy.engines.fsm.workflow.state_machine import StateHistoryEntry
+        from openbias.policy.engines.fsm.workflow.state_machine import StateHistoryEntry
         from datetime import datetime, timezone
 
         # Manually stuff history to simulate many transitions

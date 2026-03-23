@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from opensentinel.eval.runner import EvalRunner
-from opensentinel.policy.protocols import Decision
-from opensentinel.policy.registry import PolicyEngineRegistry
+from openbias.eval.runner import EvalRunner
+from openbias.policy.protocols import Decision
+from openbias.policy.registry import PolicyEngineRegistry
 
 EVALS_DIR = Path(__file__).resolve().parent.parent.parent / "evals" / "fsm"
 WORKFLOW_PATH = (

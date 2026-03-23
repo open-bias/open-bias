@@ -10,26 +10,26 @@ test:
 	pytest
 
 test-cov:
-	pytest --cov=opensentinel --cov-report=term-missing
+	pytest --cov=openbias --cov-report=term-missing
 
 lint:
-	ruff check opensentinel/ tests/
+	ruff check openbias/ tests/
 
 typecheck:
-	mypy opensentinel/
+	mypy openbias/
 
 format:
-	ruff check --fix opensentinel/ tests/
-	ruff format opensentinel/ tests/
+	ruff check --fix openbias/ tests/
+	ruff format openbias/ tests/
 
 serve:
-	osentinel serve
+	openbias serve
 
 eval:
-	osentinel eval
+	openbias eval
 
 validate:
-	osentinel validate $(file)
+	openbias validate $(file)
 
 clean:
 	rm -rf .pytest_cache .mypy_cache .ruff_cache

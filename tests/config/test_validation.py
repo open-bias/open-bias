@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import pytest
 import yaml
-from opensentinel.config.settings import SentinelSettings
+from openbias.config.settings import Settings
 
 class TestConfigValidation:
 
@@ -15,7 +15,7 @@ class TestConfigValidation:
             f.write("engine: judge\npolicy:\n  - 'missing quote")
             
         with pytest.raises(Exception, match="while scanning a quoted scalar"):
-            SentinelSettings(_config_path=str(config_path))
+            Settings(_config_path=str(config_path))
 
     def test_missing_policy_file_raises_error(self, tmp_path):
         """Test that referencing a non-existent policy file raises ValueError during validation."""
@@ -32,7 +32,7 @@ class TestConfigValidation:
             yaml.dump(config, f)
         
         # Disable .env loading to prevent pollution
-        settings = SentinelSettings(_config_path=str(config_path), _env_file=None)
+        settings = Settings(_config_path=str(config_path), _env_file=None)
         
         with pytest.raises(ValueError, match="Policy configuration file not found"):
             settings.validate()
@@ -44,7 +44,7 @@ class TestConfigValidation:
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
         
-        settings = SentinelSettings(
+        settings = Settings(
             # Override to ensure fallback logic doesn't pick up something else
             proxy={"default_model": "gpt-4o-mini"},
             openai_api_key=None,
@@ -58,7 +58,7 @@ class TestConfigValidation:
         """Test that valid config with API keys passes validation."""
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test-123")
         
-        settings = SentinelSettings(
+        settings = Settings(
             proxy={"default_model": "gpt-4o-mini"}
         )
         
@@ -70,7 +70,7 @@ class TestConfigValidation:
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         
         # Instantiate settings with explicit key and no .env file interference
-        settings = SentinelSettings(openai_api_key="sk-explicit-test", _env_file=None)
+        settings = Settings(openai_api_key="sk-explicit-test", _env_file=None)
         
         # Check if it was pushed to environ
         assert os.environ.get("OPENAI_API_KEY") == "sk-explicit-test"
@@ -79,7 +79,7 @@ class TestConfigValidation:
         """Test that default configuration without any file uses judge engine and passes validation if API key and model present."""
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
 
-        settings = SentinelSettings(
+        settings = Settings(
             proxy={"default_model": "gpt-4o-mini"},
             _env_file=None,
         )
@@ -95,7 +95,7 @@ class TestConfigValidation:
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
-        settings = SentinelSettings(
+        settings = Settings(
             policy={"engine": {"type": "fsm"}},
             _env_file=None,
         )
@@ -106,7 +106,7 @@ class TestConfigValidation:
 
     def test_non_fsm_engine_still_requires_model(self):
         """Non-FSM engines (e.g. judge) must still fail validation without a model/API key."""
-        settings = SentinelSettings(
+        settings = Settings(
             policy={"engine": {"type": "judge"}},
             openai_api_key=None,
             anthropic_api_key=None,

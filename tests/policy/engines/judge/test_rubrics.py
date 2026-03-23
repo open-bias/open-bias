@@ -3,12 +3,12 @@ Tests for rubric registry and built-in rubrics.
 """
 
 import pytest
-from opensentinel.policy.engines.judge.models import (
+from openbias.policy.engines.judge.models import (
     EvaluationType,
     EvaluationScope,
     ScoreScale,
 )
-from opensentinel.policy.engines.judge.rubrics import RubricRegistry
+from openbias.policy.engines.judge.rubrics import RubricRegistry
 
 
 class TestRubricRegistry:
@@ -70,7 +70,7 @@ class TestRubricRegistry:
 
 class TestCreateRulesRubric:
     def test_creates_one_criterion_per_rule(self):
-        from opensentinel.policy.engines.judge.rubrics import create_rules_rubric
+        from openbias.policy.engines.judge.rubrics import create_rules_rubric
         rules = ["No financial advice", "Be professional"]
         rubric = create_rules_rubric(rules)
 
@@ -90,18 +90,18 @@ class TestCreateRulesRubric:
         assert "Be professional" in rubric.prompt_overrides["additional_instructions"]
 
     def test_single_rule_creates_single_criterion(self):
-        from opensentinel.policy.engines.judge.rubrics import create_rules_rubric
+        from openbias.policy.engines.judge.rubrics import create_rules_rubric
         rubric = create_rules_rubric(["Never lie"])
         assert len(rubric.criteria) == 1
         assert rubric.criteria[0].scale == ScoreScale.BINARY
 
     def test_custom_name(self):
-        from opensentinel.policy.engines.judge.rubrics import create_rules_rubric
+        from openbias.policy.engines.judge.rubrics import create_rules_rubric
         rubric = create_rules_rubric(["rule1"], name="my_policy")
         assert rubric.name == "my_policy"
 
     def test_three_rules_all_binary(self):
-        from opensentinel.policy.engines.judge.rubrics import create_rules_rubric
+        from openbias.policy.engines.judge.rubrics import create_rules_rubric
         rules = ["Rule A", "Rule B", "Rule C"]
         rubric = create_rules_rubric(rules)
         assert len(rubric.criteria) == 3

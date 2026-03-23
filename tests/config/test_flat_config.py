@@ -1,26 +1,26 @@
 import pytest
 
-from opensentinel.config.settings import SentinelSettings, YamlConfigSource
+from openbias.config.settings import Settings, YamlConfigSource
 
 
-def test_osntl_config_env_var_discovery(monkeypatch):
-    """Verify that OSNTL_CONFIG is still used to find the config file path."""
+def test_obias_config_env_var_discovery(monkeypatch):
+    """Verify that OBIAS_CONFIG is still used to find the config file path."""
     # This is handled manually in YamlConfigSource, so it should still work
-    monkeypatch.setenv("OSNTL_CONFIG", "/tmp/nonexistent.yaml")
+    monkeypatch.setenv("OBIAS_CONFIG", "/tmp/nonexistent.yaml")
 
-    settings = SentinelSettings()
+    settings = Settings()
     # It won't fail to initialize, but YamlConfigSource will have attempted to load it
-    # We can check its internal state or just ensure no other OSNTL_ vars are picked up
+    # We can check its internal state or just ensure no other OBIAS_ vars are picked up
 
-    monkeypatch.setenv("OSNTL_DEBUG", "true")
-    settings = SentinelSettings()
-    assert settings.debug is True  # OSNTL_ prefix maps to settings fields
+    monkeypatch.setenv("OBIAS_DEBUG", "true")
+    settings = Settings()
+    assert settings.debug is True  # OBIAS_ prefix maps to settings fields
 
 
 def test_standard_api_keys_work(monkeypatch):
-    """Verify that standard API keys are still picked up without OSNTL_ prefix."""
+    """Verify that standard API keys are still picked up without OBIAS_ prefix."""
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-123")
-    settings = SentinelSettings()
+    settings = Settings()
     assert settings.openai_api_key == "sk-test-123"
 
 
@@ -69,16 +69,16 @@ class TestInterventionDefaults:
 
     def test_default_strategy_is_user_message_inject(self):
         """PolicyConfig defaults to user_message_inject strategy."""
-        settings = SentinelSettings()
+        settings = Settings()
         assert settings.policy.default_strategy == "user_message_inject"
 
 
 class TestGetPolicyConfig:
-    """Tests for SentinelSettings.get_policy_config() model injection."""
+    """Tests for Settings.get_policy_config() model injection."""
 
     def test_injects_models_from_global_default_model(self):
         """When judge engine has no explicit model, inject from proxy.default_model."""
-        settings = SentinelSettings()
+        settings = Settings()
         settings.proxy.default_model = "gpt-4o"
         settings.policy.engine.type = "judge"
         settings.policy.engine.config = {}
@@ -90,7 +90,7 @@ class TestGetPolicyConfig:
 
     def test_no_injection_when_models_already_set(self):
         """When judge engine already has models, don't override."""
-        settings = SentinelSettings()
+        settings = Settings()
         settings.proxy.default_model = "gpt-4o"
         settings.policy.engine.type = "judge"
         settings.policy.engine.config = {
@@ -104,7 +104,7 @@ class TestGetPolicyConfig:
 
     def test_no_injection_for_non_judge_engine(self):
         """Non-judge engines should not get models injected."""
-        settings = SentinelSettings()
+        settings = Settings()
         settings.proxy.default_model = "gpt-4o"
         settings.policy.engine.type = "fsm"
         settings.policy.engine.config = {}
@@ -114,7 +114,7 @@ class TestGetPolicyConfig:
 
     def test_no_injection_when_no_default_model(self):
         """When there's no global default_model, don't inject."""
-        settings = SentinelSettings()
+        settings = Settings()
         settings.proxy.default_model = None
         settings.policy.engine.type = "judge"
         settings.policy.engine.config = {}
@@ -134,7 +134,7 @@ class TestFailAction:
 
     def test_default_fail_action_is_intervene(self):
         """PolicyConfig defaults to fail_action='intervene'."""
-        settings = SentinelSettings()
+        settings = Settings()
         assert settings.policy.fail_action == "intervene"
 
     def test_fail_action_maps_from_yaml(self):
@@ -167,7 +167,7 @@ class TestFailOpen:
 
     def test_default_fail_open_is_true(self):
         """PolicyConfig defaults to fail_open=True."""
-        settings = SentinelSettings()
+        settings = Settings()
         assert settings.policy.fail_open is True
 
     def test_fail_open_false_maps_from_yaml(self):

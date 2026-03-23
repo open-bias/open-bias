@@ -1,4 +1,4 @@
-"""Unit tests for opensentinel.policy.protocols."""
+"""Unit tests for openbias.policy.protocols."""
 
 from __future__ import annotations
 
@@ -7,13 +7,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from opensentinel.policy.protocols import (
+from openbias.policy.protocols import (
     Decision,
     EngineResult,
     PolicyEngine,
     require_initialized,
 )
-from opensentinel.policy.engines.stateful import (
+from openbias.policy.engines.stateful import (
     StateClassificationResult,
     StatefulPolicyEngine,
 )

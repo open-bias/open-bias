@@ -4,12 +4,12 @@ from datetime import datetime, timezone
 
 import pytest
 
-from opensentinel.policy.engines.judge.models import JudgeSessionContext
-from opensentinel.policy.engines.fsm.workflow.state_machine import (
+from openbias.policy.engines.judge.models import JudgeSessionContext
+from openbias.policy.engines.fsm.workflow.state_machine import (
     SessionState,
     StateHistoryEntry,
 )
-from opensentinel.policy.engines.llm.models import ConfidenceTier, SessionContext
+from openbias.policy.engines.llm.models import ConfidenceTier, SessionContext
 
 
 def _assert_utc_aware(dt: datetime) -> None:

@@ -3,14 +3,14 @@ Tests for InterventionHandler.
 """
 
 import pytest
-from opensentinel.policy.engines.llm.intervention import InterventionHandler
-from opensentinel.policy.engines.llm.models import (
+from openbias.policy.engines.llm.intervention import InterventionHandler
+from openbias.policy.engines.llm.models import (
     SessionContext,
     ConstraintEvaluation,
     DriftScores,
     DriftLevel,
 )
-from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+from openbias.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
 
 @pytest.fixture

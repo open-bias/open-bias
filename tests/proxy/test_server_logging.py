@@ -1,4 +1,4 @@
-"""Tests for SentinelProxy._setup_logging() and generate_litellm_config() behaviour."""
+"""Tests for Proxy._setup_logging() and generate_litellm_config() behaviour."""
 
 from unittest.mock import patch
 
@@ -6,8 +6,8 @@ import litellm
 import pytest
 import yaml
 
-from opensentinel.config.settings import SentinelSettings
-from opensentinel.proxy.server import SentinelProxy
+from openbias.config.settings import Settings
+from openbias.proxy.server import Proxy
 
 
 @pytest.fixture(autouse=True)
@@ -18,9 +18,9 @@ def reset_litellm_verbose():
     litellm.set_verbose = original
 
 
-def _make_proxy(**kwargs) -> SentinelProxy:
-    settings = SentinelSettings(**kwargs)
-    return SentinelProxy(settings)
+def _make_proxy(**kwargs) -> Proxy:
+    settings = Settings(**kwargs)
+    return Proxy(settings)
 
 
 # ---------------------------------------------------------------------------
@@ -37,17 +37,17 @@ def test_debug_mode_does_not_enable_litellm_verbose():
 
 
 # ---------------------------------------------------------------------------
-# debug=True must emit a warning about OSNTL_LITELLM_VERBOSE
+# debug=True must emit a warning about OBIAS_LITELLM_VERBOSE
 # ---------------------------------------------------------------------------
 
 
 def test_debug_mode_emits_warning():
     proxy = _make_proxy(debug=True, litellm_verbose=False)
-    with patch("opensentinel.proxy.server.logger") as mock_logger:
+    with patch("openbias.proxy.server.logger") as mock_logger:
         proxy._setup_logging()
     mock_logger.warning.assert_called_once()
     call_args = mock_logger.warning.call_args[0][0]
-    assert "OSNTL_LITELLM_VERBOSE" in call_args
+    assert "OBIAS_LITELLM_VERBOSE" in call_args
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +57,7 @@ def test_debug_mode_emits_warning():
 
 def test_no_warning_when_debug_false():
     proxy = _make_proxy(debug=False, litellm_verbose=False)
-    with patch("opensentinel.proxy.server.logger") as mock_logger:
+    with patch("openbias.proxy.server.logger") as mock_logger:
         proxy._setup_logging()
     mock_logger.warning.assert_not_called()
 
@@ -82,32 +82,32 @@ def test_litellm_verbose_flag_enables_verbose():
 def test_debug_and_litellm_verbose_both_set():
     litellm.set_verbose = False
     proxy = _make_proxy(debug=True, litellm_verbose=True)
-    with patch("opensentinel.proxy.server.logger") as mock_logger:
+    with patch("openbias.proxy.server.logger") as mock_logger:
         proxy._setup_logging()
     assert litellm.set_verbose is True
     mock_logger.warning.assert_called_once()
     call_args = mock_logger.warning.call_args[0][0]
-    assert "OSNTL_LITELLM_VERBOSE" in call_args
+    assert "OBIAS_LITELLM_VERBOSE" in call_args
 
 
 # ---------------------------------------------------------------------------
-# SentinelSettings: litellm_verbose defaults to False
+# Settings: litellm_verbose defaults to False
 # ---------------------------------------------------------------------------
 
 
 def test_settings_litellm_verbose_default():
-    settings = SentinelSettings()
+    settings = Settings()
     assert settings.litellm_verbose is False
 
 
 # ---------------------------------------------------------------------------
-# SentinelSettings: litellm_verbose respects env var OSNTL_LITELLM_VERBOSE
+# Settings: litellm_verbose respects env var OBIAS_LITELLM_VERBOSE
 # ---------------------------------------------------------------------------
 
 
 def test_settings_litellm_verbose_from_env(monkeypatch):
-    monkeypatch.setenv("OSNTL_LITELLM_VERBOSE", "true")
-    settings = SentinelSettings()
+    monkeypatch.setenv("OBIAS_LITELLM_VERBOSE", "true")
+    settings = Settings()
     assert settings.litellm_verbose is True
 
 

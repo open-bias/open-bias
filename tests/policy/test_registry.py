@@ -1,4 +1,4 @@
-"""Unit tests for opensentinel.policy.registry."""
+"""Unit tests for openbias.policy.registry."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from opensentinel.policy.protocols import Decision, EngineResult, PolicyEngine
-from opensentinel.policy.registry import PolicyEngineRegistry, register_engine
+from openbias.policy.protocols import Decision, EngineResult, PolicyEngine
+from openbias.policy.registry import PolicyEngineRegistry, register_engine
 
 
 # ---------------------------------------------------------------------------

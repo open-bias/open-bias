@@ -1,6 +1,6 @@
 ---
 name: new-policy-engine
-description: Guide for creating a new policy engine under opensentinel/policy/engines/
+description: Guide for creating a new policy engine under openbias/policy/engines/
 ---
 
 # Creating a New Policy Engine
@@ -8,7 +8,7 @@ description: Guide for creating a new policy engine under opensentinel/policy/en
 ## Decision: PolicyEngine vs StatefulPolicyEngine
 
 - **`PolicyEngine`** — Use when each request/response is evaluated independently against policy. No state transitions between turns. Examples: Judge (rubric scoring), NeMo (guardrails).
-- **`StatefulPolicyEngine`** (from `opensentinel.policy.engines.stateful`) — Use when you need to track state transitions across turns (e.g., FSM workflows). Adds `classify_response`, `get_current_state`, `get_state_history`, `get_valid_next_states`.
+- **`StatefulPolicyEngine`** (from `openbias.policy.engines.stateful`) — Use when you need to track state transitions across turns (e.g., FSM workflows). Adds `classify_response`, `get_current_state`, `get_state_history`, `get_valid_next_states`.
 
 If you're unsure, start with `PolicyEngine`. You can always extend later.
 
@@ -17,7 +17,7 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
 1. **Create the engine package**
 
    ```
-   opensentinel/policy/engines/<name>/
+   openbias/policy/engines/<name>/
    ├── __init__.py    # Export engine class
    ├── engine.py      # Engine implementation
    └── compiler.py    # (Optional) NL-to-config compiler
@@ -28,13 +28,13 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
    ```python
    from typing import Any, Dict, Optional
 
-   from opensentinel.policy.protocols import (
+   from openbias.policy.protocols import (
        Decision,
        EngineResult,
        PolicyEngine,
        require_initialized,
    )
-   from opensentinel.policy.registry import register_engine
+   from openbias.policy.registry import register_engine
 
    @register_engine("<name>")
    class MyPolicyEngine(PolicyEngine):
@@ -91,21 +91,21 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
 3. **Export in the engine's `__init__.py`**
 
    ```python
-   from opensentinel.policy.engines.<name>.engine import MyPolicyEngine
+   from openbias.policy.engines.<name>.engine import MyPolicyEngine
 
    __all__ = ["MyPolicyEngine"]
    ```
 
-4. **Register the import** in `opensentinel/policy/engines/__init__.py`
+4. **Register the import** in `openbias/policy/engines/__init__.py`
 
    Add a line alongside existing imports:
    ```python
-   from opensentinel.policy.engines import fsm, nemo, llm, judge, <name>
+   from openbias.policy.engines import fsm, nemo, llm, judge, <name>
    ```
 
-5. **(Optional) Create a compiler** — see `opensentinel/policy/compiler/` for the `PolicyCompiler` ABC and `LLMPolicyCompiler` base class. Use `@register_compiler("<name>")`. Wire it via `get_compiler()` on your engine.
+5. **(Optional) Create a compiler** — see `openbias/policy/compiler/` for the `PolicyCompiler` ABC and `LLMPolicyCompiler` base class. Use `@register_compiler("<name>")`. Wire it via `get_compiler()` on your engine.
 
-6. **Add a config example** for `osentinel.yaml`
+6. **Add a config example** for `openbias.yaml`
 
    ```yaml
    engine: <name>
@@ -129,10 +129,10 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
 
 | File | What to look at |
 |------|----------------|
-| `opensentinel/policy/protocols.py` | `PolicyEngine` ABC, `Decision` enum, `EngineResult` dataclass |
-| `opensentinel/policy/engines/stateful.py` | `StatefulPolicyEngine` ABC, `StateClassificationResult` dataclass |
-| `opensentinel/policy/registry.py` | `@register_engine` decorator, `PolicyEngineRegistry` |
-| `opensentinel/policy/engines/__init__.py` | Where to add your import |
-| `opensentinel/policy/engines/fsm/` | Stateful engine example (smallest engine at ~340 lines) |
-| `opensentinel/policy/engines/nemo/` | Stateless engine wrapping an external library |
-| `opensentinel/policy/engines/judge/` | Complex example with LLM calls and rubric scoring |
+| `openbias/policy/protocols.py` | `PolicyEngine` ABC, `Decision` enum, `EngineResult` dataclass |
+| `openbias/policy/engines/stateful.py` | `StatefulPolicyEngine` ABC, `StateClassificationResult` dataclass |
+| `openbias/policy/registry.py` | `@register_engine` decorator, `PolicyEngineRegistry` |
+| `openbias/policy/engines/__init__.py` | Where to add your import |
+| `openbias/policy/engines/fsm/` | Stateful engine example (smallest engine at ~340 lines) |
+| `openbias/policy/engines/nemo/` | Stateless engine wrapping an external library |
+| `openbias/policy/engines/judge/` | Complex example with LLM calls and rubric scoring |

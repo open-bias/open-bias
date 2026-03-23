@@ -1,8 +1,8 @@
 # Configuration Reference
 
-OpenSentinel reads configuration from three sources, applied in this order (highest priority wins):
+OpenBias reads configuration from three sources, applied in this order (highest priority wins):
 
-1. `osentinel.yaml` (or `osentinel.yml`) in the working directory
+1. `openbias.yaml` (or `openbias.yml`) in the working directory
 2. API key environment variables (e.g., `OPENAI_API_KEY`)
 3. Built-in defaults
 
@@ -10,12 +10,12 @@ API keys are always read from environment variables or `.env` files. Never put k
 
 ## Config File Discovery
 
-OpenSentinel looks for the config file in this order:
+OpenBias looks for the config file in this order:
 
-1. Explicit path via `osentinel serve --config path/to/config.yaml`
-2. `$OSNTL_CONFIG` environment variable
-3. `./osentinel.yaml` in the current directory
-4. `./osentinel.yml` in the current directory
+1. Explicit path via `openbias serve --config path/to/config.yaml`
+2. `$OBIAS_CONFIG` environment variable
+3. `./openbias.yaml` in the current directory
+4. `./openbias.yml` in the current directory
 
 If none are found, all settings use defaults.
 
@@ -148,7 +148,7 @@ Configure under the `tracing:` section. Tracing uses OpenTelemetry spans.
 | `tracing.enabled` | bool | `false` | Enable or disable tracing entirely |
 | `tracing.type` | string | `otlp` | Exporter type: `otlp`, `langfuse`, `console`, `none` |
 | `tracing.endpoint` | string | `http://localhost:4317` | OTLP endpoint URL |
-| `tracing.service_name` | string | `opensentinel` | Service name in traces |
+| `tracing.service_name` | string | `openbias` | Service name in traces |
 | `tracing.redact_content` | bool | `false` | Strip prompts and completions from trace spans |
 
 ### Langfuse
@@ -163,7 +163,7 @@ When `tracing.type: langfuse`:
 
 ## Environment Variables
 
-Environment variables are primarily used for LLM API keys. Generic settings should be configured via `osentinel.yaml`.
+Environment variables are primarily used for LLM API keys. Generic settings should be configured via `openbias.yaml`.
 
 ### Config File Discovery
 
@@ -171,11 +171,11 @@ You can override the configuration file path via the environment:
 
 | Variable | Description |
 |----------|-------------|
-| `OSNTL_CONFIG` | Path to `osentinel.yaml` |
+| `OBIAS_CONFIG` | Path to `openbias.yaml` |
 
 ### API Keys
 
-API keys bypass the `OSNTL_` prefix. Set them directly:
+API keys bypass the `OBIAS_` prefix. Set them directly:
 
 | Variable | Provider |
 |----------|----------|
@@ -201,13 +201,13 @@ While most settings are in YAML, Langfuse keys are also supported via environmen
 
 ## .env File
 
-OpenSentinel reads `.env` files automatically. API keys found in `.env` are synced to `os.environ` so downstream libraries (LiteLLM, etc.) can use them without explicit `load_dotenv()` calls.
+OpenBias reads `.env` files automatically. API keys found in `.env` are synced to `os.environ` so downstream libraries (LiteLLM, etc.) can use them without explicit `load_dotenv()` calls.
 
 See `.env.example` in the repository root for a template.
 
 ## Eval
 
-Configure offline scenario-based evaluation under the `eval:` section. Used by `osentinel eval`.
+Configure offline scenario-based evaluation under the `eval:` section. Used by `openbias eval`.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -224,7 +224,7 @@ The engine under test is determined by the top-level `engine` key.
 
 ## Config Validation
 
-The `osentinel serve` command validates configuration at startup:
+The `openbias serve` command validates configuration at startup:
 
 - Checks that referenced policy files exist on disk
 - Verifies that the required API key is present for the configured model (skipped for `fsm`, which is local-only)

@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "opensentinel"
+name = "openbias"
 dynamic = ["version"]
 description = "Reliability layer for AI agents - monitors workflow adherence and intervenes when agents deviate"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 authors = [
-    { name = "Open Sentinel Team" }
+    { name = "Open Bias Team" }
 ]
 keywords = ["ai", "agents", "reliability", "workflow", "monitoring", "llm", "proxy"]
 classifiers = [
@@ -68,18 +68,19 @@ all = [
 ]
 
 [project.scripts]
-osentinel = "opensentinel.cli:main"
+openbias = "openbias.cli:main"
+obias = "openbias.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/open-sentinel/open-sentinel"
-Documentation = "https://github.com/open-sentinel/open-sentinel#readme"
-Repository = "https://github.com/open-sentinel/open-sentinel"
+Homepage = "https://github.com/open-bias/open-bias"
+Documentation = "https://github.com/open-bias/open-bias#readme"
+Repository = "https://github.com/open-bias/open-bias"
 
 [tool.hatch.build.targets.wheel]
-packages = ["opensentinel"]
+packages = ["openbias"]
 
 [tool.hatch.version]
-path = "opensentinel/__init__.py"
+path = "openbias/__init__.py"
 
 
 

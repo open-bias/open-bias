@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch
-from opensentinel.policy.compiler.base import LLMPolicyCompiler, CompilationResult
+from openbias.policy.compiler.base import LLMPolicyCompiler, CompilationResult
 
 class ConcreteCompiler(LLMPolicyCompiler):
     @property

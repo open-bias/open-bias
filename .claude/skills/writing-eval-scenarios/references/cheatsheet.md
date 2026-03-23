@@ -24,7 +24,7 @@ Mock responses replace `_rails.generate_async`. Return the string the guardrails
 ## Assertion Patterns
 
 ```python
-from opensentinel.policy.protocols import Decision
+from openbias.policy.protocols import Decision
 
 # Single turn check
 assert result.turns[0].response_eval.decision == Decision.ALLOW

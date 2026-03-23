@@ -1,11 +1,11 @@
-"""Unit tests for opensentinel.eval.reporter."""
+"""Unit tests for openbias.eval.reporter."""
 
 from __future__ import annotations
 
 from unittest.mock import patch
 
-from opensentinel.eval.reporter import export_json, print_report
-from opensentinel.policy.protocols import Decision
+from openbias.eval.reporter import export_json, print_report
+from openbias.policy.protocols import Decision
 from tests.eval.conftest import make_result, make_turn
 
 # ---------------------------------------------------------------------------
@@ -109,7 +109,7 @@ class TestExportJson:
 # print_report
 # ---------------------------------------------------------------------------
 
-_CLI_UI = "opensentinel.cli_ui"
+_CLI_UI = "openbias.cli_ui"
 
 
 class TestPrintReport:

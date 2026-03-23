@@ -3,8 +3,8 @@
 import pytest
 from pathlib import Path
 
-from opensentinel.policy.engines.fsm.workflow.parser import WorkflowParser
-from opensentinel.policy.engines.fsm.workflow.schema import (
+from openbias.policy.engines.fsm.workflow.parser import WorkflowParser
+from openbias.policy.engines.fsm.workflow.schema import (
     ConstraintType,
     SimpleWorkflowConfig,
     WorkflowDefinition,

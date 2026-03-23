@@ -9,9 +9,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from opensentinel.core.interceptor import CheckerMode, CheckPhase
-from opensentinel.core.interceptor.adapters import PolicyEngineChecker
-from opensentinel.policy.protocols import Decision, EngineResult
+from openbias.core.interceptor import CheckerMode, CheckPhase
+from openbias.core.interceptor.adapters import PolicyEngineChecker
+from openbias.policy.protocols import Decision, EngineResult
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -18,16 +18,16 @@
 <p align="center"><em>Reliability layer for AI agents — define rules, monitor responses, intervene automatically.</em></p>
 
 <p align="center">
-  <a href="https://pypi.org/project/opensentinel"><img src="https://img.shields.io/pypi/v/opensentinel?color=blue" alt="PyPI"></a>
-  <a href="https://pypi.org/project/opensentinel"><img src="https://img.shields.io/pypi/pyversions/opensentinel" alt="Python"></a>
-  <a href="https://github.com/open-sentinel/open-sentinel/blob/main/LICENSE"><img src="https://img.shields.io/github/license/open-sentinel/open-sentinel" alt="License"></a>
-  <!-- <a href="https://github.com/open-sentinel/open-sentinel/actions"><img src="https://img.shields.io/github/actions/workflow/status/open-sentinel/open-sentinel/ci.yml" alt="CI"></a> -->
+  <a href="https://pypi.org/project/openbias"><img src="https://img.shields.io/pypi/v/openbias?color=blue" alt="PyPI"></a>
+  <a href="https://pypi.org/project/openbias"><img src="https://img.shields.io/pypi/pyversions/openbias" alt="Python"></a>
+  <a href="https://github.com/open-bias/open-bias/blob/main/LICENSE"><img src="https://img.shields.io/github/license/open-bias/open-bias" alt="License"></a>
+  <!-- <a href="https://github.com/open-bias/open-bias/actions"><img src="https://img.shields.io/github/actions/workflow/status/open-bias/open-bias/ci.yml" alt="CI"></a> -->
 </p>
 
-Open Sentinel is a transparent proxy that monitors LLM API calls and enforces policies on AI agent behavior. Point your LLM client at the proxy, define rules in YAML, and every response is evaluated before it reaches the user.
+Open Bias is a transparent proxy that monitors LLM API calls and enforces policies on AI agent behavior. Point your LLM client at the proxy, define rules in YAML, and every response is evaluated before it reaches the user.
 
 ```
-Your App  ──▶  Open Sentinel  ──▶  LLM Provider
+Your App  ──▶  Open Bias  ──▶  LLM Provider
                     │
              classifies responses
              evaluates constraints
@@ -37,13 +37,13 @@ Your App  ──▶  Open Sentinel  ──▶  LLM Provider
 ## Quickstart
 
 ```bash
-pip install opensentinel
+pip install openbias
 export ANTHROPIC_API_KEY=sk-ant-...    # or GEMINI_API_KEY, OPENAI_API_KEY
-osentinel init                         # interactive setup
-osentinel serve
+openbias init                         # interactive setup
+openbias serve
 ```
 
-That's it. `osentinel init` guides you to create a starter `osentinel.yaml`:
+That's it. `openbias init` guides you to create a starter `openbias.yaml`:
 
 ```yaml
 policy:
@@ -74,12 +74,12 @@ Every call now runs through your policy. The judge engine (default) scores each 
 You can also compile rules from natural language:
 
 ```bash
-osentinel compile "customer support bot, verify identity before refunds, never share internal pricing"
+openbias compile "customer support bot, verify identity before refunds, never share internal pricing"
 ```
 
 ## How It Works
 
-Open Sentinel wraps [LiteLLM](https://github.com/BerriAI/litellm) as its proxy layer. Three hooks fire on every request:
+Open Bias wraps [LiteLLM](https://github.com/BerriAI/litellm) as its proxy layer. Three hooks fire on every request:
 
 1. **Pre-call**: Apply pending interventions from previous violations. Inject system prompt amendments, context reminders, or user message overrides. This is string manipulation — microseconds.
 2. **LLM call**: Forwarded to the upstream provider via LiteLLM. Unmodified.
@@ -89,7 +89,7 @@ Every hook is wrapped in `safe_hook()` with a configurable timeout (default 30s)
 
 ```
 ┌─────────────┐    ┌───────────────────────────────────────────┐    ┌─────────────┐
-│  Your App   │───▶│              OPEN SENTINEL                │───▶│ LLM Provider│
+│  Your App   │───▶│              OPEN BIAS                │───▶│ LLM Provider│
 │             │    │     ┌─────────┐    ┌─────────────┐        │    │             │
 │             │◀───│     │ Hooks   │───▶│ Interceptor │        │◀───│             │
 └─────────────┘    │     │safe_hook│    │ ┌─────────┐ │        │    └─────────────┘
@@ -149,7 +149,7 @@ Full engine documentation: [docs/engines.md](docs/engines.md)
 
 ## Configuration
 
-Everything lives in `osentinel.yaml`. The minimal config is just a `policy:` list -- everything else has smart defaults.
+Everything lives in `openbias.yaml`. The minimal config is just a `policy:` list -- everything else has smart defaults.
 
 ```yaml
 # Minimal (all you need):
@@ -174,21 +174,21 @@ Full reference: [docs/configuration.md](docs/configuration.md)
 
 ```bash
 # Bootstrap a project
-osentinel init                                            # interactive wizard
-osentinel init --quick                                    # non-interactive defaults
+openbias init                                            # interactive wizard
+openbias init --quick                                    # non-interactive defaults
 
 # Run
-osentinel serve                         # start proxy (default: 0.0.0.0:4000)
-osentinel serve -p 8080 -c custom.yaml  # custom port and config
+openbias serve                         # start proxy (default: 0.0.0.0:4000)
+openbias serve -p 8080 -c custom.yaml  # custom port and config
 
 # Compile policies (natural language to YAML)
-osentinel compile "verify identity before refunds" --engine fsm -o workflow.yaml
-osentinel compile "be helpful, never leak PII" --engine judge -o policy.yaml
-osentinel compile "block hacking" --engine nemo -o ./nemo_config
+openbias compile "verify identity before refunds" --engine fsm -o workflow.yaml
+openbias compile "be helpful, never leak PII" --engine judge -o policy.yaml
+openbias compile "block hacking" --engine nemo -o ./nemo_config
 
 # Validate and inspect
-osentinel validate workflow.yaml                          # check schema + report stats
-osentinel info workflow.yaml -v                           # detailed state/transition/constraint view
+openbias validate workflow.yaml                          # check schema + report stats
+openbias info workflow.yaml -v                           # detailed state/transition/constraint view
 
 ```
 

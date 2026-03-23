@@ -1,15 +1,15 @@
 """
-Open Sentinel — Quickstart
+Open Bias — Quickstart
 
 The smallest possible example. 3 policy rules, ~30 lines of client code.
 Takes 60 seconds to run if you already have an API key for any provider.
 
 What's happening:
-  Your OpenAI-compatible client talks to Open Sentinel (localhost:4000)
-  instead of the LLM provider directly. Open Sentinel forwards the call
+  Your OpenAI-compatible client talks to Open Bias (localhost:4000)
+  instead of the LLM provider directly. Open Bias forwards the call
   via LiteLLM, then asynchronously evaluates the response against your
   policy rules using a sidecar LLM (the "judge"). If the response
-  violates a rule, Open Sentinel queues an intervention for the next turn.
+  violates a rule, Open Bias queues an intervention for the next turn.
 
   The proxy adds zero latency to the critical path — the response comes
   back to your app immediately while the judge evaluates in the background.
@@ -23,7 +23,7 @@ Provider-agnostic:
 Run:
   cd examples/quickstart
   export <PROVIDER>_API_KEY=...    # pick one
-  osentinel serve                  # terminal 1
+  openbias serve                  # terminal 1
   python quickstart.py             # terminal 2
 """
 
@@ -63,10 +63,10 @@ response = client.chat.completions.create(
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Explain how DNS resolution works, step by step."},
     ],
-    extra_headers={"X-Sentinel-Session-ID": "quickstart-001"},
+    extra_headers={"X-OpenBias-Session-ID": "quickstart-001"},
 )
 
 print(response.choices[0].message.content)
 
-# That's it. Every call now runs through your policy rules (see osentinel.yaml).
-# Check the osentinel server logs to see the judge evaluation results.
+# That's it. Every call now runs through your policy rules (see openbias.yaml).
+# Check the openbias server logs to see the judge evaluation results.

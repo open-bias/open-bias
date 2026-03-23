@@ -7,7 +7,7 @@ Verifies InterventionHandler across engine types.
 import pytest
 from unittest.mock import MagicMock
 
-from opensentinel.policy.protocols import (
+from openbias.policy.protocols import (
     PolicyEngine,
 )
 
@@ -21,8 +21,8 @@ class TestLLMInterventionHandler:
     """LLMPolicyEngine InterventionHandler integration."""
 
     def test_handler_satisfies_protocol(self):
-        from opensentinel.policy.engines.llm.intervention import InterventionHandler
-        from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+        from openbias.policy.engines.llm.intervention import InterventionHandler
+        from openbias.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
         workflow = WorkflowDefinition(
             name="test",
@@ -45,8 +45,8 @@ class TestLLMInterventionHandler:
         assert callable(getattr(handler, "list_interventions", None))
 
     def test_get_template_returns_string(self):
-        from opensentinel.policy.engines.llm.intervention import InterventionHandler
-        from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+        from openbias.policy.engines.llm.intervention import InterventionHandler
+        from openbias.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
         workflow = WorkflowDefinition(
             name="test",
@@ -69,8 +69,8 @@ class TestLLMInterventionHandler:
         assert template == "Stay focused."
 
     def test_get_template_with_block_message(self):
-        from opensentinel.policy.engines.llm.intervention import InterventionHandler
-        from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+        from openbias.policy.engines.llm.intervention import InterventionHandler
+        from openbias.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
         workflow = WorkflowDefinition(
             name="test",
@@ -94,8 +94,8 @@ class TestLLMInterventionHandler:
         assert template == "This action is not permitted."
 
     def test_get_template_with_clarification_message(self):
-        from opensentinel.policy.engines.llm.intervention import InterventionHandler
-        from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+        from openbias.policy.engines.llm.intervention import InterventionHandler
+        from openbias.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
         workflow = WorkflowDefinition(
             name="test",
@@ -118,8 +118,8 @@ class TestLLMInterventionHandler:
         assert template == "Please clarify your request."
 
     def test_get_template_unknown_returns_none(self):
-        from opensentinel.policy.engines.llm.intervention import InterventionHandler
-        from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+        from openbias.policy.engines.llm.intervention import InterventionHandler
+        from openbias.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
         workflow = WorkflowDefinition(
             name="test",
@@ -131,8 +131,8 @@ class TestLLMInterventionHandler:
         assert handler.get_template("nonexistent") is None
 
     def test_list_interventions(self):
-        from opensentinel.policy.engines.llm.intervention import InterventionHandler
-        from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+        from openbias.policy.engines.llm.intervention import InterventionHandler
+        from openbias.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
         workflow = WorkflowDefinition(
             name="test",

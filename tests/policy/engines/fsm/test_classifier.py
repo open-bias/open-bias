@@ -2,10 +2,10 @@
 
 import pytest
 
-from opensentinel.policy.engines.stateful import StateClassificationResult
-from opensentinel.policy.engines.fsm.classifier import StateClassifier
-from opensentinel.policy.engines.fsm.workflow.schema import State, ClassificationHint
-from opensentinel.core.utils import extract_response_content, extract_tool_call_names
+from openbias.policy.engines.stateful import StateClassificationResult
+from openbias.policy.engines.fsm.classifier import StateClassifier
+from openbias.policy.engines.fsm.workflow.schema import State, ClassificationHint
+from openbias.core.utils import extract_response_content, extract_tool_call_names
 
 
 class TestStateClassifier:

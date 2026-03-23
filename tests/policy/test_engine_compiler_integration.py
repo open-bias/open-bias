@@ -7,11 +7,11 @@ via the new get_compiler() method on PolicyEngine.
 
 import pytest
 
-from opensentinel.policy.engines.fsm.engine import FSMPolicyEngine
-from opensentinel.policy.engines.judge.engine import JudgePolicyEngine
-from opensentinel.policy.engines.llm.engine import LLMPolicyEngine
-from opensentinel.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
-from opensentinel.policy.compiler.protocol import PolicyCompiler
+from openbias.policy.engines.fsm.engine import FSMPolicyEngine
+from openbias.policy.engines.judge.engine import JudgePolicyEngine
+from openbias.policy.engines.llm.engine import LLMPolicyEngine
+from openbias.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
+from openbias.policy.compiler.protocol import PolicyCompiler
 
 
 class TestFSMGetCompiler:
@@ -25,7 +25,7 @@ class TestFSMGetCompiler:
         assert compiler.engine_type == "fsm"
 
     def test_returns_fsm_compiler_type(self):
-        from opensentinel.policy.engines.fsm.compiler import FSMCompiler
+        from openbias.policy.engines.fsm.compiler import FSMCompiler
 
         engine = FSMPolicyEngine()
         compiler = engine.get_compiler()
@@ -49,7 +49,7 @@ class TestJudgeGetCompiler:
         assert compiler.engine_type == "judge"
 
     def test_returns_judge_compiler_type(self):
-        from opensentinel.policy.engines.judge.compiler import JudgeCompiler
+        from openbias.policy.engines.judge.compiler import JudgeCompiler
 
         engine = JudgePolicyEngine()
         compiler = engine.get_compiler()
@@ -76,7 +76,7 @@ class TestNemoGetCompiler:
         assert compiler.engine_type == "nemo"
 
     def test_returns_nemo_compiler_type(self):
-        from opensentinel.policy.engines.nemo.compiler import NemoCompiler
+        from openbias.policy.engines.nemo.compiler import NemoCompiler
 
         engine = NemoGuardrailsPolicyEngine()
         compiler = engine.get_compiler()

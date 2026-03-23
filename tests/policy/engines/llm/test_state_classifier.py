@@ -5,13 +5,13 @@ Tests for LLMStateClassifier.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from opensentinel.policy.engines.llm.state_classifier import LLMStateClassifier
-from opensentinel.policy.engines.llm.llm_client import LLMClient, LLMClientError
-from opensentinel.policy.engines.llm.models import (
+from openbias.policy.engines.llm.state_classifier import LLMStateClassifier
+from openbias.policy.engines.llm.llm_client import LLMClient, LLMClientError
+from openbias.policy.engines.llm.models import (
     SessionContext,
     ConfidenceTier,
 )
-from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+from openbias.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
 
 @pytest.fixture

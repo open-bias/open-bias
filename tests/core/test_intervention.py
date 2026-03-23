@@ -1,6 +1,6 @@
 """Tests for intervention system."""
 
-from opensentinel.core.intervention.strategies import (
+from openbias.core.intervention.strategies import (
     ResponseModificationStrategy,
     StrategyType,
     SystemPromptAppendStrategy,

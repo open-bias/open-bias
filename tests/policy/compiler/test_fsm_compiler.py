@@ -3,14 +3,14 @@
 import pytest
 from pathlib import Path
 
-from opensentinel.policy.compiler.protocol import CompilationResult
-from opensentinel.policy.compiler.registry import PolicyCompilerRegistry
-from opensentinel.policy.engines.fsm.compiler import (
+from openbias.policy.compiler.protocol import CompilationResult
+from openbias.policy.compiler.registry import PolicyCompilerRegistry
+from openbias.policy.engines.fsm.compiler import (
     FSMCompiler,
     compile_workflow,
     slugify,
 )
-from opensentinel.policy.engines.fsm.workflow.schema import (
+from openbias.policy.engines.fsm.workflow.schema import (
     ConstraintType,
     SimpleWorkflowConfig,
     WorkflowDefinition,
@@ -24,7 +24,7 @@ class TestFSMCompilerRegistration:
         assert PolicyCompilerRegistry.is_registered("fsm")
 
     def test_create_fsm_compiler(self):
-        from opensentinel.policy.engines.fsm.engine import FSMPolicyEngine
+        from openbias.policy.engines.fsm.engine import FSMPolicyEngine
 
         engine = FSMPolicyEngine()
         compiler = engine.get_compiler()
@@ -286,7 +286,7 @@ class TestFSMCompilerExport:
             compiler.export(result, output_path)
 
     def test_exported_yaml_is_valid_workflow(self, compiler, sample_workflow, tmp_path):
-        from opensentinel.policy.engines.fsm.workflow.parser import WorkflowParser
+        from openbias.policy.engines.fsm.workflow.parser import WorkflowParser
 
         result = CompilationResult(success=True, config=sample_workflow)
         output_path = tmp_path / "workflow.yaml"

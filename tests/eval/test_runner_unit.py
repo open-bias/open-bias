@@ -1,4 +1,4 @@
-"""Unit tests for opensentinel.eval.runner (_split_turns, EvalRunner)."""
+"""Unit tests for openbias.eval.runner (_split_turns, EvalRunner)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from opensentinel.eval.runner import EvalRunner, _split_turns
-from opensentinel.policy.protocols import Decision, EngineResult
+from openbias.eval.runner import EvalRunner, _split_turns
+from openbias.policy.protocols import Decision, EngineResult
 
 
 # ---------------------------------------------------------------------------

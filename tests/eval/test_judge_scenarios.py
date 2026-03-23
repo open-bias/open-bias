@@ -8,9 +8,9 @@ from typing import Any
 
 import pytest
 
-from opensentinel.eval.runner import EvalRunner
-from opensentinel.policy.protocols import Decision
-from opensentinel.policy.registry import PolicyEngineRegistry
+from openbias.eval.runner import EvalRunner
+from openbias.policy.protocols import Decision
+from openbias.policy.registry import PolicyEngineRegistry
 
 EVALS_DIR = Path(__file__).resolve().parent.parent.parent / "evals" / "judge"
 
@@ -23,7 +23,7 @@ INLINE_POLICY = [
 
 def _get_inline_criteria_names() -> list[str]:
     """Get criterion names that create_rules_rubric would generate for INLINE_POLICY."""
-    from opensentinel.policy.engines.judge.rubrics import create_rules_rubric
+    from openbias.policy.engines.judge.rubrics import create_rules_rubric
     rubric = create_rules_rubric(INLINE_POLICY)
     return [c.name for c in rubric.criteria]
 

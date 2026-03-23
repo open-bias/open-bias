@@ -3,11 +3,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from opensentinel.policy.engines.fsm.engine import FSMPolicyEngine
-from opensentinel.policy.engines.fsm.workflow.schema import ConstraintType
-from opensentinel.policy.engines.fsm.workflow.state_machine import TransitionResult
-from opensentinel.policy.engines.stateful import StateClassificationResult
-from opensentinel.policy.protocols import Decision
+from openbias.policy.engines.fsm.engine import FSMPolicyEngine
+from openbias.policy.engines.fsm.workflow.schema import ConstraintType
+from openbias.policy.engines.fsm.workflow.state_machine import TransitionResult
+from openbias.policy.engines.stateful import StateClassificationResult
+from openbias.policy.protocols import Decision
 
 
 @pytest.fixture
@@ -17,10 +17,10 @@ def engine():
 
 @pytest.fixture
 def mocks():
-    with patch("opensentinel.policy.engines.fsm.engine.WorkflowParser") as mock_parser, \
-         patch("opensentinel.policy.engines.fsm.engine.WorkflowStateMachine") as mock_sm, \
-         patch("opensentinel.policy.engines.fsm.engine.StateClassifier") as mock_classifier, \
-         patch("opensentinel.policy.engines.fsm.engine.ConstraintEvaluator") as mock_constraints:
+    with patch("openbias.policy.engines.fsm.engine.WorkflowParser") as mock_parser, \
+         patch("openbias.policy.engines.fsm.engine.WorkflowStateMachine") as mock_sm, \
+         patch("openbias.policy.engines.fsm.engine.StateClassifier") as mock_classifier, \
+         patch("openbias.policy.engines.fsm.engine.ConstraintEvaluator") as mock_constraints:
 
         # Default: is_in_terminal_state returns False
         mock_sm.return_value.is_in_terminal_state = AsyncMock(return_value=False)
@@ -428,7 +428,7 @@ async def test_initialize_warns_when_embeddings_unavailable(engine, mocks, caplo
     # Make the classifier's check return False
     mocks["classifier"].return_value.check_embedding_availability.return_value = False
 
-    with caplog.at_level(logging.WARNING, logger="opensentinel.policy.engines.fsm.engine"):
+    with caplog.at_level(logging.WARNING, logger="openbias.policy.engines.fsm.engine"):
         await engine.initialize({"workflow": {}})
 
     assert any(

@@ -1,11 +1,11 @@
-"""Tests for opensentinel.core.session.SessionStore."""
+"""Tests for openbias.core.session.SessionStore."""
 
 from __future__ import annotations
 
 import time
 from unittest.mock import patch
 
-from opensentinel.core.session import SessionStore
+from openbias.core.session import SessionStore
 
 
 class TestSessionStoreBasics:
@@ -68,7 +68,7 @@ class TestSessionStoreTTLEviction:
         store: SessionStore[str] = SessionStore(ttl=10, max_sessions=100)
         base = time.monotonic()
 
-        with patch("opensentinel.core.session.time") as mock_time:
+        with patch("openbias.core.session.time") as mock_time:
             mock_time.monotonic.return_value = base
             store.put("old1", "v1")
             store.put("old2", "v2")
@@ -85,7 +85,7 @@ class TestSessionStoreTTLEviction:
         store: SessionStore[str] = SessionStore(ttl=10, max_sessions=100)
         base = time.monotonic()
 
-        with patch("opensentinel.core.session.time") as mock_time:
+        with patch("openbias.core.session.time") as mock_time:
             mock_time.monotonic.return_value = base
             store.put("s1", "v1")
 
@@ -136,7 +136,7 @@ class TestSessionStoreOnEvict:
         )
         base = time.monotonic()
 
-        with patch("opensentinel.core.session.time") as mock_time:
+        with patch("openbias.core.session.time") as mock_time:
             mock_time.monotonic.return_value = base
             store.put("s1", "v1")
 
@@ -180,7 +180,7 @@ class TestSessionStoreStaleGetEviction:
         store: SessionStore[str] = SessionStore(ttl=10, max_sessions=100)
         base = time.monotonic()
 
-        with patch("opensentinel.core.session.time") as mock_time:
+        with patch("openbias.core.session.time") as mock_time:
             mock_time.monotonic.return_value = base
             store.put("s1", "v1")
 
@@ -191,7 +191,7 @@ class TestSessionStoreStaleGetEviction:
         store: SessionStore[str] = SessionStore(ttl=10, max_sessions=100)
         base = time.monotonic()
 
-        with patch("opensentinel.core.session.time") as mock_time:
+        with patch("openbias.core.session.time") as mock_time:
             mock_time.monotonic.return_value = base
             store.put("s1", "v1")
 
@@ -206,7 +206,7 @@ class TestSessionStoreStaleGetEviction:
         )
         base = time.monotonic()
 
-        with patch("opensentinel.core.session.time") as mock_time:
+        with patch("openbias.core.session.time") as mock_time:
             mock_time.monotonic.return_value = base
             store.put("s1", "v1")
 
@@ -219,7 +219,7 @@ class TestSessionStoreStaleGetEviction:
         store: SessionStore[str] = SessionStore(ttl=10, max_sessions=100)
         base = time.monotonic()
 
-        with patch("opensentinel.core.session.time") as mock_time:
+        with patch("openbias.core.session.time") as mock_time:
             mock_time.monotonic.return_value = base
             store.put("s1", "v1")
 
@@ -230,7 +230,7 @@ class TestSessionStoreStaleGetEviction:
         store: SessionStore[str] = SessionStore(ttl=10, max_sessions=100)
         base = time.monotonic()
 
-        with patch("opensentinel.core.session.time") as mock_time:
+        with patch("openbias.core.session.time") as mock_time:
             mock_time.monotonic.return_value = base
             store.put("s1", "v1")
 
@@ -241,7 +241,7 @@ class TestSessionStoreStaleGetEviction:
         store: SessionStore[str] = SessionStore(ttl=10, max_sessions=100)
         base = time.monotonic()
 
-        with patch("opensentinel.core.session.time") as mock_time:
+        with patch("openbias.core.session.time") as mock_time:
             mock_time.monotonic.return_value = base
             store.put("s1", "v1")
 

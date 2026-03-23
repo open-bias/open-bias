@@ -5,7 +5,7 @@
 # before performing any account actions.
 #
 # Usage:
-#   cd examples/fsm_workflow && osentinel serve
+#   cd examples/fsm_workflow && openbias serve
 
 name: customer-support-agent
 

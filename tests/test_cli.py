@@ -1,4 +1,4 @@
-"""Tests for opensentinel.cli commands."""
+"""Tests for openbias.cli commands."""
 
 import sys
 from io import StringIO
@@ -7,7 +7,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from opensentinel.cli import main
+from openbias.cli import main
 
 
 def _invoke(args):
@@ -16,7 +16,7 @@ def _invoke(args):
     # Rich writes to sys.stdout; CliRunner captures click.echo output.
     # We need to capture both.
     buf = StringIO()
-    from opensentinel.cli_ui import console
+    from openbias.cli_ui import console
 
     old_file = console.file
     console.file = buf
@@ -32,13 +32,13 @@ class TestVersionCommand:
     def test_version_output(self):
         result, output = _invoke(["version"])
         assert result.exit_code == 0
-        assert "Open Sentinel" in output
+        assert "Open Bias" in output
 
     def test_version_flag(self):
         runner = CliRunner()
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "osentinel" in result.output
+        assert "openbias" in result.output
 
 
 class TestValidateCommand:
@@ -61,13 +61,13 @@ class TestValidateCommand:
             mock_workflow.interventions = {}
 
             buf = StringIO()
-            from opensentinel.cli_ui import console
+            from openbias.cli_ui import console
 
             old_file = console.file
             console.file = buf
             try:
                 with patch(
-                    "opensentinel.policy.engines.fsm.workflow.parser.WorkflowParser.parse_file",
+                    "openbias.policy.engines.fsm.workflow.parser.WorkflowParser.parse_file",
                     return_value=mock_workflow,
                 ):
                     result = runner.invoke(main, ["validate", "test.yaml"])
@@ -79,10 +79,10 @@ class TestValidateCommand:
             assert "Valid Workflow" in combined
 
     def test_validate_good_judge_config(self):
-        """validate with a valid osentinel.yaml should show summary."""
+        """validate with a valid openbias.yaml should show summary."""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            Path("osentinel.yaml").write_text(
+            Path("openbias.yaml").write_text(
                 "engine: judge\n"
                 "model: gpt-4o-mini\n"
                 "policy:\n"
@@ -92,12 +92,12 @@ class TestValidateCommand:
             )
 
             buf = StringIO()
-            from opensentinel.cli_ui import console
+            from openbias.cli_ui import console
 
             old_file = console.file
             console.file = buf
             try:
-                result = runner.invoke(main, ["validate", "osentinel.yaml"])
+                result = runner.invoke(main, ["validate", "openbias.yaml"])
             finally:
                 console.file = old_file
 
@@ -110,7 +110,7 @@ class TestValidateCommand:
         """validate with no model should fail with clear error."""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            Path("osentinel.yaml").write_text(
+            Path("openbias.yaml").write_text(
                 "engine: judge\n"
                 "policy:\n"
                 '  - "Be professional"\n'
@@ -118,12 +118,12 @@ class TestValidateCommand:
             )
 
             buf = StringIO()
-            from opensentinel.cli_ui import console
+            from openbias.cli_ui import console
 
             old_file = console.file
             console.file = buf
             try:
-                result = runner.invoke(main, ["validate", "osentinel.yaml"])
+                result = runner.invoke(main, ["validate", "openbias.yaml"])
             finally:
                 console.file = old_file
 
@@ -135,7 +135,7 @@ class TestValidateCommand:
         """validate with a nonexistent default rubric should fail."""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            Path("osentinel.yaml").write_text(
+            Path("openbias.yaml").write_text(
                 "engine: judge\n"
                 "model: gpt-4o-mini\n"
                 "judge:\n"
@@ -144,12 +144,12 @@ class TestValidateCommand:
             )
 
             buf = StringIO()
-            from opensentinel.cli_ui import console
+            from openbias.cli_ui import console
 
             old_file = console.file
             console.file = buf
             try:
-                result = runner.invoke(main, ["validate", "osentinel.yaml"])
+                result = runner.invoke(main, ["validate", "openbias.yaml"])
             finally:
                 console.file = old_file
 
@@ -169,7 +169,7 @@ class TestInitCommand:
         runner = CliRunner()
         with runner.isolated_filesystem():
             # Mock run_init since it might try to write files or check env
-            with patch("opensentinel.cli_init.run_init") as mock_run:
+            with patch("openbias.cli_init.run_init") as mock_run:
                 result = runner.invoke(main, ["init", "--quick"])
                 assert result.exit_code == 0
                 mock_run.assert_called_once_with(quick=True)
@@ -178,7 +178,7 @@ class TestInitCommand:
         """Without --from and without TTY, should show error."""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with patch("opensentinel.cli_init.is_interactive", return_value=False):
+            with patch("openbias.cli_init.is_interactive", return_value=False):
                 result = runner.invoke(main, ["init"])
                 assert result.exit_code != 0
 
@@ -189,11 +189,11 @@ class TestServeCommand:
         assert result.exit_code != 0
 
     def test_serve_no_yaml_prompts_init(self):
-        """serve without an osentinel.yaml should tell user to run osentinel init."""
+        """serve without an openbias.yaml should tell user to run openbias init."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             buf = StringIO()
-            from opensentinel.cli_ui import console
+            from openbias.cli_ui import console
             old_file = console.file
             console.file = buf
             try:
@@ -202,24 +202,24 @@ class TestServeCommand:
                 console.file = old_file
             combined = result.output + buf.getvalue()
             assert result.exit_code != 0
-            assert "osentinel init" in combined
+            assert "openbias init" in combined
 
     def test_serve_with_yaml_proceeds(self):
-        """serve with an osentinel.yaml should pass the gate and attempt startup."""
+        """serve with an openbias.yaml should pass the gate and attempt startup."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             # Write a minimal valid yaml
-            Path("osentinel.yaml").write_text(
+            Path("openbias.yaml").write_text(
                 "engine: judge\nmodel: gpt-4o-mini\nport: 4000\n"
                 "policy:\n  fail_open: true\ntracing:\n  type: none\n"
             )
             # Mock start_proxy so we don't actually start a server
-            with patch("opensentinel.proxy.server.start_proxy"):
-                with patch("opensentinel.config.settings.SentinelSettings.validate"):
+            with patch("openbias.proxy.server.start_proxy"):
+                with patch("openbias.config.settings.Settings.validate"):
                     result = runner.invoke(main, ["serve"])
             # Should NOT fail with the init-gate error
             combined = result.output
-            assert "osentinel init" not in combined or result.exit_code == 0
+            assert "openbias init" not in combined or result.exit_code == 0
 
 
 class TestCompileCommand:
@@ -230,10 +230,10 @@ class TestCompileCommand:
 
 
     def test_compile_reads_model_from_yaml(self):
-        """compile should use model from osentinel.yaml when --model is not given."""
+        """compile should use model from openbias.yaml when --model is not given."""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            Path("osentinel.yaml").write_text("engine: judge\nmodel: gpt-4o\n")
+            Path("openbias.yaml").write_text("engine: judge\nmodel: gpt-4o\n")
 
             mock_result = MagicMock()
             mock_result.success = True
@@ -250,8 +250,8 @@ class TestCompileCommand:
             mock_compiler_class = MagicMock(return_value=mock_compiler)
 
             with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
-                with patch("opensentinel.policy.registry.PolicyEngineRegistry.get", return_value=None):
-                    with patch("opensentinel.policy.compiler.PolicyCompilerRegistry.get", return_value=mock_compiler_class):
+                with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=None):
+                    with patch("openbias.policy.compiler.PolicyCompilerRegistry.get", return_value=mock_compiler_class):
                         result = runner.invoke(main, ["compile", "be professional"])
 
             # Model should have been set from yaml (gpt-4o), not gpt-4o-mini
@@ -275,9 +275,9 @@ class TestCompileCommand:
 
             mock_compiler_class = MagicMock(return_value=mock_compiler)
 
-            with patch("opensentinel.policy.registry.PolicyEngineRegistry.get", return_value=None):
-                with patch("opensentinel.policy.compiler.PolicyCompilerRegistry.get", return_value=mock_compiler_class):
-                    with patch("opensentinel.cli_init.ensure_model_and_key", return_value=("claude-3-haiku", None)) as mock_ensure:
+            with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=None):
+                with patch("openbias.policy.compiler.PolicyCompilerRegistry.get", return_value=mock_compiler_class):
+                    with patch("openbias.cli_init.ensure_model_and_key", return_value=("claude-3-haiku", None)) as mock_ensure:
                         result = runner.invoke(main, ["compile", "be professional"])
 
             mock_ensure.assert_called_once()
@@ -287,11 +287,11 @@ class TestCompileCommand:
         """compile should fail with clear error when model requires a key that's missing."""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            Path("osentinel.yaml").write_text("engine: judge\nmodel: gpt-4o\n")
+            Path("openbias.yaml").write_text("engine: judge\nmodel: gpt-4o\n")
 
             # Ensure OPENAI_API_KEY is NOT set
             with patch.dict("os.environ", {}, clear=True):
-                # Patch out HOME/PATH etc that SentinelSettings might need
+                # Patch out HOME/PATH etc that Settings might need
                 with patch.dict("os.environ", {"HOME": "/tmp"}, clear=False):
                     result = runner.invoke(main, ["compile", "be professional"])
 
@@ -302,7 +302,7 @@ class TestCompileCommand:
         """--api-key should be forwarded to the compiler regardless of provider."""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            Path("osentinel.yaml").write_text("engine: judge\nmodel: gpt-4o\n")
+            Path("openbias.yaml").write_text("engine: judge\nmodel: gpt-4o\n")
 
             mock_result = MagicMock()
             mock_result.success = True
@@ -319,7 +319,7 @@ class TestCompileCommand:
             mock_engine_instance.get_compiler = MagicMock(return_value=mock_compiler)
             mock_engine_cls.return_value = mock_engine_instance
 
-            with patch("opensentinel.policy.registry.PolicyEngineRegistry.get", return_value=mock_engine_cls):
+            with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=mock_engine_cls):
                 result = runner.invoke(
                     main, ["compile", "be professional", "--api-key", "sk-test-key"]
                 )
@@ -333,7 +333,7 @@ class TestCompileCommand:
         """compile with gemini model should resolve key from GOOGLE_API_KEY."""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            Path("osentinel.yaml").write_text(
+            Path("openbias.yaml").write_text(
                 "engine: judge\nmodel: gemini/gemini-2.5-flash\n"
             )
 
@@ -353,7 +353,7 @@ class TestCompileCommand:
             mock_engine_cls.return_value = mock_engine_instance
 
             with patch.dict("os.environ", {"GOOGLE_API_KEY": "test-gemini-key"}):
-                with patch("opensentinel.policy.registry.PolicyEngineRegistry.get", return_value=mock_engine_cls):
+                with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=mock_engine_cls):
                     result = runner.invoke(main, ["compile", "be professional"])
 
             # get_compiler should have received the resolved gemini key
@@ -368,7 +368,7 @@ class TestHelpOutput:
     def test_main_help(self):
         result, _ = _invoke(["--help"])
         assert result.exit_code == 0
-        assert "Open Sentinel" in result.output
+        assert "Open Bias" in result.output
         assert "init" in result.output
         assert "serve" in result.output
         assert "compile" in result.output

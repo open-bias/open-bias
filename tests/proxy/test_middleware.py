@@ -1,5 +1,5 @@
 """
-Tests for opensentinel.proxy.middleware — session extraction, workflow context,
+Tests for openbias.proxy.middleware — session extraction, workflow context,
 and response transformation.
 
 Covers the critical scenario where HTTP headers arrive embedded inside
@@ -10,7 +10,7 @@ import uuid
 
 import pytest
 
-from opensentinel.proxy.middleware import (
+from openbias.proxy.middleware import (
     SessionExtractor,
     _get_header,
     _validate_session_id,
@@ -81,7 +81,7 @@ class TestValidateSessionId:
     def test_invalid_logs_warning(self, caplog):
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="opensentinel.proxy.middleware"):
+        with caplog.at_level(logging.WARNING, logger="openbias.proxy.middleware"):
             _validate_session_id("bad\nvalue")
         assert "Rejected session ID" in caplog.text
 
@@ -93,7 +93,7 @@ class TestSessionIdValidationIntegration:
     def test_header_with_newline_falls_through_to_next_source(self):
         """Malicious header is rejected; extraction falls through to metadata."""
         data = _litellm_proxy_data(
-            headers={"x-sentinel-session-id": "evil\ninjected"},
+            headers={"x-openbias-session-id": "evil\ninjected"},
             metadata={"session_id": "safe-fallback"},
         )
         assert SessionExtractor.extract_session_id(data) == "safe-fallback"
@@ -120,7 +120,7 @@ class TestSessionIdValidationIntegration:
     def test_oversized_header_rejected(self):
         """A 257-char session ID header is rejected."""
         data = _litellm_proxy_data(
-            headers={"x-sentinel-session-id": "a" * 257},
+            headers={"x-openbias-session-id": "a" * 257},
             metadata={"session_id": "safe"},
         )
         assert SessionExtractor.extract_session_id(data) == "safe"
@@ -163,31 +163,31 @@ class TestGetHeader:
 # ===========================================================================
 class TestResolveHeaders:
     def test_explicit_headers_take_priority(self):
-        explicit = {"x-sentinel-session-id": "explicit"}
-        data = _litellm_proxy_data(headers={"x-sentinel-session-id": "embedded"})
+        explicit = {"x-openbias-session-id": "explicit"}
+        data = _litellm_proxy_data(headers={"x-openbias-session-id": "embedded"})
         resolved = SessionExtractor._resolve_headers(data, explicit)
         assert resolved is explicit
 
     def test_proxy_server_request_headers(self):
-        data = _litellm_proxy_data(headers={"x-sentinel-session-id": "from-proxy"})
+        data = _litellm_proxy_data(headers={"x-openbias-session-id": "from-proxy"})
         resolved = SessionExtractor._resolve_headers(data, None)
-        assert resolved == {"x-sentinel-session-id": "from-proxy"}
+        assert resolved == {"x-openbias-session-id": "from-proxy"}
 
     def test_metadata_headers_fallback(self):
-        data = {"metadata": {"headers": {"x-sentinel-session-id": "from-meta"}}}
+        data = {"metadata": {"headers": {"x-openbias-session-id": "from-meta"}}}
         resolved = SessionExtractor._resolve_headers(data, None)
-        assert resolved == {"x-sentinel-session-id": "from-meta"}
+        assert resolved == {"x-openbias-session-id": "from-meta"}
 
     def test_litellm_params_metadata_headers(self):
         data = {
             "litellm_params": {
                 "metadata": {
-                    "headers": {"x-sentinel-session-id": "from-lp"}
+                    "headers": {"x-openbias-session-id": "from-lp"}
                 }
             }
         }
         resolved = SessionExtractor._resolve_headers(data, None)
-        assert resolved == {"x-sentinel-session-id": "from-lp"}
+        assert resolved == {"x-openbias-session-id": "from-lp"}
 
     def test_no_headers_returns_none(self):
         data = {"messages": [{"role": "user", "content": "hi"}]}
@@ -208,7 +208,7 @@ class TestResolveHeaders:
 class TestExtractSessionIdFromHeaders:
     def test_explicit_header(self):
         data = {"messages": []}
-        headers = {"x-sentinel-session-id": "sess-123"}
+        headers = {"x-openbias-session-id": "sess-123"}
         assert SessionExtractor.extract_session_id(data, headers) == "sess-123"
 
     def test_x_session_id_header(self):
@@ -216,23 +216,23 @@ class TestExtractSessionIdFromHeaders:
         headers = {"x-session-id": "sess-456"}
         assert SessionExtractor.extract_session_id(data, headers) == "sess-456"
 
-    def test_sentinel_header_takes_priority_over_x_session_id(self):
+    def test_openbias_header_takes_priority_over_x_session_id(self):
         data = {"messages": []}
         headers = {
-            "x-sentinel-session-id": "sentinel",
+            "x-openbias-session-id": "openbias",
             "x-session-id": "generic",
         }
-        assert SessionExtractor.extract_session_id(data, headers) == "sentinel"
+        assert SessionExtractor.extract_session_id(data, headers) == "openbias"
 
     def test_case_insensitive_header(self):
         data = {"messages": []}
-        headers = {"X-Sentinel-Session-Id": "mixed-case"}
+        headers = {"X-OpenBias-Session-Id": "mixed-case"}
         assert SessionExtractor.extract_session_id(data, headers) == "mixed-case"
 
     def test_litellm_embedded_headers(self):
         """Core OpenClaw scenario: headers embedded by LiteLLM proxy."""
         data = _litellm_proxy_data(
-            headers={"x-sentinel-session-id": "openclaw-session-42"}
+            headers={"x-openbias-session-id": "openclaw-session-42"}
         )
         # No explicit headers param — must pick from data dict
         assert SessionExtractor.extract_session_id(data) == "openclaw-session-42"
@@ -251,8 +251,8 @@ class TestExtractSessionIdFromMetadata:
         data = {"metadata": {"session_id": "meta-123"}}
         assert SessionExtractor.extract_session_id(data) == "meta-123"
 
-    def test_sentinel_session_id_in_metadata(self):
-        data = {"metadata": {"sentinel_session_id": "pan-456"}}
+    def test_openbias_session_id_in_metadata(self):
+        data = {"metadata": {"openbias_session_id": "pan-456"}}
         assert SessionExtractor.extract_session_id(data) == "pan-456"
 
     def test_run_id_in_metadata(self):
@@ -265,7 +265,7 @@ class TestExtractSessionIdFromMetadata:
 
     def test_header_takes_priority_over_metadata(self):
         data = _litellm_proxy_data(
-            headers={"x-sentinel-session-id": "from-header"},
+            headers={"x-openbias-session-id": "from-header"},
             metadata={"session_id": "from-meta"},
         )
         assert SessionExtractor.extract_session_id(data) == "from-header"
@@ -353,10 +353,10 @@ class TestExtractSessionIdFallback:
         import logging
 
         data: dict = {}
-        with caplog.at_level(logging.WARNING, logger="opensentinel.proxy.middleware"):
+        with caplog.at_level(logging.WARNING, logger="openbias.proxy.middleware"):
             SessionExtractor.extract_session_id(data)
         assert "No session ID found" in caplog.text
-        assert "x-sentinel-session-id" in caplog.text
+        assert "x-openbias-session-id" in caplog.text
 
 
 # ===========================================================================
@@ -370,11 +370,11 @@ class TestMultiAgentIsolation:
 
     def test_different_headers_produce_different_sessions(self):
         agent_a = _litellm_proxy_data(
-            headers={"x-sentinel-session-id": "agent-A-session"},
+            headers={"x-openbias-session-id": "agent-A-session"},
             messages=[{"role": "user", "content": "Hello from A"}],
         )
         agent_b = _litellm_proxy_data(
-            headers={"x-sentinel-session-id": "agent-B-session"},
+            headers={"x-openbias-session-id": "agent-B-session"},
             messages=[{"role": "user", "content": "Hello from B"}],
         )
         assert SessionExtractor.extract_session_id(agent_a) == "agent-A-session"
@@ -389,7 +389,7 @@ class TestMultiAgentIsolation:
     def test_mixed_sources_still_isolate(self):
         """Agent A uses header, Agent B uses metadata."""
         agent_a = _litellm_proxy_data(
-            headers={"x-sentinel-session-id": "header-sess"},
+            headers={"x-openbias-session-id": "header-sess"},
         )
         agent_b = {"metadata": {"session_id": "meta-sess"}}
         assert SessionExtractor.extract_session_id(agent_a) == "header-sess"

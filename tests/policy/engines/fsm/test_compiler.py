@@ -2,7 +2,7 @@
 
 import pytest
 
-from opensentinel.policy.engines.fsm.compiler import (
+from openbias.policy.engines.fsm.compiler import (
     compile_workflow,
     slugify,
     _parse_steps,
@@ -13,7 +13,7 @@ from opensentinel.policy.engines.fsm.compiler import (
     _resolve_state,
     _generate_patterns,
 )
-from opensentinel.policy.engines.fsm.workflow.schema import (
+from openbias.policy.engines.fsm.workflow.schema import (
     ConstraintType,
     SimpleWorkflowConfig,
     State,

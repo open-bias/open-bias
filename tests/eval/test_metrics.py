@@ -1,10 +1,10 @@
-"""Unit tests for opensentinel.eval.metrics."""
+"""Unit tests for openbias.eval.metrics."""
 
 from __future__ import annotations
 
-from opensentinel.eval.metrics import EvalMetrics, compute_metrics
-from opensentinel.eval.runner import TurnResult
-from opensentinel.policy.protocols import Decision, EngineResult
+from openbias.eval.metrics import EvalMetrics, compute_metrics
+from openbias.eval.runner import TurnResult
+from openbias.policy.protocols import Decision, EngineResult
 from tests.eval.conftest import make_result, make_turn
 
 

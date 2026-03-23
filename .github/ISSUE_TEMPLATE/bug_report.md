@@ -26,5 +26,5 @@ What happened instead? Include error messages or logs if available.
 
 - Python version:
 - OS:
-- Open Sentinel version:
+- Open Bias version:
 - Engine type (judge/fsm/llm/nemo/composite):

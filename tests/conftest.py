@@ -1,4 +1,4 @@
-"""Pytest fixtures for Open Sentinel tests."""
+"""Pytest fixtures for Open Bias tests."""
 
 import pytest
 from pathlib import Path
@@ -19,7 +19,7 @@ def sample_workflow_path(examples_dir: Path) -> Path:
 @pytest.fixture
 def sample_workflow(sample_workflow_path: Path):
     """Load sample customer support workflow."""
-    from opensentinel.policy.engines.fsm.workflow.parser import WorkflowParser
+    from openbias.policy.engines.fsm.workflow.parser import WorkflowParser
 
     return WorkflowParser.parse_file(sample_workflow_path)
 
@@ -88,7 +88,7 @@ def simple_config_dict():
 @pytest.fixture
 def simple_workflow(simple_workflow_dict):
     """Create a simple workflow from dict."""
-    from opensentinel.policy.engines.fsm.workflow.schema import WorkflowDefinition
+    from openbias.policy.engines.fsm.workflow.schema import WorkflowDefinition
 
     return WorkflowDefinition.model_validate(simple_workflow_dict)
 

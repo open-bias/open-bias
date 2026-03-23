@@ -3,8 +3,8 @@
 ## Setup
 
 ```bash
-git clone https://github.com/open-sentinel/open-sentinel.git
-cd open-sentinel
+git clone https://github.com/open-bias/open-bias.git
+cd open-bias
 pip install -e ".[dev]"
 ```
 
@@ -18,17 +18,17 @@ Verify the install:
 
 ```bash
 pytest
-osentinel --help
+openbias --help
 ```
 
 ## Running Locally
 
 ```bash
-# Initialize config files (creates osentinel.yaml and policy.yaml)
-osentinel init
+# Initialize config files (creates openbias.yaml and policy.yaml)
+openbias init
 
 # Start the proxy
-osentinel serve
+openbias serve
 
 # Point any OpenAI-compatible client at the proxy
 # base_url="http://localhost:4000/v1"
@@ -37,7 +37,7 @@ osentinel serve
 Override engine selection at startup:
 
 ```bash
-osentinel serve --config custom_config.yaml
+openbias serve --config custom_config.yaml
 ```
 
 ## Code Conventions
@@ -71,8 +71,8 @@ from pydantic import BaseModel
 import litellm
 
 # 3. Local
-from opensentinel.policy.protocols import PolicyEngine
-from opensentinel.config.settings import SentinelSettings
+from openbias.policy.protocols import PolicyEngine
+from openbias.config.settings import Settings
 ```
 
 ## Testing
@@ -111,7 +111,7 @@ tests/
 │   └── test_session.py
 ├── eval/                          # Offline scenario-based evaluation
 ├── proxy/
-│   ├── test_hooks.py              # SentinelCallback tests
+│   ├── test_hooks.py              # Callback tests
 │   ├── test_middleware.py         # Session extraction
 │   └── test_server_shutdown.py    # Graceful shutdown
 ├── tracing/
@@ -140,7 +140,7 @@ Defined in `tests/conftest.py`:
 
 ```python
 import pytest
-from opensentinel.policy.engines.fsm import WorkflowStateMachine, TransitionResult
+from openbias.policy.engines.fsm import WorkflowStateMachine, TransitionResult
 
 class TestMyFeature:
     @pytest.fixture
@@ -168,12 +168,12 @@ make format      # ruff fix + format
 
 ### Adding a Policy Engine
 
-Create a package under `opensentinel/policy/engines/`:
+Create a package under `openbias/policy/engines/`:
 
 ```python
-# opensentinel/policy/engines/my_engine/engine.py
-from opensentinel.policy.protocols import PolicyEngine, Decision, EngineResult
-from opensentinel.policy.registry import register_engine
+# openbias/policy/engines/my_engine/engine.py
+from openbias.policy.protocols import PolicyEngine, Decision, EngineResult
+from openbias.policy.registry import register_engine
 
 @register_engine("my_engine")
 class MyPolicyEngine(PolicyEngine):
@@ -204,7 +204,7 @@ class MyPolicyEngine(PolicyEngine):
 Import the engine in `__init__.py` to trigger registration:
 
 ```python
-# opensentinel/policy/engines/my_engine/__init__.py
+# openbias/policy/engines/my_engine/__init__.py
 from .engine import MyPolicyEngine
 ```
 
@@ -215,8 +215,8 @@ The `Interceptor` automatically wraps registered engines as `PolicyEngineChecker
 All checkers are `PolicyEngineChecker` instances wrapping a `PolicyEngine`. Create a new engine (see above) and register it via `PolicyEngineChecker`:
 
 ```python
-from opensentinel.core.interceptor.adapters import PolicyEngineChecker
-from opensentinel.core.interceptor.types import CheckPhase, CheckerMode
+from openbias.core.interceptor.adapters import PolicyEngineChecker
+from openbias.core.interceptor.types import CheckPhase, CheckerMode
 
 checker = PolicyEngineChecker(
     engine=my_engine,
@@ -225,18 +225,18 @@ checker = PolicyEngineChecker(
 )
 ```
 
-Register it in `SentinelCallback._get_interceptor()` in `opensentinel/proxy/hooks.py`.
+Register it in `Callback._get_interceptor()` in `openbias/proxy/hooks.py`.
 
 ### Adding a Constraint Type (FSM Engine)
 
-1. Add to `ConstraintType` enum in `opensentinel/policy/engines/fsm/workflow/schema.py`.
+1. Add to `ConstraintType` enum in `openbias/policy/engines/fsm/workflow/schema.py`.
 2. Add validation in `Constraint.validate_constraint_params()`.
-3. Implement evaluation in `ConstraintEvaluator._evaluate_constraint()` in `opensentinel/policy/engines/fsm/workflow/constraints.py`.
+3. Implement evaluation in `ConstraintEvaluator._evaluate_constraint()` in `openbias/policy/engines/fsm/workflow/constraints.py`.
 4. Add message formatting in `_format_violation_message()`.
 
 ### Adding an Intervention Strategy
 
-Three strategies exist as standalone classes in `opensentinel/core/intervention/strategies.py` (no base class):
+Three strategies exist as standalone classes in `openbias/core/intervention/strategies.py` (no base class):
 
 - **`SystemPromptAppendStrategy`** — appends guidance to the system message via `merge(messages, value)`.
 - **`UserMessageInjectStrategy`** — injects a user message with guidance via `merge(messages, value)`.
@@ -244,21 +244,21 @@ Three strategies exist as standalone classes in `opensentinel/core/intervention/
 
 The `StrategyType` enum maps to these classes. To add a new strategy:
 
-1. Add a variant to `StrategyType` enum in `opensentinel/core/intervention/strategies.py`.
+1. Add a variant to `StrategyType` enum in `openbias/core/intervention/strategies.py`.
 2. Create a standalone class with the appropriate static method (`merge()` for request-modifying strategies, or `apply_to_response()` for response-modifying strategies).
-3. Add handling for the new type in `Interceptor._apply_intervention()` in `opensentinel/core/interceptor/interceptor.py`.
+3. Add handling for the new type in `Interceptor._apply_intervention()` in `openbias/core/interceptor/interceptor.py`.
 
 ### Adding a Classification Method (FSM Engine)
 
-The FSM classifier uses a cascade: tool calls -> regex patterns -> embeddings. To add a method, extend `StateClassifier.classify()` in `opensentinel/policy/engines/fsm/classifier.py` and insert your method at the appropriate priority in the cascade.
+The FSM classifier uses a cascade: tool calls -> regex patterns -> embeddings. To add a method, extend `StateClassifier.classify()` in `openbias/policy/engines/fsm/classifier.py` and insert your method at the appropriate priority in the cascade.
 
 ### Adding a Policy Compiler
 
 ```python
-# opensentinel/policy/engines/my_engine/compiler.py
-from opensentinel.policy.compiler.base import LLMPolicyCompiler
-from opensentinel.policy.compiler.protocol import CompilationResult
-from opensentinel.policy.compiler.registry import register_compiler
+# openbias/policy/engines/my_engine/compiler.py
+from openbias.policy.compiler.base import LLMPolicyCompiler
+from openbias.policy.compiler.protocol import CompilationResult
+from openbias.policy.compiler.registry import register_compiler
 
 @register_compiler("my_engine")
 class MyEngineCompiler(LLMPolicyCompiler):
@@ -282,7 +282,7 @@ Import in the engine's `__init__.py` to trigger registration.
 
 ### Adding a CLI Command
 
-Edit `opensentinel/cli.py`:
+Edit `openbias/cli.py`:
 
 ```python
 @main.command()
@@ -295,43 +295,43 @@ def mycommand(option: str, arg: str):
 
 ### Adding Configuration Options
 
-Edit `opensentinel/config/settings.py`:
+Edit `openbias/config/settings.py`:
 
 ```python
 class MyComponentConfig(BaseModel):
     option_a: str = "default"
     option_b: int = 42
 
-class SentinelSettings(BaseSettings):
+class Settings(BaseSettings):
     # ... existing fields ...
     my_component: MyComponentConfig = Field(default_factory=MyComponentConfig)
 ```
 
-Configuration is primarily handled via `osentinel.yaml`.
+Configuration is primarily handled via `openbias.yaml`.
 
 ## Debugging
 
 Enable debug logging:
 
 ```bash
-DEBUG=true osentinel serve
+DEBUG=true openbias serve
 ```
 
-(If using standard env vars) or set `debug: true` in `osentinel.yaml`.
+(If using standard env vars) or set `debug: true` in `openbias.yaml`.
 
 Target specific loggers:
 
 ```python
 import logging
-logging.getLogger("opensentinel.policy.engines.fsm.classifier").setLevel(logging.DEBUG)
-logging.getLogger("opensentinel.policy.engines.llm.engine").setLevel(logging.DEBUG)
-logging.getLogger("opensentinel.core.interceptor").setLevel(logging.DEBUG)
+logging.getLogger("openbias.policy.engines.fsm.classifier").setLevel(logging.DEBUG)
+logging.getLogger("openbias.policy.engines.llm.engine").setLevel(logging.DEBUG)
+logging.getLogger("openbias.core.interceptor").setLevel(logging.DEBUG)
 ```
 
 Monitor fail-open activations:
 
 ```python
-from opensentinel.proxy.hooks import get_fail_open_counts
+from openbias.proxy.hooks import get_fail_open_counts
 counts = get_fail_open_counts()
 # {"pre_call": 0, "post_call": 1, ...}
 ```
@@ -339,7 +339,7 @@ counts = get_fail_open_counts()
 ### OpenTelemetry Tracing
 
 ```bash
-Set `tracing:` section in `osentinel.yaml`.
+Set `tracing:` section in `openbias.yaml`.
 
 # Local Jaeger instance
 docker run -d -p 4317:4317 -p 16686:16686 jaegertracing/all-in-one:latest
@@ -380,7 +380,7 @@ The state machine uses `asyncio.Lock` per session. Sessions are stored in memory
 ## Troubleshooting
 
 **"No workflow configured - running in pass-through mode"**
-Ensure your `osentinel.yaml` has the correct `policy:` path or inline rules.
+Ensure your `openbias.yaml` has the correct `policy:` path or inline rules.
 
 **"Failed to load embedding model"**
 Install `sentence-transformers` and check disk space. The model downloads ~100MB on first use.
@@ -395,7 +395,7 @@ At least one state needs `is_initial: true`.
 Check that `trigger` and `target` values in constraints match state names exactly.
 
 **"Unknown policy engine type: '...'"**
-Valid types: `judge`, `fsm`, `llm`, `nemo`. Ensure the engine module is imported in `opensentinel/policy/engines/__init__.py`.
+Valid types: `judge`, `fsm`, `llm`, `nemo`. Ensure the engine module is imported in `openbias/policy/engines/__init__.py`.
 
 ### NeMo-Specific
 
@@ -403,7 +403,7 @@ Valid types: `judge`, `fsm`, `llm`, `nemo`. Ensure the engine module is imported
 Check that your model configuration in `config.yml` maps to a valid API key in your `.env` file.
 
 **"TypeError: 'function' object is not subscriptable"**
-Pydantic v1/v2 conflict between LangChain and OpenSentinel. Pin compatible versions.
+Pydantic v1/v2 conflict between LangChain and OpenBias. Pin compatible versions.
 
 ### LLM Engine-Specific
 
@@ -423,6 +423,6 @@ Pydantic v1/v2 conflict between LangChain and OpenSentinel. Pin compatible versi
 
 If workflows aren't tracked correctly:
 
-1. Add debug logging to `opensentinel/proxy/middleware.py` to see extracted session IDs.
+1. Add debug logging to `openbias/proxy/middleware.py` to see extracted session IDs.
 2. Ensure consistent session identifiers across calls.
-3. Use the `x-sentinel-session-id` header for explicit control.
+3. Use the `x-openbias-session-id` header for explicit control.

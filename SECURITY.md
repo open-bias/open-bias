@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you've found a security vulnerability in OpenSentinel, please DO NOT report it via a public GitHub issue. Instead, email us privately.
+If you've found a security vulnerability in OpenBias, please DO NOT report it via a public GitHub issue. Instead, email us privately.
 
 We will acknowledge your email within 48 hours and provide a timeline for a fix and public disclosure.
 
@@ -16,7 +16,7 @@ The following are considered in-scope security issues:
 
 ## API Key Safety
 
-OpenSentinel never stores or transmits your API keys. They are used only for authentication with upstream LLM providers (via LiteLLM).
+OpenBias never stores or transmits your API keys. They are used only for authentication with upstream LLM providers (via LiteLLM).
 
 **Important**:
 - Never commit your `.env` file to version control.

@@ -1,0 +1,641 @@
+"""
+Core single-judge evaluator for the Judge Policy Engine.
+
+Handles pointwise, pairwise, and conversation-level evaluation
+by building prompts, calling the judge LLM, and parsing results
+into structured verdicts.
+"""
+
+import logging
+import time
+from collections import Counter
+from typing import Any
+
+from openbias.policy.engines.judge.bias import (
+    demap_pairwise_scores,
+    randomize_positions,
+)
+from openbias.policy.engines.judge.client import JudgeClient
+from openbias.policy.engines.judge.models import (
+    EvaluationScope,
+    EvaluationType,
+    JudgeScore,
+    JudgeSessionContext,
+    JudgeVerdict,
+    Rubric,
+    RubricCriterion,
+    ScoreScale,
+    VerdictAction,
+)
+from openbias.policy.engines.judge.prompts import (
+    CONVERSATION_SYSTEM,
+    CONVERSATION_USER,
+    TURN_PAIRWISE_SYSTEM,
+    TURN_PAIRWISE_USER,
+    TURN_POINTWISE_SYSTEM,
+    TURN_POINTWISE_USER,
+    TURN_REFERENCE_SYSTEM,
+    TURN_REFERENCE_USER,
+    format_conversation_block,
+    format_criteria_block,
+    format_metadata_block,
+    format_session_context_block,
+    format_tool_calls_block,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _predominant_scale(criteria: list[RubricCriterion]) -> str:
+    """Derive the ref_scale string from the most common scale across criteria."""
+    if not criteria:
+        return "1-5"
+    counts: Counter[ScoreScale] = Counter(c.scale for c in criteria)
+    scale = counts.most_common(1)[0][0]
+    return f"{scale.min_score}-{scale.max_score}"
+
+
+class JudgeEvaluator:
+    """Core evaluation logic for a single judge model.
+
+    Builds prompts from rubrics, calls the judge via JudgeClient,
+    parses JSON responses into JudgeScore/JudgeVerdict objects,
+    and maps composite scores to verdict actions.
+    """
+
+    def __init__(
+        self,
+        client: JudgeClient,
+        verbose: bool = False,
+    ) -> None:
+        self._client = client
+        self.verbose = verbose
+
+    async def evaluate_turn(
+        self,
+        model_name: str,
+        rubric: Rubric,
+        response_content: str,
+        conversation: list[dict[str, Any]],
+        reference: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        session_id: str | None = None,
+        tool_calls: list[dict[str, Any]] | None = None,
+        session_context: JudgeSessionContext | None = None,
+        tool_definitions: dict[str, dict[str, Any]] | None = None,
+        fail_action: VerdictAction = VerdictAction.INTERVENE,
+    ) -> JudgeVerdict:
+        """Evaluate a single turn (latest assistant response).
+
+        The conversation is provided as context, but scoring focuses
+        on the latest response only.
+
+        Args:
+            model_name: Which judge model to use.
+            rubric: Rubric with criteria to evaluate against.
+            response_content: The assistant response to evaluate.
+            conversation: Full conversation history for context.
+            reference: Optional reference/ideal answer.
+            metadata: Optional metadata (platform, session info, etc.).
+            tool_calls: Optional tool calls from the response.
+            tool_definitions: Optional tool schemas from the request.
+
+        Returns:
+            JudgeVerdict with per-criterion scores and composite.
+        """
+        if reference and rubric.evaluation_type in (
+            EvaluationType.REFERENCE,
+            EvaluationType.POINTWISE,
+        ):
+            return await self._evaluate_with_reference(
+                model_name, rubric, response_content, conversation,
+                reference, metadata, session_id=session_id,
+                session_context=session_context,
+                fail_action=fail_action,
+                tool_calls=tool_calls,
+                tool_definitions=tool_definitions,
+            )
+
+        criteria_block = format_criteria_block(rubric.criteria)
+        conversation_block = format_conversation_block(conversation)
+        metadata_block = format_metadata_block(metadata or {})
+        tool_calls_block = format_tool_calls_block(tool_calls or [], tool_definitions)
+        session_block = format_session_context_block(session_context)
+
+        system_prompt = (
+            rubric.prompt_overrides.get("system")
+            or TURN_POINTWISE_SYSTEM.format(
+                criteria_block=criteria_block,
+                additional_instructions=rubric.prompt_overrides.get("additional_instructions", ""),
+                session_context_block=session_block,
+            )
+        )
+        user_prompt = (
+            rubric.prompt_overrides.get("user")
+            or TURN_POINTWISE_USER.format(
+                conversation_block=conversation_block,
+                response_content=response_content,
+                tool_calls_block=tool_calls_block,
+                metadata_block=metadata_block,
+            )
+        )
+
+
+        if self.verbose:
+            logger.info("=== JUDGE PROMPT (TURN) ===")
+            logger.info(f"System: {self._truncate_log(system_prompt)}")
+            logger.info(f"User: {self._truncate_log(user_prompt)}")
+            logger.info("===========================")
+
+        start = time.monotonic()
+        raw = await self._client.call_judge(model_name, system_prompt, user_prompt, session_id=session_id)
+        latency_ms = (time.monotonic() - start) * 1000
+
+        if self.verbose:
+            logger.info(f"=== JUDGE RESPONSE (TURN - {latency_ms:.2f}ms) ===")
+            logger.info(raw)
+            logger.info("=============================================")
+
+        self._validate_judge_response(raw, rubric.criteria)
+        scores = self._parse_pointwise_scores(raw, rubric.criteria)
+        model_id = self._client.get_model_id(model_name)
+        action, composite, failed_criteria = self._resolve_verdict(
+            scores, rubric, fail_action,
+        )
+
+        return JudgeVerdict(
+            scores=scores,
+            composite_score=composite,
+            action=action,
+            summary=raw.get("summary", ""),
+            judge_model=model_id,
+            latency_ms=latency_ms,
+            token_usage=self._client.get_tokens_for_model(model_name),
+            scope=EvaluationScope.TURN,
+            metadata={"criterion_failures": failed_criteria} if failed_criteria else {},
+        )
+
+    async def evaluate_conversation(
+        self,
+        model_name: str,
+        rubric: Rubric,
+        full_conversation: list[dict[str, Any]],
+        metadata: dict[str, Any] | None = None,
+        session_id: str | None = None,
+        session_context: JudgeSessionContext | None = None,
+        fail_action: VerdictAction = VerdictAction.INTERVENE,
+    ) -> JudgeVerdict:
+        """Evaluate the entire conversation trajectory.
+
+        The full message history IS the evaluation target. The judge
+        scores cross-turn patterns, cumulative behavior, and trajectory.
+
+        Args:
+            model_name: Which judge model to use.
+            rubric: Conversation-scope rubric.
+            full_conversation: Complete message history.
+            metadata: Optional metadata.
+            session_context: Optional session state for evaluation history.
+
+        Returns:
+            JudgeVerdict with conversation-level scores.
+        """
+        criteria_block = format_criteria_block(rubric.criteria)
+        conversation_block = format_conversation_block(full_conversation)
+        metadata_block = format_metadata_block(metadata or {})
+        session_block = format_session_context_block(session_context)
+
+        # Count non-system, non-tool turns (matches format_conversation_block numbering)
+        turn_count = sum(
+            1 for m in full_conversation
+            if m.get("role") not in ("system", "tool")
+        )
+
+        system_prompt = (
+            rubric.prompt_overrides.get("system")
+            or CONVERSATION_SYSTEM.format(
+                criteria_block=criteria_block,
+                additional_instructions=rubric.prompt_overrides.get("additional_instructions", ""),
+                session_context_block=session_block,
+            )
+        )
+        user_prompt = (
+            rubric.prompt_overrides.get("user")
+            or CONVERSATION_USER.format(
+                turn_count=turn_count,
+                conversation_block=conversation_block,
+                metadata_block=metadata_block,
+            )
+        )
+
+        if self.verbose:
+            logger.info("=== JUDGE PROMPT (CONVERSATION) ===")
+            logger.info(f"System: {self._truncate_log(system_prompt)}")
+            logger.info(f"User: {self._truncate_log(user_prompt)}")
+            logger.info("===================================")
+
+        start = time.monotonic()
+        raw = await self._client.call_judge(model_name, system_prompt, user_prompt, session_id=session_id)
+        latency_ms = (time.monotonic() - start) * 1000
+
+        if self.verbose:
+            logger.info(f"=== JUDGE RESPONSE (CONVERSATION - {latency_ms:.2f}ms) ===")
+            logger.info(raw)
+            logger.info("=====================================================")
+
+        self._validate_judge_response(raw, rubric.criteria)
+        scores = self._parse_pointwise_scores(raw, rubric.criteria)
+        model_id = self._client.get_model_id(model_name)
+        action, composite, failed_criteria = self._resolve_verdict(
+            scores, rubric, fail_action,
+        )
+
+        return JudgeVerdict(
+            scores=scores,
+            composite_score=composite,
+            action=action,
+            summary=raw.get("summary", ""),
+            judge_model=model_id,
+            latency_ms=latency_ms,
+            token_usage=self._client.get_tokens_for_model(model_name),
+            scope=EvaluationScope.CONVERSATION,
+            metadata={"criterion_failures": failed_criteria} if failed_criteria else {},
+        )
+
+    async def evaluate_pairwise(
+        self,
+        model_name: str,
+        rubric: Rubric,
+        response_a: str,
+        response_b: str,
+        conversation: list[dict[str, Any]],
+        metadata: dict[str, Any] | None = None,
+        session_id: str | None = None,
+        fail_action: VerdictAction = VerdictAction.INTERVENE,
+    ) -> JudgeVerdict:
+        """Compare two responses using pairwise evaluation.
+
+        Positions are randomized to mitigate position bias,
+        then de-mapped after evaluation.
+
+        Args:
+            model_name: Which judge model to use.
+            rubric: Pairwise rubric.
+            response_a: First candidate response.
+            response_b: Second candidate response.
+            conversation: Conversation context.
+            metadata: Optional metadata.
+
+        Returns:
+            JudgeVerdict with comparison scores (de-mapped).
+        """
+        # Randomize positions to mitigate bias
+        first, second, mapping = randomize_positions(response_a, response_b)
+
+        criteria_block = format_criteria_block(rubric.criteria)
+        conversation_block = format_conversation_block(conversation)
+        metadata_block = format_metadata_block(metadata or {})
+
+        system_prompt = (
+            rubric.prompt_overrides.get("system")
+            or TURN_PAIRWISE_SYSTEM.format(criteria_block=criteria_block)
+        )
+        user_prompt = (
+            rubric.prompt_overrides.get("user")
+            or TURN_PAIRWISE_USER.format(
+                conversation_block=conversation_block,
+                response_a=first,
+                response_b=second,
+                metadata_block=metadata_block,
+            )
+        )
+
+        start = time.monotonic()
+        raw = await self._client.call_judge(model_name, system_prompt, user_prompt, session_id=session_id)
+        latency_ms = (time.monotonic() - start) * 1000
+
+        # De-map positions back to original a/b
+        raw_scores = raw.get("scores", [])
+        demapped_scores = demap_pairwise_scores(raw_scores, mapping)
+
+
+
+        # Build JudgeScores from the "a" side scores
+        scores = self._parse_pairwise_scores(demapped_scores, rubric.criteria)
+        model_id = self._client.get_model_id(model_name)
+
+        action, composite, failed_criteria = self._resolve_verdict(
+            scores, rubric, fail_action,
+        )
+
+        return JudgeVerdict(
+            scores=scores,
+            composite_score=composite,
+            action=action,
+            summary=raw.get("summary", ""),
+            judge_model=model_id,
+            latency_ms=latency_ms,
+            token_usage=self._client.get_tokens_for_model(model_name),
+            scope=EvaluationScope.TURN,
+            metadata={
+                "pairwise": True,
+                "overall_winner": raw.get("overall_winner", "tie"),
+                "position_mapping": mapping,
+                **({"criterion_failures": failed_criteria} if failed_criteria else {}),
+            },
+        )
+
+    async def _evaluate_with_reference(
+        self,
+        model_name: str,
+        rubric: Rubric,
+        response_content: str,
+        conversation: list[dict[str, Any]],
+        reference: str,
+        metadata: dict[str, Any] | None = None,
+        session_id: str | None = None,
+        session_context: JudgeSessionContext | None = None,
+        fail_action: VerdictAction = VerdictAction.INTERVENE,
+        tool_calls: list[dict[str, Any]] | None = None,
+        tool_definitions: dict[str, dict[str, Any]] | None = None,
+    ) -> JudgeVerdict:
+        """Evaluate a response against a reference answer."""
+        criteria_block = format_criteria_block(rubric.criteria)
+        conversation_block = format_conversation_block(conversation)
+        metadata_block = format_metadata_block(metadata or {})
+        tool_calls_block = format_tool_calls_block(tool_calls or [], tool_definitions)
+        session_block = format_session_context_block(session_context)
+
+        system_prompt = (
+            rubric.prompt_overrides.get("system")
+            or TURN_REFERENCE_SYSTEM.format(
+                criteria_block=criteria_block,
+                ref_scale=_predominant_scale(rubric.criteria),
+                additional_instructions=rubric.prompt_overrides.get("additional_instructions", ""),
+                session_context_block=session_block,
+            )
+        )
+        user_prompt = (
+            rubric.prompt_overrides.get("user")
+            or TURN_REFERENCE_USER.format(
+                conversation_block=conversation_block,
+                response_content=response_content,
+                reference_answer=reference,
+                tool_calls_block=tool_calls_block,
+                metadata_block=metadata_block,
+            )
+        )
+
+        start = time.monotonic()
+        raw = await self._client.call_judge(model_name, system_prompt, user_prompt, session_id=session_id)
+        latency_ms = (time.monotonic() - start) * 1000
+
+        # Add reference_alignment criterion so the parser accepts it; it should
+        # not affect pass/fail decisions so _resolve_verdict still uses rubric.criteria.
+        ref_criterion = RubricCriterion(
+            name="reference_alignment",
+            description="How well the response aligns with the reference answer",
+            scale=ScoreScale.LIKERT_5,
+            weight=1.0,
+        )
+        augmented_criteria = list(rubric.criteria) + [ref_criterion]
+
+        self._validate_judge_response(raw, augmented_criteria)
+        scores = self._parse_pointwise_scores(raw, augmented_criteria)
+        model_id = self._client.get_model_id(model_name)
+
+        # Pass only rubric criteria scores to _resolve_verdict so reference_alignment
+        # does not influence composite score or pass/fail decisions.
+        rubric_criterion_names = {c.name for c in rubric.criteria}
+        rubric_scores = [s for s in scores if s.criterion in rubric_criterion_names]
+        action, composite, failed_criteria = self._resolve_verdict(
+            rubric_scores, rubric, fail_action,
+        )
+
+        return JudgeVerdict(
+            scores=scores,
+            composite_score=composite,
+            action=action,
+            summary=raw.get("summary", ""),
+            judge_model=model_id,
+            latency_ms=latency_ms,
+            token_usage=self._client.get_tokens_for_model(model_name),
+            scope=EvaluationScope.TURN,
+            metadata={
+                "reference_based": True,
+                **({"criterion_failures": failed_criteria} if failed_criteria else {}),
+            },
+        )
+
+    # =========================================================================
+    # Verdict resolution
+    # =========================================================================
+
+    def _resolve_verdict(
+        self,
+        scores: list[JudgeScore],
+        rubric: Rubric,
+        fail_action: VerdictAction,
+    ) -> tuple[VerdictAction, float, list[str]]:
+        """Resolve action, composite score, and failed criteria from scores.
+
+        Uses a fast binary path when all criteria are binary (0/1),
+        otherwise falls through to the threshold-based path.
+
+        Returns:
+            (action, composite, failed_criteria) tuple.
+        """
+        if self._is_all_binary(rubric.criteria):
+            failed = [s for s in scores if s.score == 0 and s.confidence > 0.0]
+            action = fail_action if failed else VerdictAction.PASS
+            composite = 0.0 if failed else 1.0
+            failed_criteria = [s.criterion for s in failed]
+        else:
+            failed_criteria = self._check_criterion_failures(scores, rubric.criteria)
+            composite = self._compute_composite(scores, rubric.criteria)
+            action = self._map_action(composite, rubric, fail_action)
+            if failed_criteria and action == VerdictAction.PASS:
+                action = fail_action
+        return action, composite, failed_criteria
+
+    @staticmethod
+    def _is_all_binary(criteria: list[RubricCriterion]) -> bool:
+        """Return True if every criterion uses the BINARY scale."""
+        return all(c.scale == ScoreScale.BINARY for c in criteria)
+
+    # =========================================================================
+    # Parsing & Scoring
+    # =========================================================================
+
+    def _parse_pointwise_scores(
+        self,
+        raw: dict[str, Any],
+        criteria: list[RubricCriterion],
+    ) -> list[JudgeScore]:
+        """Parse pointwise scores from raw LLM JSON response."""
+        raw_scores = raw.get("scores", [])
+        criteria_map = {c.name: c for c in criteria}
+        scores = []
+
+        for raw_score in raw_scores:
+            criterion_name = raw_score.get("criterion", "")
+            criterion = criteria_map.get(criterion_name)
+            if not criterion:
+                logger.warning(f"Unknown criterion in judge response: {criterion_name}")
+                continue
+
+            score_val = int(raw_score.get("score", 0))
+            # Clamp score to validity range
+            score_val = max(criterion.scale.min_score, min(criterion.scale.max_score, score_val))
+
+            scores.append(JudgeScore(
+                criterion=criterion_name,
+                score=score_val,
+                max_score=criterion.scale.max_score,
+                reasoning=raw_score.get("reasoning", ""),
+                evidence=raw_score.get("evidence", []),
+                confidence=float(raw_score.get("confidence", 1.0)),
+                corrective_actions=raw_score.get("corrective_actions"),
+            ))
+
+        # Fill in missing criteria with minimum scores
+        scored_names = {s.criterion for s in scores}
+        for criterion in criteria:
+            if criterion.name not in scored_names:
+                logger.warning(f"Judge did not score criterion: {criterion.name}")
+                scores.append(JudgeScore(
+                    criterion=criterion.name,
+                    score=criterion.scale.min_score,
+                    max_score=criterion.scale.max_score,
+                    reasoning="Not evaluated by judge",
+                    confidence=0.0,
+                ))
+
+        return scores
+
+    def _parse_pairwise_scores(
+        self,
+        demapped_scores: list[dict[str, Any]],
+        criteria: list[RubricCriterion],
+    ) -> list[JudgeScore]:
+        """Parse pairwise scores into JudgeScore objects.
+
+        Uses score_a as the primary score (evaluating response A).
+        """
+        criteria_map = {c.name: c for c in criteria}
+        scores = []
+
+        for raw_score in demapped_scores:
+            criterion_name = raw_score.get("criterion", "")
+            criterion = criteria_map.get(criterion_name)
+            if not criterion:
+                continue
+
+            score_val = int(raw_score.get("score_a", 0))
+            # Clamp score
+            score_val = max(criterion.scale.min_score, min(criterion.scale.max_score, score_val))
+
+            scores.append(JudgeScore(
+                criterion=criterion_name,
+                score=score_val,
+                max_score=criterion.scale.max_score,
+                reasoning=raw_score.get("reasoning", ""),
+                evidence=raw_score.get("evidence", []),
+                confidence=float(raw_score.get("confidence", 1.0)),
+                corrective_actions=raw_score.get("corrective_actions"),
+            ))
+
+        return scores
+
+    def _compute_composite(
+        self,
+        scores: list[JudgeScore],
+        criteria: list[RubricCriterion],
+    ) -> float:
+        """Compute weighted normalized composite score (0-1).
+
+        Each score is normalized to 0-1 using its scale, then
+        weighted by the criterion weight.
+        """
+        if not scores:
+            return 0.0
+
+        criteria_map = {c.name: c for c in criteria}
+        total_weight = 0.0
+        weighted_sum = 0.0
+
+        for score in scores:
+            if score.confidence == 0.0:
+                continue
+            criterion = criteria_map.get(score.criterion)
+            weight = criterion.weight if criterion else 1.0
+            weighted_sum += score.normalized * weight
+            total_weight += weight
+
+        if total_weight == 0.0:
+            return 0.0
+
+        return weighted_sum / total_weight
+
+    def _map_action(
+        self, composite: float, rubric: Rubric, fail_action: VerdictAction,
+    ) -> VerdictAction:
+        """Map composite score to a verdict action.
+
+        Binary: pass if above rubric threshold, otherwise fail_action.
+        """
+        if composite >= rubric.pass_threshold:
+            return VerdictAction.PASS
+        return fail_action
+
+    def _check_criterion_failures(
+        self,
+        scores: list[JudgeScore],
+        criteria: list[RubricCriterion],
+    ) -> list[str]:
+        """Check if any individual criteria fall below their fail thresholds.
+
+        Returns list of criterion names that failed.
+        """
+        criteria_map = {c.name: c for c in criteria}
+        failures = []
+
+        for score in scores:
+            # Skip synthetic fills (confidence=0.0) — these are placeholders
+            # for criteria the judge LLM omitted, not real failures
+            if score.confidence == 0.0:
+                continue
+            criterion = criteria_map.get(score.criterion)
+            if criterion and criterion.fail_threshold is not None:
+                if score.normalized < criterion.fail_threshold:
+                    failures.append(score.criterion)
+
+        return failures
+
+
+    def _validate_judge_response(
+        self,
+        raw: dict[str, Any],
+        criteria: list[RubricCriterion],
+    ) -> None:
+        """Validate the structure of the judge LLM response."""
+        if "scores" not in raw:
+            raise ValueError("Judge response missing 'scores' key")
+
+        if not isinstance(raw["scores"], list):
+            raise ValueError("Judge response 'scores' must be a list")
+
+        # Basic schema check for each score item
+        for item in raw["scores"]:
+            if not isinstance(item, dict):
+                raise ValueError("Score item must be a dictionary")
+            if "criterion" not in item:
+                raise ValueError("Score item missing 'criterion'")
+            if "score" not in item:
+                raise ValueError(f"Score item for '{item.get('criterion')}' missing 'score'")
+
+    def _truncate_log(self, text: str, max_len: int = 2000) -> str:
+        """Truncate text for logging if it exceeds max_len."""
+        if len(text) <= max_len:
+            return text
+        return text[:max_len] + f"... (truncated {len(text) - max_len} chars)"
