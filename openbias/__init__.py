@@ -53,7 +53,7 @@ Using Policy Engines Directly:
     ```
 """
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 # Core configuration
 from openbias.config.settings import Settings

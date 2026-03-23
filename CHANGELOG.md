@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.3.0
+
+### Breaking
+- Renamed package from `opensentinel` to `openbias`
+- Removed composite engine
+- Removed reliability modes, ensemble, and multi-threshold from judge engine
+- Rewrote FSM schema and compiler (deterministic pipeline, simplified constraints)
+- Removed `mode` and `pass_threshold` config options
+
+### Added
+- Eval framework: `openbias eval` with per-engine scenario runners, metrics, and reporting
+- Shadow `fail_action` mode — log violations without blocking
+- Trace content redaction
+- Session TTL, LRU eviction, and per-session async task caps
+- Eager policy engine initialization at startup
+- Tool call awareness in judge evaluations
+- Session ID validation to prevent log/OTEL injection
+
+### Fixed
+- Dozens of correctness fixes across all engines (judge scoring, FSM transitions, LLM drift detection, NeMo rail activation)
+- Interceptor race conditions, session lifecycle, and async result handling
+
 ## 0.2.0
 
 ### Added
