@@ -477,6 +477,7 @@ class TestTriggerCommand:
 
             combined = result.output + buf.getvalue()
             # Should exit 0 (trigger handles errors internally, prints them)
+            assert result.exit_code == 0
             assert "Error" in combined or "API call failed" in combined
 
     def test_trigger_custom_message(self):
@@ -549,3 +550,4 @@ class TestHelpOutput:
         assert "validate" in result.output
         assert "info" in result.output
         assert "version" in result.output
+        assert "trigger" in result.output

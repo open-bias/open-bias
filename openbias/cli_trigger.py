@@ -204,8 +204,6 @@ async def run_trigger(
 
     # Check pass-through mode (no policy engine configured)
     if proxy._callback is not None and proxy._callback._policy_engine is None:
-        interceptor_logger.removeHandler(collector)
-        hooks_logger.removeHandler(collector)
         console.print()
         warning("No policy engine configured — pass-through mode")
         # Still run the completion so we can show the response
