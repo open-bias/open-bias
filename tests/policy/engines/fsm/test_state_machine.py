@@ -256,7 +256,7 @@ class TestExpectedFromState:
         """When expected_from_state is None, no staleness check is performed."""
         await machine.get_or_create_session("s1")
 
-        # Should work without expected_from_state (backward compat)
+        # expected_from_state is optional
         result, error = await machine.transition("s1", "middle")
         assert result == TransitionResult.SUCCESS
 
