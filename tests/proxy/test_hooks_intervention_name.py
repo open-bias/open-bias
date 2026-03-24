@@ -1,5 +1,5 @@
 """
-Integration test: async POST_CALL checker returns INTERVENE with a message
+Integration test: async POST_CALL evaluator returns INTERVENE with a message
 -> next PRE_CALL applies it -> verify the modifications appear in the result.
 
 Tests the full deferred intervention flow end-to-end through the Interceptor.
@@ -69,7 +69,7 @@ def _mock_async_engine(
 class TestDeferredInterventionIntegration:
 
     async def test_system_prompt_append_applied(self):
-        """Async checker returns INTERVENE -> system prompt is appended on next PRE_CALL."""
+        """Async evaluator returns INTERVENE -> system prompt is appended on next PRE_CALL."""
         engine = _mock_async_engine(
             message="Always verify identity first.",
             metadata={"strategy": "system_prompt_append"},
@@ -88,7 +88,7 @@ class TestDeferredInterventionIntegration:
         assert "Always verify identity first." in system_msg["content"]
 
     async def test_user_message_inject_applied(self):
-        """Async checker returns INTERVENE with user_message_inject strategy."""
+        """Async evaluator returns INTERVENE with user_message_inject strategy."""
         engine = _mock_async_engine(
             message="Please verify identity.",
         )
