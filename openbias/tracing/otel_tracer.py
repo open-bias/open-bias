@@ -41,6 +41,12 @@ class SpanEventManager(logging.Handler):
                     "code.filepath": record.pathname,
                     "code.lineno": record.lineno,
                 }
+                session_id = getattr(record, "session_id", "")
+                if session_id:
+                    attributes["session.id"] = session_id
+                request_id = getattr(record, "request_id", "")
+                if request_id:
+                    attributes["request.id"] = request_id
                 current_span.add_event(record.getMessage(), attributes=attributes)
                 
                 # Debug print for verification
