@@ -108,45 +108,6 @@ class EvaluatorConfig(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
 
 
-class PolicyEngineConfig(BaseModel):
-    """Configuration for a single policy engine.
-
-    .. deprecated::
-        Use EvaluatorConfig instead. This class is kept as a backward-compatible
-        shim and will be removed in a future refactor step.
-    """
-
-    type: str = "judge"
-    enabled: bool = True
-    config_path: str | None = None
-    config: dict[str, Any] = Field(default_factory=dict)
-
-    def model_dump(self, **kwargs):
-        """Custom dump to merge config_path into config dict for engines."""
-        data = super().model_dump(**kwargs)
-        if data.get("config_path"):
-            data["config"]["config_path"] = data["config_path"]
-        return data
-
-
-class PolicyConfig(BaseModel):
-    """Policy system configuration.
-
-    .. deprecated::
-        Fields have been flattened onto Settings. This class is kept as a
-        backward-compatible shim and will be removed in a future refactor step.
-    """
-
-    engine: PolicyEngineConfig = Field(default_factory=PolicyEngineConfig)
-    default_strategy: Literal[
-        "system_prompt_append", "user_message_inject"
-    ] = "user_message_inject"
-    fail_action: Literal["intervene", "block", "shadow"] = "intervene"
-    fail_open: bool = True
-    hook_timeout_seconds: float = 30.0
-    post_call_mode: Literal["sync", "async"] = "async"
-
-
 class YamlConfigSource(PydanticBaseSettingsSource):
     """Custom settings source that reads from a openbias.yaml config file.
 
@@ -358,138 +319,13 @@ class YamlConfigSource(PydanticBaseSettingsSource):
         result["evaluators"] = evaluators
         return result
 
-    def _map_to_settings(self) -> dict[str, Any]:
-        """Map simplified YAML keys to nested Settings structure.
-
-        See openbias/config/schema.yaml for the full reference of
-        supported keys and their mapping behavior.
-        """
-        if not self._yaml_data:
-            return {}
-
-        data = self._yaml_data
-
-        # New evaluator-based format: when "evaluators" key is present,
-        # use the new mapping path exclusively.
-        if "evaluators" in data:
-            return self._map_evaluators(data)
-
-        result: dict[str, Any] = {}
-
-        # engine -> policy.engine.type
-        if "engine" in data:
-            result.setdefault("policy", {}).setdefault("engine", {})["type"] = data[
-                "engine"
-            ]
-
-        # policy -> config_path (string) or inline_policy (list/dict)
-        if "policy" in data:
-            policy_val = data["policy"]
-            if isinstance(policy_val, str):
-                resolved_path = self._resolve_path(policy_val)
-                result.setdefault("policy", {}).setdefault("engine", {})[
-                    "config_path"
-                ] = resolved_path
-            elif isinstance(policy_val, (list, dict)):
-                engine_config = (
-                    result.setdefault("policy", {})
-                    .setdefault("engine", {})
-                    .setdefault("config", {})
-                )
-                engine_config["inline_policy"] = policy_val
-
-        # post_call_mode -> policy.post_call_mode
-        if "post_call_mode" in data:
-            result.setdefault("policy", {})["post_call_mode"] = data[
-                "post_call_mode"
-            ]
-
-        # fail_action -> policy.fail_action
-        if "fail_action" in data:
-            result.setdefault("policy", {})["fail_action"] = data["fail_action"]
-
-        # fail_open -> policy.fail_open
-        if "fail_open" in data:
-            result.setdefault("policy", {})["fail_open"] = data["fail_open"]
-
-        # Shared proxy, debug/log_level, and tracing mapping
-        self._map_common_fields(data, result)
-
-        # -----------------------------------------------------------------
-        # Engine-specific sections -> policy.engine.config.*
-        # Each engine's YAML section passes all keys into the config dict
-        # that the engine's initialize() receives.
-        # -----------------------------------------------------------------
-        engine_type = data.get("engine", "judge")
-
-        # judge.* -> policy.engine.config.*
-        judge_cfg = data.get("judge", {})
-        if engine_type == "judge" and isinstance(judge_cfg, dict) and judge_cfg:
-            engine_config = (
-                result.setdefault("policy", {})
-                .setdefault("engine", {})
-                .setdefault("config", {})
-            )
-
-            # Special: judge.model -> models list entry
-            if "model" in judge_cfg:
-                engine_config["models"] = [
-                    {"name": "primary", "model": judge_cfg["model"]}
-                ]
-
-            # Pass through all remaining keys directly
-            for k, v in judge_cfg.items():
-                if k not in self._JUDGE_SPECIAL_KEYS:
-                    engine_config[k] = v
-
-        # llm.* -> policy.engine.config.*
-        llm_cfg = data.get("llm", {})
-        if engine_type == "llm" and isinstance(llm_cfg, dict) and llm_cfg:
-            engine_config = (
-                result.setdefault("policy", {})
-                .setdefault("engine", {})
-                .setdefault("config", {})
-            )
-            for k, v in llm_cfg.items():
-                # Rename 'model' -> 'llm_model' to match what LLMPolicyEngine expects
-                mapped_key = self._LLM_KEY_RENAMES.get(k, k)
-                engine_config[mapped_key] = v
-
-        # nemo.* -> policy.engine.config.*
-        nemo_cfg = data.get("nemo", {})
-        if engine_type == "nemo" and isinstance(nemo_cfg, dict) and nemo_cfg:
-            engine_config = (
-                result.setdefault("policy", {})
-                .setdefault("engine", {})
-                .setdefault("config", {})
-            )
-            for k, v in nemo_cfg.items():
-                if k == "config_path":
-                    v = self._resolve_path(v)
-                engine_config[k] = v
-
-        # fsm.* -> policy.engine.config.*
-        fsm_cfg = data.get("fsm", {})
-        if engine_type == "fsm" and isinstance(fsm_cfg, dict) and fsm_cfg:
-            engine_config = (
-                result.setdefault("policy", {})
-                .setdefault("engine", {})
-                .setdefault("config", {})
-            )
-            for k, v in fsm_cfg.items():
-                if k == "workflow_path" or k == "config_path":
-                    v = self._resolve_path(v)
-                engine_config[k] = v
-
-        return result
-
     def get_field_value(self, field: Any, field_name: str) -> tuple[Any, str, bool]:
-        mapped = self._map_to_settings()
+        mapped = self._map_evaluators(self._yaml_data or {})
         value = mapped.get(field_name)
         return value, field_name, value is not None
 
     def __call__(self) -> dict[str, Any]:
-        return self._map_to_settings()
+        return self._map_evaluators(self._yaml_data or {})
 
 
 _config_path_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
@@ -541,11 +377,6 @@ class Settings(BaseSettings):
     hook_timeout_seconds: float = 30.0
     evaluators: list[EvaluatorConfig] = Field(default_factory=list)
 
-    # Backward-compatible field — still populated by YamlConfigSource which
-    # emits {"policy": {...}}.  Consumers access settings.policy.engine.type etc.
-    # Will be removed in Steps 3-4 when YAML mapping and consumers are updated.
-    policy: PolicyConfig = Field(default_factory=PolicyConfig)
-
     # API Keys (loaded from env vars or .env file)
     # We use validation_alias to map standard keys to these fields
     openai_api_key: str | None = Field(None, validation_alias="OPENAI_API_KEY")
@@ -562,24 +393,6 @@ class Settings(BaseSettings):
             super().__init__(**kwargs)
         finally:
             _config_path_var.reset(_token)
-
-        # Sync flat fields from the policy shim so new-style access works.
-        # Only overwrite if the flat field was NOT explicitly passed by the caller.
-        # Skip entirely when evaluators are populated (new format sets flat fields
-        # directly, no policy shim involved).
-        # The policy field is still populated by YamlConfigSource which emits
-        # {"policy": {...}} format.  This sync will be removed in Steps 3-4.
-        if not self.evaluators:
-            if "mode" not in kwargs:
-                self.mode = self.policy.post_call_mode
-            if "fail_action" not in kwargs:
-                self.fail_action = self.policy.fail_action
-            if "strategy" not in kwargs:
-                self.strategy = self.policy.default_strategy
-            if "fail_open" not in kwargs:
-                self.fail_open = self.policy.fail_open
-            if "hook_timeout_seconds" not in kwargs:
-                self.hook_timeout_seconds = self.policy.hook_timeout_seconds
 
         # Sync API keys to os.environ for downstream libraries (LiteLLM, LangChain)
         # This allows us to use .env files without explicit load_dotenv() in CLI
@@ -654,20 +467,8 @@ class Settings(BaseSettings):
         Returns:
             Configuration dict ready for PolicyEngineRegistry.create_and_initialize()
         """
-        engine_config = self.policy.engine.model_dump()
-
-        # For judge engines: ensure models list is populated from global default_model
-        # if no explicit judge.model was configured. Engine should never resolve models itself.
-        if (
-            engine_config.get("type") == "judge"
-            and not engine_config["config"].get("models")
-            and self.proxy.default_model
-        ):
-            engine_config["config"]["models"] = [
-                {"name": "primary", "model": self.proxy.default_model}
-            ]
-
-        return engine_config
+        # TODO (Task 2): implement via evaluators list
+        return {}
 
     def get_model_list(self) -> list[dict]:
         """Get model list for LiteLLM router using wildcard routing.
@@ -706,21 +507,7 @@ class Settings(BaseSettings):
 
     def validate(self) -> None:
         """Validate configuration logic."""
-        # Use the policy shim to access engine config (works for both old and new paths)
-        policy = self.policy
-
-        # 1. Check if policy config path exists
-        policy_config_path = policy.engine.config_path or policy.engine.config.get("config_path")
-
-        if policy_config_path and not Path(policy_config_path).exists():
-            raise ValueError(
-                f"Policy configuration file not found: {policy_config_path}"
-            )
-
-        # FSM engine is purely local — no LLM model or API keys required.
-        if policy.engine.type == "fsm":
-            return
-
+        # TODO (Task 2): validate via evaluators list instead of policy shim
         default_model = self.proxy.default_model
 
         if not default_model:

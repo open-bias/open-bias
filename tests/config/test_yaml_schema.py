@@ -1,11 +1,19 @@
 """
 Tests for YamlConfigSource._map_to_settings() — full YAML schema coverage.
 
-Verifies that every engine-specific YAML section maps correctly into
-the Settings structure per openbias/config/schema.yaml.
+DEPRECATED: _map_to_settings() was removed as part of the backward-compatibility
+removal. The old single-engine YAML format (engine:, judge:, policy: top-level keys)
+is no longer supported. Use the evaluators-based format instead.
+
+These tests are skipped pending removal or replacement with evaluator-format tests.
 """
 
 import pytest
+
+pytestmark = pytest.mark.skip(
+    reason="REMOVED: _map_to_settings() deleted — old single-engine YAML format no longer supported"
+)
+
 from openbias.config.settings import YamlConfigSource
 
 

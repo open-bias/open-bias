@@ -82,11 +82,15 @@ class TestValidateCommand:
         runner = CliRunner()
         with runner.isolated_filesystem():
             Path("openbias.yaml").write_text(
-                "engine: judge\n"
                 "model: gpt-4o-mini\n"
-                "policy:\n"
-                '  - "Be professional"\n'
-                '  - "No PII"\n'
+                "evaluators:\n"
+                "  - name: safety\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+                "    model: gpt-4o-mini\n"
+                '    policies:\n'
+                '      - "Be professional"\n'
+                '      - "No PII"\n'
                 "tracing:\n  type: none\n"
             )
 
@@ -110,9 +114,12 @@ class TestValidateCommand:
         runner = CliRunner()
         with runner.isolated_filesystem():
             Path("openbias.yaml").write_text(
-                "engine: judge\n"
-                "policy:\n"
-                '  - "Be professional"\n'
+                "evaluators:\n"
+                "  - name: safety\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+                '    policies:\n'
+                '      - "Be professional"\n'
                 "tracing:\n  type: none\n"
             )
 
@@ -135,10 +142,13 @@ class TestValidateCommand:
         runner = CliRunner()
         with runner.isolated_filesystem():
             Path("openbias.yaml").write_text(
-                "engine: judge\n"
                 "model: gpt-4o-mini\n"
-                "judge:\n"
-                "  default_rubric: nonexistent_rubric\n"
+                "evaluators:\n"
+                "  - name: behavior\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+                "    model: gpt-4o-mini\n"
+                "    rubric: nonexistent_rubric\n"
                 "tracing:\n  type: none\n"
             )
 

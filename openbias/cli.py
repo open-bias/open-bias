@@ -284,7 +284,7 @@ def validate(config_path: Path) -> None:
         error(f"Failed to read {config_path}: {e}")
         raise SystemExit(1)
 
-    if isinstance(raw, dict) and "engine" in raw:
+    if isinstance(raw, dict) and ("engine" in raw or "evaluators" in raw):
         _validate_openbias_config(config_path, raw)
     else:
         _validate_workflow(config_path)
@@ -319,38 +319,53 @@ def _validate_openbias_config(config_path: Path, raw: dict) -> None:
     """Validate an openbias.yaml configuration file."""
     from openbias.config.settings import Settings
 
-    engine_type = raw.get("engine", "judge")
-
     try:
         with spinner("Loading configuration..."):
             settings = Settings(_config_path=str(config_path))
-            policy_config = settings.get_policy_config()
     except Exception as e:
         error(f"Configuration error: {e}")
         raise SystemExit(1)
 
-    engine_config = policy_config.get("config", {})
+    # Determine engine type: new format uses evaluators list, old uses top-level engine key
+    judge_evaluators = [ev for ev in settings.evaluators if ev.type == "judge"]
 
-    if engine_type == "judge":
+    if judge_evaluators:
         from openbias.policy.engines.judge.engine import JudgePolicyEngine
 
-        errors = JudgePolicyEngine.validate_config(engine_config)
-        if errors:
+        # Validate each judge evaluator
+        all_errors: list[str] = []
+        for ev in judge_evaluators:
+            engine_config = dict(ev.config)
+            # Inject default model if not explicitly set
+            if not engine_config.get("models") and settings.proxy.default_model:
+                engine_config["models"] = [
+                    {"name": "primary", "model": settings.proxy.default_model}
+                ]
+            ev_errors = JudgePolicyEngine.validate_config(engine_config)
+            if ev_errors:
+                all_errors.extend(ev_errors)
+
+        if all_errors:
             error("Judge engine configuration errors:")
-            for err in errors:
+            for err in all_errors:
                 console.print(f"    [dim]{err}[/]")
             raise SystemExit(1)
 
-        # Build summary
-        models = engine_config.get("models", [])
+        # Build summary using first judge evaluator
+        first_ev_config = dict(judge_evaluators[0].config)
+        if not first_ev_config.get("models") and settings.proxy.default_model:
+            first_ev_config["models"] = [
+                {"name": "primary", "model": settings.proxy.default_model}
+            ]
+        models = first_ev_config.get("models", [])
         model_name = models[0]["model"] if models else "(none)"
-        fail_action = settings.policy.fail_action
+        fail_action = settings.fail_action
 
         # Count rubrics and criteria
         from openbias.policy.engines.judge.rubrics import RubricRegistry
 
         registry = RubricRegistry()
-        inline_policy = engine_config.get("inline_policy")
+        inline_policy = first_ev_config.get("inline_policy")
         if inline_policy is not None:
             temp = JudgePolicyEngine()
             temp._registry = registry
@@ -367,7 +382,7 @@ def _validate_openbias_config(config_path: Path, raw: dict) -> None:
         config_panel(
             "\u2713 Valid Configuration",
             {
-                "Engine": engine_type,
+                "Engine": "judge",
                 "Model": model_name,
                 "Fail Action": fail_action,
                 "Rubrics": str(len(rubric_names)),
@@ -375,12 +390,14 @@ def _validate_openbias_config(config_path: Path, raw: dict) -> None:
             },
         )
     else:
-        # For non-judge engines, just verify settings loaded
+        # No evaluators configured — show basic summary
+        engine_type = raw.get("engine", "unknown")
         config_panel(
             "\u2713 Valid Configuration",
             {
                 "Engine": engine_type,
                 "Model": str(settings.proxy.default_model or "(none)"),
+                "Fail Action": settings.fail_action,
             },
         )
 
