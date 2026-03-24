@@ -41,6 +41,7 @@ from openbias.config.settings import Settings
 from openbias.core.utils import extract_response_content, extract_usage_info
 from openbias.core.interceptor import Interceptor
 from openbias.core.intervention.strategies import WorkflowViolationError
+from openbias.logging import session_id_var, request_id_var
 from openbias.policy.protocols import PolicyEngine
 from openbias.proxy.middleware import SessionExtractor
 
@@ -442,6 +443,8 @@ class Callback(CustomLogger):
         if not data["metadata"].get("session_id"):
             data["metadata"]["session_id"] = session_id
 
+        # Bind context vars so all downstream log records include these IDs
+        session_id_var.set(session_id)
 
         logger.debug(f"pre_call_hook: session={session_id}, call_type={call_type}")
 
@@ -464,6 +467,7 @@ class Callback(CustomLogger):
 
             with cm as span:
                 request_id = str(uuid.uuid4())
+                request_id_var.set(request_id)
                 if "metadata" not in data:
                     data["metadata"] = {}
                 data["metadata"]["_openbias_request_id"] = request_id
@@ -540,6 +544,10 @@ class Callback(CustomLogger):
     ) -> Any:
         """Inner implementation for async_post_call_success_hook."""
         session_id = SessionExtractor.extract_session_id(data)
+        session_id_var.set(session_id)
+        request_id = data.get("metadata", {}).get("_openbias_request_id", "")
+        if request_id:
+            request_id_var.set(request_id)
         llm_end_time = time.time()
         llm_start_time = data.get("metadata", {}).get("_openbias_llm_start_time")
 
@@ -675,6 +683,7 @@ class Callback(CustomLogger):
     ) -> None:
         """Inner implementation for async_post_call_failure_hook."""
         session_id = SessionExtractor.extract_session_id(request_data)
+        session_id_var.set(session_id)
 
         logger.warning(f"LLM call failed for session {session_id}: {original_exception}")
 
