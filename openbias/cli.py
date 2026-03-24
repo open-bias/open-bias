@@ -17,7 +17,7 @@ import click
 from rich.text import Text
 
 from openbias import __version__
-from openbias.logging_setup import setup_logging
+from openbias.logging import configure_logging
 from openbias.cli_ui import (
     config_panel,
     console,
@@ -98,7 +98,7 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
         openbias serve -c openbias.yaml
         openbias serve --port 4000
     """
-    setup_logging(debug=debug)
+    configure_logging(debug=debug)
 
     from openbias.config.settings import Settings
     from openbias.proxy.server import start_proxy
@@ -194,7 +194,7 @@ def trigger(config: Path, message: str, debug: bool) -> None:
     """
     import asyncio
 
-    setup_logging(debug=debug)
+    configure_logging(debug=debug)
 
     from openbias.config.settings import Settings
 
@@ -531,7 +531,7 @@ def eval_cmd(config: Path | None, json_output: Path | None, verbose: bool, debug
     from openbias.eval.mocks import apply_mock_provider
     from openbias.policy.registry import PolicyEngineRegistry
 
-    setup_logging(debug=debug)
+    configure_logging(debug=debug)
 
     # --- Discover config file ---
     config_path = config
@@ -770,7 +770,7 @@ def compile(
     """
     import asyncio
 
-    setup_logging(debug=debug)
+    configure_logging(debug=debug)
 
     # Handle 'auto' engine selection
     if engine == "auto":

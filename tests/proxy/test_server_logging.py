@@ -9,8 +9,8 @@ import yaml
 from openbias.config.settings import Settings
 from openbias.proxy.server import Proxy
 
-# The warning is now emitted by the shared logging_setup module.
-_LOGGER_PATCH_TARGET = "openbias.logging_setup.logger"
+# The warning is now emitted by the shared openbias.logging module.
+_LOGGER_PATCH_TARGET = "openbias.logging.logger"
 
 
 @pytest.fixture(autouse=True)

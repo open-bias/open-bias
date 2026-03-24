@@ -25,7 +25,7 @@ import litellm
 from litellm import Router
 
 from openbias.config.settings import Settings
-from openbias.logging_setup import setup_logging
+from openbias.logging import configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +55,10 @@ class Proxy:
 
     def _setup_logging(self) -> None:
         """Configure logging based on settings."""
-        setup_logging(
+        configure_logging(
             debug=self.settings.debug,
             log_level=self.settings.log_level,
+            log_format=self.settings.log_format,
             litellm_verbose=self.settings.litellm_verbose,
         )
 
