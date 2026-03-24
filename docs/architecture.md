@@ -8,11 +8,11 @@ Open Bias is a transparent proxy between your application and LLM providers. It 
 │             │    │  ┌────────-┐  ┌─────────────┐             │    │             │
 │             │◀───│  │ Hooks   │─▶│ Interceptor │             │◀───│             │
 └─────────────┘    │  │safe_hook│  │ ┌─────────┐ │             │    └─────────────┘
-                   │  └────────-┘  │ │Checkers │ │             │
+                   │  └────────-┘  │ │Evaluators│ │             │
                    │      │        │ └─────────┘ │             │
                    │      ▼        └─────────────┘             │
                    │  ┌────────────────────────────────────┐   │
-                   │  │         Policy Engines             │   │
+                   │  │       Evaluator Engines             │   │
                    │  │  ┌───────┐ ┌─────┐ ┌─────┐ ┌────┐  │   │
                    │  │  │ Judge │ │ FSM │ │ LLM │ │NeMo│  │   │
                    │  │  └───────┘ └─────┘ └─────┘ └────┘  │   │
@@ -36,22 +36,22 @@ Wraps LiteLLM to intercept all LLM traffic.
 
 | Hook | Timing | Purpose |
 |------|--------|---------|
-| `async_pre_call_hook` | Before LLM call | Apply pending interventions, run PRE_CALL checkers, start trace |
+| `async_pre_call_hook` | Before LLM call | Apply pending interventions, run PRE_CALL evaluators, start trace |
 | `async_moderation_hook` | Parallel with LLM | Reserved (unused) |
-| `async_post_call_success_hook` | After LLM response | Run POST_CALL checkers, start async checkers, complete trace |
+| `async_post_call_success_hook` | After LLM response | Run POST_CALL evaluators, start async evaluators, complete trace |
 | `async_post_call_failure_hook` | After LLM error | Log failure |
 
 - **`middleware.py`** -- Session ID extraction. Priority: `x-openbias-session-id` header > `metadata.session_id` > `metadata.run_id` (LangChain) > `user` field > `thread_id` > hash of first message > random UUID.
 
 ### Interceptor (`openbias/core/interceptor/`)
 
-Orchestration layer between hooks and policy engines. Runs checkers in two phases (PRE_CALL, POST_CALL) with two execution modes (SYNC, ASYNC).
+Orchestration layer between hooks and policy engines. Runs evaluators in two phases (PRE_CALL, POST_CALL) with two execution modes (SYNC, ASYNC).
 
-`run_pre_call`: collects async results from the previous request, runs sync PRE_CALL checkers, starts async PRE_CALL checkers in background.
+`run_pre_call`: collects async results from the previous request, runs sync PRE_CALL evaluators, starts async PRE_CALL evaluators in background.
 
-`run_post_call`: runs sync POST_CALL checkers, starts async POST_CALL checkers (results applied on next request).
+`run_post_call`: runs sync POST_CALL evaluators, starts async POST_CALL evaluators (results applied on next request).
 
-Policy engines are passed directly to the `Interceptor` — no adapter layer.
+Policy engines are passed directly as `pre_call_evaluators` and `post_call_evaluators` to the `Interceptor` — no adapter layer.
 
 ### Policy Engines (`openbias/policy/`)
 
@@ -77,9 +77,9 @@ Engine-specific docs: [engines.md](engines.md). Engine-specific READMEs live in 
 
 ```
 Client request
-  → pre_call_hook: extract session, run PRE_CALL checkers
+  → pre_call_hook: extract session, run PRE_CALL evaluators
   → LLM call
-  → post_call_hook: run POST_CALL checkers (all pass)
+  → post_call_hook: run POST_CALL evaluators (all pass)
   → response returned unmodified
 ```
 
@@ -87,7 +87,7 @@ Client request
 
 ```
 Call N:
-  → post_call_hook: POST_CALL checker detects violation, schedules intervention
+  → post_call_hook: POST_CALL evaluator detects violation, schedules intervention
   → response returned unmodified (violation is deferred)
 
 Call N+1:
@@ -110,6 +110,6 @@ Hook throws or times out
 
 **Deferred intervention.** Violations detected in POST_CALL are applied on the next request, not retroactively. This preserves the current response and avoids race conditions with streaming.
 
-**Engine-agnostic interceptor.** The interceptor knows about checkers and phases, not about FSMs or rubrics. Engines are wrapped as checkers via an adapter. Adding a new engine requires zero changes to the proxy layer.
+**Evaluator-pipeline interceptor.** The interceptor knows about evaluators and phases, not about FSMs or rubrics.
 
 **Async by default.** The judge engine runs in ASYNC mode -- evaluation happens in the background after the response is sent. This adds zero latency to the critical path. Sync mode is available when blocking evaluation is required.
