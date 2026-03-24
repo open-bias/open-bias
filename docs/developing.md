@@ -207,7 +207,7 @@ Import the engine in `__init__.py` to trigger registration:
 from .engine import MyPolicyEngine
 ```
 
-The `Interceptor` accepts registered engines directly via `Interceptor(engines=[engine])`. No adapter layer needed.
+The `Interceptor` accepts registered engines directly via `Interceptor(pre_call_evaluators=[], post_call_evaluators=[engine])`. No adapter layer needed.
 
 ### Adding a Constraint Type (FSM Engine)
 
@@ -277,19 +277,18 @@ def mycommand(option: str, arg: str):
 
 ### Adding Configuration Options
 
-Edit `openbias/config/settings.py`:
+Engine-specific config keys are set directly in the evaluator entry in `openbias.yaml`:
 
-```python
-class MyComponentConfig(BaseModel):
-    option_a: str = "default"
-    option_b: int = 42
-
-class Settings(BaseSettings):
-    # ... existing fields ...
-    my_component: MyComponentConfig = Field(default_factory=MyComponentConfig)
+```yaml
+# openbias.yaml
+evaluators:
+  - name: my-evaluator
+    type: my_engine
+    option_a: "value"
+    option_b: 42
 ```
 
-Configuration is primarily handled via `openbias.yaml`.
+These keys are collected into the evaluator's `config` dict and passed to the engine's `initialize()` method. No changes to `settings.py` are needed for engine-specific options.
 
 ## Debugging
 
@@ -377,7 +376,7 @@ At least one state needs `is_initial: true`.
 Check that `trigger` and `target` values in constraints match state names exactly.
 
 **"Unknown policy engine type: '...'"**
-Valid types: `judge`, `fsm`, `llm`, `nemo`. Ensure the engine module is imported in `openbias/policy/engines/__init__.py`.
+The `type` field on an evaluator entry in `openbias.yaml` must match a registered engine key (e.g. `judge`, `fsm`, `llm`, `nemo`). Ensure the engine module is imported in `openbias/policy/engines/__init__.py` so its `@register_engine` decorator runs.
 
 ### NeMo-Specific
 
