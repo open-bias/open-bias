@@ -295,7 +295,7 @@ async def test_pre_call_hook_returns_exception_on_block(
 async def test_post_call_hook_block_raises_workflow_violation(
     callback, mock_api_key
 ):
-    """When sync POST_CALL checker blocks, WorkflowViolationError propagates."""
+    """When sync POST_CALL evaluator blocks, WorkflowViolationError propagates."""
     from openbias.core.interceptor.types import InterceptionResult
 
     data = {"messages": [{"role": "user", "content": "hello"}]}
@@ -334,7 +334,7 @@ async def test_post_call_intervention_modifies_returned_response(
             modified_data={
                 "_interventions": [
                     {
-                        "checker": "test_checker",
+                        "evaluator": "test_evaluator",
                         "message": "policy warning: be careful",
                     }
                 ]
@@ -377,7 +377,7 @@ async def test_post_call_intervention_replaces_response_content(
             modified_data={
                 "_interventions": [
                     {
-                        "checker": "test_checker",
+                        "evaluator": "test_evaluator",
                         "modified_messages": [
                             {"role": "assistant", "content": "safe replacement"}
                         ],
@@ -939,7 +939,7 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
     Verifies the complete path:
     1. settings.fail_action = "block"
     2. Hook creates Interceptor with fail_action="block"
-    3. Sync PRE_CALL checker returns Decision.INTERVENE
+    3. Sync PRE_CALL evaluator returns Decision.INTERVENE
     4. Interceptor._effective_decision upgrades INTERVENE → BLOCK
     5. Interceptor.run_pre_call returns InterceptionResult(allowed=False)
     6. _pre_call_impl returns an Exception object
@@ -1007,14 +1007,14 @@ async def test_initialize_partitions_evaluators_by_phase(mock_settings):
     from openbias.config.settings import EvaluatorConfig
 
     mock_pre_engine = MagicMock()
-    mock_pre_engine.name = "pre-checker"
+    mock_pre_engine.name = "pre-evaluator"
     mock_post_engine = MagicMock()
-    mock_post_engine.name = "post-checker"
+    mock_post_engine.name = "post-evaluator"
 
     mock_settings.evaluators = [
-        EvaluatorConfig(name="pre-checker", type="judge", phase="pre_call",
+        EvaluatorConfig(name="pre-evaluator", type="judge", phase="pre_call",
                         config={"models": [{"name": "primary", "model": "gpt-4o"}]}),
-        EvaluatorConfig(name="post-checker", type="judge", phase="post_call",
+        EvaluatorConfig(name="post-evaluator", type="judge", phase="post_call",
                         config={"models": [{"name": "primary", "model": "gpt-4o"}]}),
     ]
 
