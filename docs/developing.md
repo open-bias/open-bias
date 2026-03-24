@@ -396,9 +396,9 @@ Pydantic v1/v2 conflict between LangChain and OpenBias. Pin compatible versions.
 
 ### Interceptor
 
-**Async checker results not applied** -- Async results are collected at the start of the next `run_pre_call`. Ensure session IDs are consistent across requests.
+**Async evaluator results not applied** -- Async results are collected at the start of the next `run_pre_call`. Ensure session IDs are consistent across requests.
 
-**Checker errors not propagating** -- By default, checker errors produce a `FAIL` decision. Under `safe_hook`, only `WorkflowViolationError` propagates; all other errors trigger pass-through.
+**Evaluator errors not propagating** -- By default, evaluator errors produce a `FAIL` decision. Under `safe_hook`, only `WorkflowViolationError` propagates; all other errors trigger pass-through.
 
 ### Session ID
 
