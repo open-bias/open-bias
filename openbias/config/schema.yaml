@@ -172,20 +172,3 @@ eval:
   scenarios:
     - ./eval/scenarios/*.json     # single directory
     # - ./eval/scenarios/**/*.json  # recursive glob
-
-# ---------------------------------------------------------------------------
-# Backward Compatibility
-# ---------------------------------------------------------------------------
-#
-# The old single-engine format is still supported:
-#
-#   engine: judge
-#   policy:
-#     - "No harmful content"
-#   judge:
-#     model: anthropic/claude-sonnet-4-5
-#     fail_action: block
-#
-# When the YAML parser sees `engine:` without `evaluators:`, it uses the
-# legacy mapping path to convert to the internal Settings structure.
-# New configs should use the evaluators format above.

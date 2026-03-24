@@ -10,14 +10,14 @@ Configuration can be provided via:
 Priority (highest wins): openbias.yaml > API keys > defaults
 
 The simplified openbias.yaml format:
-    engine: judge
     model: gemini/gemini-2.5-flash   # optional — auto-detected from API keys
     port: 4000
-    judge:
-      pass_threshold: 0.6
-    policy:
-      - "Must NOT provide financial advice"
-      - "Be professional and helpful"
+    evaluators:
+      - name: safety
+        type: judge
+        policies:
+          - "Must NOT provide financial advice"
+          - "Be professional and helpful"
     tracing:
       type: none
 
@@ -188,8 +188,6 @@ class YamlConfigSource(PydanticBaseSettingsSource):
     # to engine config as generic keys.
     _RESERVED_TOPLEVEL_KEYS = frozenset(
         {
-            "engine",
-            "policy",
             "port",
             "host",
             "debug",
@@ -197,30 +195,17 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             "model",
             "tracing",
             "eval",
-            "post_call_mode",
             "fail_action",
             "fail_open",
             "hook_timeout_seconds",
-            # New evaluator-pipeline keys
             "mode",
             "evaluators",
             "max_intervention_attempts",
             "strategy",
             "session_ttl",
             "max_sessions",
-            # Engine-specific sections are handled below
-            "judge",
-            "llm",
-            "fsm",
-            "nemo",
         }
     )
-
-    # Keys within judge: that receive special handling
-    _JUDGE_SPECIAL_KEYS = frozenset({"model"})
-
-    # Keys within llm: that need renaming for the engine config
-    _LLM_KEY_RENAMES = {"model": "llm_model"}
 
     # Keys extracted from each evaluator entry as EvaluatorConfig fields
     # (everything else goes into the config dict).
