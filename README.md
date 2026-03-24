@@ -94,7 +94,7 @@ Every hook is wrapped in `safe_hook()` with a configurable timeout (default 30s)
                    │         │          │ └──────────┘│        │
                    │         ▼          └─────────────┘        │
                    │  ┌────────────────────────────────────┐   │
-                   │  │        Evaluator Engines            │   │
+                   │  │        Evaluator Engines           │   │
                    │  │  ┌───────┐ ┌─────┐ ┌─────┐ ┌────┐  │   │
                    │  │  │ Judge │ │ FSM │ │ LLM │ │NeMo│  │   │
                    │  │  └───────┘ └─────┘ └─────┘ └────┘  │   │

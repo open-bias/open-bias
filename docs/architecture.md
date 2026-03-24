@@ -12,7 +12,7 @@ Open Bias is a transparent proxy between your application and LLM providers. It 
                    │      │        │ └──────────┘│             │
                    │      ▼        └─────────────┘             │
                    │  ┌────────────────────────────────────┐   │
-                   │  │       Evaluator Engines             │   │
+                   │  │       Evaluator Engines            │   │
                    │  │  ┌───────┐ ┌─────┐ ┌─────┐ ┌────┐  │   │
                    │  │  │ Judge │ │ FSM │ │ LLM │ │NeMo│  │   │
                    │  │  └───────┘ └─────┘ └─────┘ └────┘  │   │
