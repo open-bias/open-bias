@@ -192,6 +192,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             "host",
             "debug",
             "log_level",
+            "log_format",
             "model",
             "tracing",
             "eval",
@@ -226,6 +227,8 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             result["debug"] = data["debug"]
         if "log_level" in data:
             result["log_level"] = data["log_level"]
+        if "log_format" in data:
+            result["log_format"] = data["log_format"]
 
         # Tracing (tracing.* -> otel.*)
         tracing_cfg = data.get("tracing", {})
@@ -345,6 +348,7 @@ class Settings(BaseSettings):
     # General settings
     debug: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    log_format: Literal["text", "json"] = "text"
     litellm_verbose: bool = False
 
     # Component configurations
