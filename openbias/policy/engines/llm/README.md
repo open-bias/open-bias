@@ -148,7 +148,7 @@ The drift detector also sets boolean anomaly flags:
 
 ### Soft Constraint Evaluation
 
-Unlike the FSM engine's deterministic constraint checker, the LLM engine evaluates constraints **semantically**:
+Unlike the FSM engine's deterministic constraint evaluator, the LLM engine evaluates constraints **semantically**:
 
 1. **Selection**: Only constraints relevant to the current state are evaluated (e.g., `NEVER` constraints are always active; `PRECEDENCE` constraints activate when the trigger state is current)
 2. **Batching**: Active constraints are batched (max 5 per call) to minimize LLM round-trips
