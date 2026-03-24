@@ -420,9 +420,10 @@ class TestTriggerCommand:
             mock_proxy_class = MagicMock(return_value=mock_proxy)
 
             mock_settings = MagicMock()
-            mock_settings.policy.engine.type = "judge"
+            mock_settings.evaluators = [MagicMock(type="judge")]
             mock_settings.proxy.default_model = "gpt-4o-mini"
-            mock_settings.policy.fail_action = "block"
+            mock_settings.fail_action = "block"
+            mock_settings.fail_open = True
             mock_settings.validate = MagicMock()
 
             mock_settings_class = MagicMock(return_value=mock_settings)
@@ -465,9 +466,10 @@ class TestTriggerCommand:
             mock_proxy_class = MagicMock(return_value=mock_proxy)
 
             mock_settings = MagicMock()
-            mock_settings.policy.engine.type = "judge"
+            mock_settings.evaluators = [MagicMock(type="judge")]
             mock_settings.proxy.default_model = "gpt-4o-mini"
-            mock_settings.policy.fail_action = "block"
+            mock_settings.fail_action = "block"
+            mock_settings.fail_open = True
             mock_settings.validate = MagicMock()
 
             mock_settings_class = MagicMock(return_value=mock_settings)
@@ -517,9 +519,10 @@ class TestTriggerCommand:
             mock_proxy_class = MagicMock(return_value=mock_proxy)
 
             mock_settings = MagicMock()
-            mock_settings.policy.engine.type = "judge"
+            mock_settings.evaluators = [MagicMock(type="judge")]
             mock_settings.proxy.default_model = "gpt-4o-mini"
-            mock_settings.policy.fail_action = "block"
+            mock_settings.fail_action = "block"
+            mock_settings.fail_open = True
             mock_settings.validate = MagicMock()
 
             mock_settings_class = MagicMock(return_value=mock_settings)
