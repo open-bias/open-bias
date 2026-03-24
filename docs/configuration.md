@@ -91,9 +91,6 @@ evaluators:
       - "Be professional"
     # rubric: agent_behavior
     # custom_rubrics_path: ./rubrics/
-    # conversation_rubric: conversation_policy
-    # conversation_eval_interval: 5
-    # pre_call_enabled: false
     # verbose: true
 ```
 
@@ -103,10 +100,9 @@ evaluators:
 | `policies` | list | -- | Inline policy rules (shorthand for `config.inline_policy`). Judge-only. |
 | `rubric` | string | `agent_behavior` | Default rubric for per-turn evaluation (shorthand for `config.default_rubric`). |
 | `custom_rubrics_path` | string | -- | Path to directory containing custom rubric YAML files |
-| `conversation_rubric` | string | `conversation_policy` | Rubric for multi-turn conversation evaluation |
-| `conversation_eval_interval` | int | `5` | Run conversation-level evaluation every N turns |
-| `pre_call_enabled` | bool | `false` | Evaluate requests before forwarding to the LLM |
 | `verbose` | bool | `false` | Log the raw judge prompt and response |
+
+Pre-call evaluation is controlled by setting `phase: pre_call` on the evaluator entry. For conversation-scope evaluation, configure a separate evaluator with a conversation rubric.
 
 ## LLM Engine
 
@@ -195,8 +191,7 @@ Configure under the `tracing:` section. Tracing uses OpenTelemetry spans.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `tracing.enabled` | bool | `false` | Enable or disable tracing entirely |
-| `tracing.type` | string | `otlp` | Exporter type: `otlp`, `langfuse`, `console`, `none` |
+| `tracing.type` | string | `none` | Exporter type: `otlp`, `langfuse`, `console`, `none`. Tracing is enabled when type is not `none`. |
 | `tracing.endpoint` | string | `http://localhost:4317` | OTLP endpoint URL |
 | `tracing.service_name` | string | `openbias` | Service name in traces |
 | `tracing.redact_content` | bool | `false` | Strip prompts and completions from trace spans |
@@ -309,8 +304,6 @@ evaluators:
     phase: post_call
     rubric: agent_behavior
     custom_rubrics_path: ./rubrics/
-    conversation_eval_interval: 5
-
   - name: workflow-guard
     type: fsm
     phase: post_call
