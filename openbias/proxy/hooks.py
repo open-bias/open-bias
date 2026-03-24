@@ -636,7 +636,7 @@ class Callback(CustomLogger):
                     )
                     logger.info(
                         f"Applied POST_CALL intervention from "
-                        f"'{intervention.get('checker')}' for session {session_id}"
+                        f"'{intervention.get('evaluator')}' for session {session_id}"
                     )
 
                 if self.tracer:
