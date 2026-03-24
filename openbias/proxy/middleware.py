@@ -175,6 +175,7 @@ class SessionExtractor:
                 if session_id is not None:
                     validated = _validate_session_id(session_id)
                     if validated is not None:
+                        logger.debug("Session ID from header %s: %s", header_name, validated)
                         return validated
 
         # 1b. Check litellm_params metadata (Library mode)
@@ -187,6 +188,7 @@ class SessionExtractor:
                 if sid is not None and str(sid) != "":
                     validated = _validate_session_id(str(sid))
                     if validated is not None:
+                        logger.debug("Session ID from litellm_params metadata: %s", validated)
                         return validated
 
         # 2. Check metadata fields
@@ -197,6 +199,7 @@ class SessionExtractor:
                 if val is not None and str(val) != "":
                     validated = _validate_session_id(str(val))
                     if validated is not None:
+                        logger.debug("Session ID from metadata.%s: %s", key, validated)
                         return validated
 
         # 3. Check user field (OpenAI pattern)
@@ -204,6 +207,7 @@ class SessionExtractor:
         if user is not None and str(user) != "":
             validated = _validate_session_id(str(user))
             if validated is not None:
+                logger.debug("Session ID from user field: user_%s", validated)
                 return f"user_{validated}"
 
         # 4. Check for thread_id (OpenAI Assistants)
@@ -211,6 +215,7 @@ class SessionExtractor:
         if thread_id is not None and str(thread_id) != "":
             validated = _validate_session_id(str(thread_id))
             if validated is not None:
+                logger.debug("Session ID from thread_id: %s", validated)
                 return validated
 
         # 5. Hash of first message content (deterministic fallback)
@@ -225,6 +230,7 @@ class SessionExtractor:
                     else:
                         raw = json.dumps(content, sort_keys=True).encode()
                     msg_hash = hashlib.sha256(raw).hexdigest()[:16]
+                    logger.debug("Session ID from message hash: msg_%s", msg_hash)
                     return f"msg_{msg_hash}"
 
         # 6. Last resort: random UUID

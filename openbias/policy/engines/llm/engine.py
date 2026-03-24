@@ -190,6 +190,12 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             classification = await self._state_classifier.classify(
                 session, message, tool_calls
             )
+            logger.debug(
+                "State classification: state=%s, confidence=%.2f, tier=%s",
+                classification.best_state,
+                classification.best_confidence,
+                classification.tier.value,
+            )
 
             # Record turn after classification
             session.add_turn({
@@ -223,6 +229,10 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             drift = self._drift_detector.compute_drift(
                 session, message, tool_calls, expected_tools
             )
+            logger.debug(
+                "Drift computed: composite=%.3f, level=%s",
+                drift.composite, drift.level.value,
+            )
 
             # Add anomaly violations
             if drift.anomaly_flags.get("unexpected_tool_call"):
@@ -243,6 +253,12 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             constraint_evals = await self._constraint_evaluator.evaluate(
                 session, message, tool_calls
             )
+            if constraint_evals:
+                violated = [cv for cv in constraint_evals if cv.violated]
+                logger.debug(
+                    "Constraint evaluation: %d checked, %d violated",
+                    len(constraint_evals), len(violated),
+                )
 
             for cv in constraint_evals:
                 if cv.violated:

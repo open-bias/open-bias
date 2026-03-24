@@ -456,6 +456,10 @@ class JudgeEvaluator:
             action = self._map_action(composite, rubric, fail_action)
             if failed_criteria and action == VerdictAction.PASS:
                 action = fail_action
+        logger.debug(
+            "Verdict resolved: action=%s, composite=%.3f, failed=%s",
+            action.value, composite, failed_criteria,
+        )
         return action, composite, failed_criteria
 
     @staticmethod

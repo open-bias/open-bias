@@ -92,6 +92,7 @@ class SessionStore(Generic[V]):
                 break
 
         for sid in stale:
+            logger.debug("Evicting session %s (TTL expired)", sid)
             self._evict_one(sid)
         evicted += len(stale)
 
@@ -100,6 +101,7 @@ class SessionStore(Generic[V]):
         if overflow > 0:
             oldest = list(self._data.keys())[:overflow]
             for sid in oldest:
+                logger.debug("Evicting session %s (hard-cap overflow)", sid)
                 self._evict_one(sid)
             evicted += len(oldest)
 

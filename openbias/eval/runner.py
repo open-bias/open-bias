@@ -133,6 +133,10 @@ class EvalRunner:
                     response_data=response_data,
                     request_data=request_data,
                 )
+                logger.debug(
+                    "Eval turn %d: request=%s, response=%s",
+                    idx, request_eval.decision.value, response_eval.decision.value,
+                )
 
                 turn_results.append(
                     TurnResult(
