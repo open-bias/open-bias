@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Breaking
+- Replaced top-level `engine`, `policy`, `judge`, `fsm`, `llm`, `nemo` config keys with `evaluators` list — each evaluator entry specifies `name`, `type`, and `phase`
+- Removed `PolicyEngineConfig`, `PolicyConfig`, and `_map_to_settings()`
+- Interceptor constructor now takes `pre_call_evaluators` and `post_call_evaluators` instead of a single `engines` list
+
+### Added
+- Multi-evaluator pipeline with phase-based execution (pre_call / post_call)
+- YAML shorthand mappings for evaluator config (`model`, `policies`, `rubric`, `policy`)
+- Top-level `mode`, `strategy`, `max_intervention_attempts`, `session_ttl`, `max_sessions` settings
+
 ## 0.3.0
 
 ### Breaking
