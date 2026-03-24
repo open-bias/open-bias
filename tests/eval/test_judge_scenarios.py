@@ -51,7 +51,6 @@ async def engine():
         "judge",
         {
             "inline_policy": INLINE_POLICY,
-            "conversation_eval_interval": 999,
             "models": [{"model": "mock-model"}],
         },
     )
@@ -199,7 +198,6 @@ async def recovery_engine():
         "judge",
         {
             "inline_policy": INLINE_POLICY,
-            "conversation_eval_interval": 999,
             "conversation_rubric": None,
             "models": [{"model": "mock-model"}],
         },
