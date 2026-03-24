@@ -1,15 +1,15 @@
 # Architecture
 
-Open Bias is a transparent proxy between your application and LLM providers. It intercepts every call, evaluates it against policy engines, and intervenes when violations are detected.
+Open Bias is a transparent proxy between your application and LLM providers. It intercepts every call, evaluates it against a pipeline of evaluators, and intervenes when violations are detected.
 
 ```
 ┌─────────────┐    ┌───────────────────────────────────────────┐    ┌─────────────┐
 │  Your App   │───▶│              OPEN BIAS                    │───▶│ LLM Provider│
 │             │    │  ┌────────-┐  ┌─────────────┐             │    │             │
 │             │◀───│  │ Hooks   │─▶│ Interceptor │             │◀───│             │
-└─────────────┘    │  │safe_hook│  │ ┌─────────┐ │             │    └─────────────┘
-                   │  └────────-┘  │ │Evaluators│ │             │
-                   │      │        │ └─────────┘ │             │
+└─────────────┘    │  │safe_hook│  │ ┌──────────┐│             │    └─────────────┘
+                   │  └────────-┘  │ │Evaluators││             │
+                   │      │        │ └──────────┘│             │
                    │      ▼        └─────────────┘             │
                    │  ┌────────────────────────────────────┐   │
                    │  │       Evaluator Engines             │   │
@@ -45,7 +45,7 @@ Wraps LiteLLM to intercept all LLM traffic.
 
 ### Interceptor (`openbias/core/interceptor/`)
 
-Orchestration layer between hooks and policy engines. Runs evaluators in two phases (PRE_CALL, POST_CALL) with two execution modes (SYNC, ASYNC).
+Orchestration layer between hooks and evaluator engines. Runs evaluators in two phases (PRE_CALL, POST_CALL) with two execution modes (SYNC, ASYNC).
 
 `run_pre_call`: collects async results from the previous request, runs sync PRE_CALL evaluators, starts async PRE_CALL evaluators in background.
 
@@ -110,6 +110,6 @@ Hook throws or times out
 
 **Deferred intervention.** Violations detected in POST_CALL are applied on the next request, not retroactively. This preserves the current response and avoids race conditions with streaming.
 
-**Evaluator-pipeline interceptor.** The interceptor knows about evaluators and phases, not about FSMs or rubrics.
+**Evaluator-pipeline interceptor.** The interceptor knows about evaluators and phases, not about FSMs or rubrics. Adding a new engine type requires zero changes to the proxy layer.
 
 **Async by default.** The judge engine runs in ASYNC mode -- evaluation happens in the background after the response is sent. This adds zero latency to the critical path. Sync mode is available when blocking evaluation is required.

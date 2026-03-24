@@ -89,9 +89,9 @@ Every hook is wrapped in `safe_hook()` with a configurable timeout (default 30s)
 │  Your App   │───▶│              OPEN BIAS                    │───▶│ LLM Provider│
 │             │    │     ┌─────────┐    ┌─────────────┐        │    │             │
 │             │◀───│     │ Hooks   │───▶│ Interceptor │        │◀───│             │
-└─────────────┘    │     │safe_hook│    │ ┌─────────┐ │        │    └─────────────┘
-                   │     └─────────┘    │ │Evaluators│ │        │
-                   │         │          │ └─────────┘ │        │
+└─────────────┘    │     │safe_hook│    │ ┌──────────┐│        │    └─────────────┘
+                   │     └─────────┘    │ │Evaluators││        │
+                   │         │          │ └──────────┘│        │
                    │         ▼          └─────────────┘        │
                    │  ┌────────────────────────────────────┐   │
                    │  │        Evaluator Engines            │   │
@@ -221,7 +221,7 @@ Missing: persistent session storage, dashboard UI, pre-built policy library, rat
 ## Documentation
 
 - [Configuration Reference](docs/configuration.md) -- every config option with type, default, description
-- [Policy Engines](docs/engines.md) -- how each engine works, when to use it, tradeoffs
+- [Evaluator Engines](docs/engines.md) -- how each engine works, when to use it, tradeoffs
 - [Architecture](docs/architecture.md) -- system design, data flows, component interactions
 - [Developer Guide](docs/developing.md) -- setup, testing, extension points, debugging
 - [Examples](examples/)

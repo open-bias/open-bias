@@ -114,6 +114,7 @@ evaluators:
     type: llm
     phase: post_call
     model: anthropic/claude-sonnet-4-5
+    config_path: ./workflow.yaml
     temperature: 0.0
     max_tokens: 1024
     # timeout: 10.0
@@ -127,6 +128,7 @@ evaluators:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `model` | string | global `model` | LLM model for state classification (shorthand for `config.models`). |
+| `config_path` | string | -- | Path to workflow YAML file (required). Unlike FSM/NeMo, the `policy` shorthand is not available for the LLM engine. |
 | `temperature` | float | `0.0` | LLM temperature |
 | `max_tokens` | int | `1024` | Maximum tokens per LLM call |
 | `timeout` | float | `10.0` | Request timeout in seconds |
@@ -304,6 +306,7 @@ evaluators:
     phase: post_call
     rubric: agent_behavior
     custom_rubrics_path: ./rubrics/
+
   - name: workflow-guard
     type: fsm
     phase: post_call

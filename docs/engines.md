@@ -1,4 +1,4 @@
-# Policy Engines
+# Evaluator Engines
 
 Four engines, same interface (`PolicyEngine` protocol). Configure one or more as evaluators based on your enforcement needs.
 
@@ -208,6 +208,7 @@ evaluators:
   - name: llm-guard
     type: llm
     model: anthropic/claude-sonnet-4-5
+    config_path: ./workflow.yaml
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#llm-engine)
