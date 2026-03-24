@@ -127,7 +127,7 @@ class Interceptor:
             result = pending.result
             decision = self._effective_decision(result.decision, session_id)
             all_metadata["results"].append(
-                {"checker": pending.evaluator_name, "decision": decision.value}
+                {"evaluator": pending.evaluator_name, "decision": decision.value}
             )
 
             if decision == Decision.BLOCK:
@@ -175,7 +175,7 @@ class Interceptor:
                 )
                 decision = self._effective_decision(result.decision, session_id)
                 all_metadata["results"].append(
-                    {"checker": evaluator.name, "decision": decision.value}
+                    {"evaluator": evaluator.name, "decision": decision.value}
                 )
 
                 if decision == Decision.BLOCK:
@@ -208,7 +208,7 @@ class Interceptor:
                 logger.error(f"Evaluator '{evaluator.name}' failed: {e}")
                 # Fail-open: log and continue instead of blocking
                 all_metadata["results"].append(
-                    {"checker": evaluator.name, "decision": "error", "error": str(e)}
+                    {"evaluator": evaluator.name, "decision": "error", "error": str(e)}
                 )
 
         return InterceptionResult(
@@ -248,7 +248,7 @@ class Interceptor:
                 )
                 decision = self._effective_decision(result.decision, session_id)
                 all_metadata["results"].append(
-                    {"checker": evaluator.name, "decision": decision.value}
+                    {"evaluator": evaluator.name, "decision": decision.value}
                 )
 
                 if decision == Decision.BLOCK:
@@ -268,7 +268,7 @@ class Interceptor:
                         f"{result.message}"
                     )
                     intervention_info: dict[str, Any] = {
-                        "checker": evaluator.name,
+                        "evaluator": evaluator.name,
                         "message": result.message,
                     }
                     if result.modified_messages is not None:
@@ -279,7 +279,7 @@ class Interceptor:
                         modified_data = {}
                     modified_data.setdefault("_interventions", []).append(
                         {
-                            "checker": evaluator.name,
+                            "evaluator": evaluator.name,
                             "message": result.message,
                             "modified_messages": result.modified_messages,
                             "metadata": result.metadata,
@@ -289,7 +289,7 @@ class Interceptor:
             except Exception as e:
                 logger.error(f"Evaluator '{evaluator.name}' failed: {e}")
                 all_metadata["results"].append(
-                    {"checker": evaluator.name, "decision": "error", "error": str(e)}
+                    {"evaluator": evaluator.name, "decision": "error", "error": str(e)}
                 )
 
         # Step 2: Start async POST_CALL evaluators in background
