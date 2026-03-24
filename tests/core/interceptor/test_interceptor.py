@@ -430,7 +430,7 @@ class TestSyncPostCall:
 # ===========================================================================
 
 
-class TestAsyncCheckerLifecycle:
+class TestAsyncEvaluatorLifecycle:
 
     async def test_async_evaluator_started_during_post_call(self):
         """After run_post_call, async task is stored in _running_tasks."""
@@ -1243,7 +1243,7 @@ class TestSeparateEvaluatorLists:
         )
         assert post_result.allowed is True
         assert len(post_result.metadata["results"]) == 1
-        assert post_result.metadata["results"][0]["checker"] == "post_only"
+        assert post_result.metadata["results"][0]["evaluator"] == "post_only"
 
     async def test_populated_pre_call_with_empty_post_call(self):
         """Populated pre_call with empty post_call works correctly."""
@@ -1258,7 +1258,7 @@ class TestSeparateEvaluatorLists:
         pre_result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
         assert pre_result.allowed is True
         assert len(pre_result.metadata["results"]) == 1
-        assert pre_result.metadata["results"][0]["checker"] == "pre_only"
+        assert pre_result.metadata["results"][0]["evaluator"] == "pre_only"
 
         # Post-call: no evaluators
         post_result = await interceptor.run_post_call(
@@ -1269,9 +1269,9 @@ class TestSeparateEvaluatorLists:
 
     async def test_different_evaluators_for_each_phase(self):
         """Different evaluators can be assigned to pre_call and post_call."""
-        pre_eval = _mock_engine(name="pre_checker", decision=Decision.ALLOW)
+        pre_eval = _mock_engine(name="pre_evaluator", decision=Decision.ALLOW)
         post_eval = _mock_engine(
-            name="post_checker",
+            name="post_evaluator",
             decision=Decision.INTERVENE,
             message="post-call issue",
         )
@@ -1285,7 +1285,7 @@ class TestSeparateEvaluatorLists:
         pre_result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
         assert pre_result.allowed is True
         assert len(pre_result.metadata["results"]) == 1
-        assert pre_result.metadata["results"][0]["checker"] == "pre_checker"
+        assert pre_result.metadata["results"][0]["evaluator"] == "pre_evaluator"
 
         # Post-call uses only post_eval
         post_result = await interceptor.run_post_call(
@@ -1295,7 +1295,7 @@ class TestSeparateEvaluatorLists:
         assert post_result.modified_data is not None
         interventions = post_result.modified_data["_interventions"]
         assert len(interventions) == 1
-        assert interventions[0]["checker"] == "post_checker"
+        assert interventions[0]["evaluator"] == "post_evaluator"
 
     async def test_pre_call_evaluator_not_used_in_post_call(self):
         """Pre-call evaluator's evaluate_response is never called during post_call."""
