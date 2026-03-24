@@ -103,7 +103,6 @@ class JudgePolicyEngine(PolicyEngine):
                 - custom_rubrics_path: Path to custom rubric YAML files
                 - session_ttl: Session TTL in seconds
                 - max_sessions: Maximum concurrent sessions
-                - checker_mode: "async" or "sync" (used by interceptor, not engine)
         """
         # Build client with judge models
         self._client = JudgeClient()

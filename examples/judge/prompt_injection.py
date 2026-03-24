@@ -115,9 +115,9 @@ for i, user_input in enumerate(turns, 1):
 
     except Exception as e:
         # WorkflowViolationError surfaces as an HTTP error when judge runs
-        # in sync mode or when a HARD_BLOCK intervention fires. In async mode
+        # in sync mode. In async mode
         # (default), violations are deferred — you won't hit this path unless
-        # you set judge.sync: true.
+        # you set mode: "sync" in config.
         if "violation" in str(e).lower() or "blocked" in str(e).lower():
             print(f"  🚫 Blocked by policy: {e}")
         else:

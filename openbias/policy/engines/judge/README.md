@@ -87,7 +87,7 @@ await engine.initialize({
     ],
     "default_rubric": "agent_behavior",
     "conversation_eval_interval": 5,  # Run conversation-level rubrics every 5 turns
-    "checker_mode": "async"           # "async" (post-call) or "sync" (pre-response blocking)
+    # Note: sync/async mode is set at the top level via `mode: async` in openbias.yaml
 })
 ```
 
@@ -146,12 +146,12 @@ Inside `evaluate_response()`:
 
 The engine logic is identical in both modes; the difference is when it is invoked by the **Interceptor**.
 
--   **Async (`checker_mode: async`)**:
+-   **Async (`mode: async`)**:
     -   The user receives the agent's response immediately (zero latency impact).
     -   The judge runs in the background.
     -   Violations are stored and applied as "pending interventions" on the *next* turn.
 
--   **Sync (`checker_mode: sync`)**:
+-   **Sync (`mode: sync`)**:
     -   The agent's response is held back.
     -   The judge evaluates it.
     -   If `BLOCK` or `MODIFY`, the user sees the intervention immediately.
