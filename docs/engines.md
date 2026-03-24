@@ -1,6 +1,6 @@
 # Policy Engines
 
-Four engines, same interface (`PolicyEngine` protocol). Pick one based on your enforcement needs.
+Four engines, same interface (`PolicyEngine` protocol). Configure one or more as evaluators based on your enforcement needs.
 
 ## How to choose
 
@@ -30,7 +30,7 @@ Do you need deterministic, auditable enforcement?
 
 ## Judge Engine
 
-**Config key**: `engine: judge`
+**Evaluator type**: `judge`
 
 Uses an LLM to evaluate every agent response against configurable rubrics. The judge sees the conversation history and scores the response on multiple criteria (tone, safety, instruction following, etc.), then maps the aggregate score to an action: pass, warn, intervene, or block.
 
@@ -76,12 +76,13 @@ When `ensemble_enabled: true`, multiple judge models evaluate the same response.
 ### Minimal config
 
 ```yaml
-engine: judge
-policy:
-  - "No financial advice"
-  - "Be professional"
-judge:
-  model: anthropic/claude-sonnet-4-5
+evaluators:
+  - name: content-policy
+    type: judge
+    model: anthropic/claude-sonnet-4-5
+    policies:
+      - "No financial advice"
+      - "Be professional"
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#judge-engine)
@@ -99,7 +100,7 @@ Deep dive: [openbias/policy/engines/judge/README.md](../openbias/policy/engines/
 
 ## FSM Engine
 
-**Config key**: `engine: fsm`
+**Evaluator type**: `fsm`
 
 Models allowed agent behavior as a finite state machine defined in YAML. Classifies each LLM response to a workflow state using a three-tier cascade (tool call matching, regex, semantic embeddings), evaluates temporal constraints based on LTL-lite, and triggers interventions on violations.
 
@@ -149,8 +150,10 @@ Intervention templates in the workflow YAML support strategy prefixes:
 ### Minimal config
 
 ```yaml
-engine: fsm
-policy: ./workflow.yaml
+evaluators:
+  - name: workflow-guard
+    type: fsm
+    policy: ./workflow.yaml
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#fsm-engine)
@@ -168,7 +171,7 @@ Deep dive: [openbias/policy/engines/fsm/README.md](../openbias/policy/engines/fs
 
 ## LLM Engine
 
-**Config key**: `engine: llm`
+**Evaluator type**: `llm`
 
 Uses a lightweight sidecar LLM for state classification, drift detection, and soft constraint evaluation. Reads the same workflow YAML as the FSM engine, so you can swap between them without rewriting policies. Trades determinism for the ability to handle ambiguous, conversational workflows where tool calls and regex are insufficient.
 
@@ -201,9 +204,10 @@ Uses a lightweight sidecar LLM for state classification, drift detection, and so
 ### Minimal config
 
 ```yaml
-engine: llm
-llm:
-  model: anthropic/claude-sonnet-4-5
+evaluators:
+  - name: llm-guard
+    type: llm
+    model: anthropic/claude-sonnet-4-5
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#llm-engine)
@@ -214,7 +218,7 @@ Deep dive: [openbias/policy/engines/llm/README.md](../openbias/policy/engines/ll
 
 ## NeMo Guardrails Engine
 
-**Config key**: `engine: nemo`
+**Evaluator type**: `nemo`
 
 Wraps NVIDIA's [NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails) as a policy engine. Runs requests through input rails (pre-call) and responses through output rails (post-call) for jailbreak detection, PII filtering, toxicity checks, and programmable dialog flows via Colang.
 
@@ -251,8 +255,10 @@ The engine registers two custom NeMo actions for use in Colang flows:
 ### Minimal config
 
 ```yaml
-engine: nemo
-policy: ./nemo_config/
+evaluators:
+  - name: nemo-rails
+    type: nemo
+    policy: ./nemo_config/
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#nemo-guardrails-engine)
