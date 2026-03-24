@@ -86,8 +86,8 @@ await engine.initialize({
         }
     ],
     "default_rubric": "agent_behavior",
-    "conversation_eval_interval": 5,  # Run conversation-level rubrics every 5 turns
-    # Note: sync/async mode is set at the top level via `mode: async` in openbias.yaml
+    # Note: sync/async mode and phase routing are set at the top level
+    # via the evaluator config in openbias.yaml
 })
 ```
 
@@ -98,17 +98,14 @@ await engine.initialize({
 | `models` | `list` | -- | List of model configs. Must be provided or set via `judge.model` in YAML. |
 | `default_rubric` | `str` | `agent_behavior` | Rubric to use if none specified in request. |
 | `custom_rubrics_path` | `str` | `None` | Path to directory containing custom rubric YAMLs. |
-| `pre_call_enabled` | `bool` | `false` | Whether to run an evaluation on the *user's* request (input railing). |
-| `pre_call_rubric` | `str` | `safety` | Rubric to use for pre-call evaluation. |
-| `conversation_eval_interval` | `int` | `5` | How often (in turns) to run conversation-scope rubrics. |
 
 ## Evaluation Flow
 
 ### 1. Pre-Call (Optional)
-If `pre_call_enabled` is true:
-1.  **Input**: User's prompt.
-2.  **Rubric**: `pre_call_rubric` (default: `safety`).
-3.  **Action**: If violated, can `BLOCK` request before it reaches the agent.
+To run the judge engine at pre-call phase, configure a separate evaluator entry
+with `phase: pre_call` in your `openbias.yaml`. The engine will evaluate the
+user's prompt against its configured rubric and can `BLOCK` the request before
+it reaches the agent.
 
 ### 2. Post-Call (Main)
 Inside `evaluate_response()`:
