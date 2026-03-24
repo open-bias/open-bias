@@ -367,6 +367,76 @@ class TestEvaluatorYamlMapping:
         assert "policy" not in result
 
 
+# =========================================================================
+# get_policy_config() tests
+# =========================================================================
+
+
+class TestGetPolicyConfig:
+    """Tests for Settings.get_policy_config() using the evaluators-based format."""
+
+    def test_empty_evaluators_returns_default_judge(self):
+        """When evaluators is empty, return default judge config."""
+        settings = Settings()
+        result = settings.get_policy_config()
+        assert result["type"] == "judge"
+        assert result["enabled"] is True
+        assert result["config"] == {}
+        assert result["config_path"] is None
+
+    def test_judge_evaluator_no_models_injects_proxy_model(self):
+        """When judge evaluator has no models, inject from proxy.default_model."""
+        settings = Settings(
+            evaluators=[
+                {"name": "safety", "type": "judge", "phase": "post_call"},
+            ],
+            proxy={"default_model": "gpt-4o-mini"},
+        )
+        result = settings.get_policy_config()
+        assert result["type"] == "judge"
+        assert result["config"]["models"] == [
+            {"name": "primary", "model": "gpt-4o-mini"}
+        ]
+
+    def test_judge_evaluator_models_already_set_no_override(self):
+        """When judge evaluator already has models set, don't override."""
+        settings = Settings(
+            evaluators=[
+                {
+                    "name": "safety",
+                    "type": "judge",
+                    "phase": "post_call",
+                    "config": {
+                        "models": [{"name": "primary", "model": "anthropic/claude-sonnet-4-5"}]
+                    },
+                },
+            ],
+            proxy={"default_model": "gpt-4o-mini"},
+        )
+        result = settings.get_policy_config()
+        assert result["config"]["models"] == [
+            {"name": "primary", "model": "anthropic/claude-sonnet-4-5"}
+        ]
+
+    def test_non_judge_evaluator_no_models_injection(self):
+        """When evaluator is fsm type, no models injection occurs."""
+        settings = Settings(
+            evaluators=[
+                {
+                    "name": "workflow",
+                    "type": "fsm",
+                    "phase": "post_call",
+                    "config": {"config_path": "/abs/workflow.yaml"},
+                },
+            ],
+            proxy={"default_model": "gpt-4o-mini"},
+        )
+        result = settings.get_policy_config()
+        assert result["type"] == "fsm"
+        assert "models" not in result["config"]
+        assert result["config_path"] == "/abs/workflow.yaml"
+
+
 if __name__ == "__main__":
     import sys
     sys.exit(pytest.main([__file__]))
