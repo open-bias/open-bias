@@ -9,6 +9,9 @@ import yaml
 from openbias.config.settings import Settings
 from openbias.proxy.server import Proxy
 
+# The warning is now emitted by the shared logging_setup module.
+_LOGGER_PATCH_TARGET = "openbias.logging_setup.logger"
+
 
 @pytest.fixture(autouse=True)
 def reset_litellm_verbose():
@@ -43,7 +46,7 @@ def test_debug_mode_does_not_enable_litellm_verbose():
 
 def test_debug_mode_emits_warning():
     proxy = _make_proxy(debug=True, litellm_verbose=False)
-    with patch("openbias.proxy.server.logger") as mock_logger:
+    with patch(_LOGGER_PATCH_TARGET) as mock_logger:
         proxy._setup_logging()
     mock_logger.warning.assert_called_once()
     call_args = mock_logger.warning.call_args[0][0]
@@ -57,7 +60,7 @@ def test_debug_mode_emits_warning():
 
 def test_no_warning_when_debug_false():
     proxy = _make_proxy(debug=False, litellm_verbose=False)
-    with patch("openbias.proxy.server.logger") as mock_logger:
+    with patch(_LOGGER_PATCH_TARGET) as mock_logger:
         proxy._setup_logging()
     mock_logger.warning.assert_not_called()
 
@@ -82,7 +85,7 @@ def test_litellm_verbose_flag_enables_verbose():
 def test_debug_and_litellm_verbose_both_set():
     litellm.set_verbose = False
     proxy = _make_proxy(debug=True, litellm_verbose=True)
-    with patch("openbias.proxy.server.logger") as mock_logger:
+    with patch(_LOGGER_PATCH_TARGET) as mock_logger:
         proxy._setup_logging()
     assert litellm.set_verbose is True
     mock_logger.warning.assert_called_once()
