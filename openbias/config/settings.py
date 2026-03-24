@@ -467,8 +467,32 @@ class Settings(BaseSettings):
         Returns:
             Configuration dict ready for PolicyEngineRegistry.create_and_initialize()
         """
-        # TODO (Task 2): implement via evaluators list
-        return {}
+        if not self.evaluators:
+            return {
+                "type": "judge",
+                "enabled": True,
+                "config": {},
+                "config_path": None,
+            }
+
+        evaluator = self.evaluators[0]
+        config = dict(evaluator.config)
+
+        if (
+            evaluator.type == "judge"
+            and not config.get("models")
+            and self.proxy.default_model
+        ):
+            config["models"] = [
+                {"name": "primary", "model": self.proxy.default_model}
+            ]
+
+        return {
+            "type": evaluator.type,
+            "enabled": True,
+            "config": config,
+            "config_path": config.get("config_path"),
+        }
 
     def get_model_list(self) -> list[dict]:
         """Get model list for LiteLLM router using wildcard routing.
@@ -507,7 +531,16 @@ class Settings(BaseSettings):
 
     def validate(self) -> None:
         """Validate configuration logic."""
-        # TODO (Task 2): validate via evaluators list instead of policy shim
+        if self.evaluators:
+            evaluator = self.evaluators[0]
+            config_path = evaluator.config.get("config_path")
+            if config_path and not Path(config_path).exists():
+                raise ValueError(f"Policy configuration file not found: {config_path}")
+
+            # FSM engines don't require API keys
+            if all(ev.type == "fsm" for ev in self.evaluators):
+                return
+
         default_model = self.proxy.default_model
 
         if not default_model:

@@ -286,8 +286,8 @@ def start_proxy(settings: Settings | None = None) -> None:
     resolved_settings = settings or Settings()
     logger.info(f"Default model: {resolved_settings.proxy.default_model}")
     logger.info(
-        f"Policy engine: {resolved_settings.policy.engine.type}"
-        f" (config_path={resolved_settings.policy.engine.config_path})"
+        f"Policy engine: {resolved_settings.evaluators[0].type if resolved_settings.evaluators else 'judge'}"
+        f" (config_path={resolved_settings.evaluators[0].config.get('config_path') if resolved_settings.evaluators else None})"
     )
 
     proxy = Proxy(resolved_settings)

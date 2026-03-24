@@ -130,9 +130,9 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
             settings.validate()
 
         # Show config summary
-        engine_type = settings.policy.engine.type
+        engine_type = settings.evaluators[0].type if settings.evaluators else "judge"
         display_model = settings.proxy.default_model or "(none)"
-        fail_open = settings.policy.fail_open
+        fail_open = settings.fail_open
         config_panel(
             "Open Bias Proxy",
             {

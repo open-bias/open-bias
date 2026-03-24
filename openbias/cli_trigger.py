@@ -150,9 +150,9 @@ async def run_trigger(
     # ------------------------------------------------------------------
     # Show config panel
     # ------------------------------------------------------------------
-    engine_type = settings.policy.engine.type
+    engine_type = settings.evaluators[0].type if settings.evaluators else "judge"
     display_model = settings.proxy.default_model or "(none)"
-    fail_action = settings.policy.fail_action
+    fail_action = settings.fail_action
 
     config_panel(
         "Trigger",
