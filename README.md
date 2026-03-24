@@ -94,7 +94,7 @@ Every hook is wrapped in `safe_hook()` with a configurable timeout (default 30s)
                    │         │          │ └─────────┘ │        │
                    │         ▼          └─────────────┘        │
                    │  ┌────────────────────────────────────┐   │
-                   │  │         Policy Engines             │   │
+                   │  │        Evaluator Engines            │   │
                    │  │  ┌───────┐ ┌─────┐ ┌─────┐ ┌────┐  │   │
                    │  │  │ Judge │ │ FSM │ │ LLM │ │NeMo│  │   │
                    │  │  └───────┘ └─────┘ └─────┘ └────┘  │   │
@@ -109,7 +109,7 @@ Every hook is wrapped in `safe_hook()` with a configurable timeout (default 30s)
 
 ## Engines
 
-Four policy engines, same interface. Pick one.
+Four evaluator types, same interface. Mix and match.
 
 | Engine | Mechanism | Critical-path latency |
 |--------|-----------|----------------------|
@@ -151,20 +151,25 @@ Full engine documentation: [docs/engines.md](docs/engines.md)
 
 Everything lives in `openbias.yaml`. The minimal config is just an `evaluators:` list -- everything else has smart defaults.
 
+Minimal:
+
 ```yaml
-# Minimal (all you need):
 evaluators:
   - type: judge
     policies:
       - "Your rules here"
+```
 
-# Full (all optional):
+Full (all optional):
+
+```yaml
 port: 4000
 debug: false
 
 evaluators:
   - name: my-policy
     type: judge
+    phase: post_call
     model: anthropic/claude-sonnet-4-5
 
 tracing:
