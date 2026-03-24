@@ -142,13 +142,13 @@ class Callback(CustomLogger):
     Implements policy enforcement through LiteLLM's hook system.
     This is registered as a callback when the proxy starts.
 
-    Uses the Interceptor to orchestrate checkers:
-    - Sync PRE_CALL checkers run before LLM call
-    - Sync POST_CALL checkers run after LLM call (can modify response)
-    - Async checkers run in background, results applied next request
+    Uses the Interceptor to orchestrate evaluators:
+    - Sync PRE_CALL evaluators run before LLM call
+    - Sync POST_CALL evaluators run after LLM call (can modify response)
+    - Async evaluators run in background, results applied next request
 
     The callback maintains:
-    - Interceptor instance with configured checkers
+    - Interceptor instance with configured evaluators
     - OpenTelemetry tracer for observability
 
     Thread-safety is ensured through asyncio locks for session state.

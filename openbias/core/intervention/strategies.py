@@ -13,7 +13,7 @@ Strategies define HOW to modify LLM requests or responses when deviation is dete
 
 3. RESPONSE_MODIFICATION: Modify the current LLM response (response)
    - Strips tool calls, replaces content, or appends warnings
-   - Used by sync POST_CALL checkers for real-time enforcement
+   - Used by sync POST_CALL evaluators for real-time enforcement
 
 """
 
