@@ -9,7 +9,7 @@
 </pre>
 </p>
 
-<p align="center"><em>Reliability layer for AI agents — define rules, monitor responses, intervene automatically.</em></p>
+<p align="center"><em>Policy enforcement for AI agents. Define rules, monitor responses, intervene automatically.</em></p>
 
 <p align="center">
   <a href="https://pypi.org/project/openbias"><img src="https://img.shields.io/pypi/v/openbias?color=blue" alt="PyPI"></a>
@@ -18,7 +18,7 @@
   <!-- <a href="https://github.com/open-bias/open-bias/actions"><img src="https://img.shields.io/github/actions/workflow/status/open-bias/open-bias/ci.yml" alt="CI"></a> -->
 </p>
 
-Open Bias is a transparent proxy that monitors LLM API calls and enforces policies on AI agent behavior. Point your LLM client at the proxy, define rules in YAML, and every response is evaluated before it reaches the user.
+Open Bias is a policy enforcement layer for AI agents. It ships a proxy you point your LLM client at, defines rules, and evaluates every response before it reaches the user.
 
 ```
 Your App  ──▶  Open Bias  ──▶  LLM Provider
@@ -76,7 +76,7 @@ openbias compile "customer support bot, verify identity before refunds, never sh
 
 ## How It Works
 
-Open Bias wraps [LiteLLM](https://github.com/BerriAI/litellm) as its proxy layer. Three hooks fire on every request:
+Three hooks fire on every request:
 
 1. **Pre-call**: Pre-call evaluators run, applying any pending interventions from previous violations. Inject system prompt amendments, context reminders, or user message overrides. This is string manipulation — microseconds.
 2. **LLM call**: Forwarded to the upstream provider via LiteLLM. Unmodified.
