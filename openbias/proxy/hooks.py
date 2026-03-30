@@ -553,6 +553,9 @@ class Callback(CustomLogger):
                 request_span = self.tracer.start_request_span(session_id, request_id)
             request_span_var.set(request_span)
 
+            # Create async evaluator span group for cross-hook communication
+            async_group = AsyncEvaluatorSpanGroup(self.tracer, request_span, session_id) if self.tracer and request_span else None
+
             # Wrap in a trace block under the request span
             if self.tracer:
                 cm = self.tracer.trace_block(
@@ -570,10 +573,14 @@ class Callback(CustomLogger):
                 cm = nullcontext()
 
             with cm as span:
+                span_factory = EvaluatorSpanFactory(self.tracer, span, session_id) if self.tracer and span else None
+
                 result = await interceptor.run_pre_call(
                     session_id=session_id,
                     request_data=data,
                     user_request_id=request_id,
+                    span_factory=span_factory,
+                    async_span_group=async_group,
                 )
 
                 # Set output on span
@@ -608,6 +615,9 @@ class Callback(CustomLogger):
                             context=result.metadata,
                             parent_span=span,
                         )
+
+            # Store async_group in metadata so post_call can access it
+            data["metadata"]["_openbias_async_group"] = async_group
 
         # Capture start time at the end of pre-call to accurately measure LLM latency in trace
         data["metadata"]["_openbias_llm_start_time"] = time.time()
@@ -652,6 +662,9 @@ class Callback(CustomLogger):
 
         # Retrieve per-request grouping span created in pre_call
         request_span = request_span_var.get()
+
+        # Retrieve async_group stored in pre_call for cross-hook span coordination
+        async_group = data.get("metadata", {}).get("_openbias_async_group")
 
         interceptor = await self._get_interceptor()
 
@@ -709,12 +722,16 @@ class Callback(CustomLogger):
                         or str(uuid.uuid4())
                     )
 
+                    span_factory = EvaluatorSpanFactory(self.tracer, span, session_id) if self.tracer and span else None
+
                     result = await interceptor.run_post_call(
                         session_id=session_id,
                         request_data=data,
                         response_data=response,
                         user_request_id=request_id,
                         parent_span=request_span,
+                        span_factory=span_factory,
+                        async_span_group=async_group,
                     )
 
                     # Set output on span
@@ -763,6 +780,9 @@ class Callback(CustomLogger):
 
             return response
         finally:
+            # Finalize async evaluator spans before ending the request span
+            if async_group:
+                async_group.finalize()
             # End request span after all post-call work is done
             if self.tracer and request_span is not None:
                 self.tracer.end_request_span(request_span)
