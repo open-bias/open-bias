@@ -139,6 +139,62 @@ class TestTracerIntegration:
         assert call_kwargs["parent_span"] is None
 
 
+class TestSuppressTrace:
+    """Test that _suppress_trace in context skips _trace_verdict."""
+
+    async def test_suppress_trace_skips_trace_verdict_on_response(
+        self, engine, judge_config, mock_tracer, sample_request, sample_response,
+    ):
+        """evaluate_response does not call _trace_verdict when _suppress_trace is set."""
+        await engine.initialize(judge_config)
+        engine.set_tracer(mock_tracer)
+        engine._client.call_judge = AsyncMock(return_value=_passing_response())
+
+        await engine.evaluate_response(
+            "s1", sample_response, sample_request,
+            context={"_suppress_trace": True},
+        )
+
+        mock_tracer.log_judge_evaluation.assert_not_called()
+
+    async def test_suppress_trace_skips_trace_verdict_on_request(
+        self, engine, judge_config, sample_request,
+    ):
+        """evaluate_request does not call _trace_verdict when _suppress_trace is set."""
+        await engine.initialize(judge_config)
+
+        mock_verdict = MagicMock()
+        mock_verdict.action = VerdictAction.PASS
+        mock_verdict.scores = []
+        mock_verdict.composite_score = 5.0
+        mock_verdict.scope = MagicMock()
+        mock_verdict.scope.value = "turn"
+        mock_verdict.judge_model = "gpt-4o-mini"
+
+        engine._evaluator.evaluate_turn = AsyncMock(return_value=mock_verdict)
+
+        with patch.object(engine, "_trace_verdict") as mock_trace:
+            with patch.object(engine, "_build_result", return_value=MagicMock(decision=Decision.ALLOW)):
+                await engine.evaluate_request(
+                    "s1", sample_request,
+                    context={"_suppress_trace": True},
+                )
+
+            mock_trace.assert_not_called()
+
+    async def test_no_suppress_trace_still_traces(
+        self, engine, judge_config, mock_tracer, sample_request, sample_response,
+    ):
+        """Without _suppress_trace, _trace_verdict is still called normally."""
+        await engine.initialize(judge_config)
+        engine.set_tracer(mock_tracer)
+        engine._client.call_judge = AsyncMock(return_value=_passing_response())
+
+        await engine.evaluate_response("s1", sample_response, sample_request)
+
+        mock_tracer.log_judge_evaluation.assert_called_once()
+
+
 class TestTraceVerdictFromEvaluateRequest:
     """Test that evaluate_request calls _trace_verdict with correct args."""
 
