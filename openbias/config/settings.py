@@ -446,6 +446,22 @@ class Settings(BaseSettings):
             file_secret_settings,
         )
 
+    @staticmethod
+    def inject_default_model(
+        evaluator_type: str, config: dict[str, Any], default_model: str | None
+    ) -> None:
+        """Inject ``default_model`` into *config* when the engine needs one.
+
+        Mutates *config* in place.  No-op when *default_model* is falsy or the
+        engine already has an explicit model configured.
+        """
+        if not default_model:
+            return
+        if evaluator_type == "judge" and not config.get("models"):
+            config["models"] = [{"name": "primary", "model": default_model}]
+        elif evaluator_type == "llm" and not config.get("llm_model"):
+            config["llm_model"] = default_model
+
     def get_policy_config(self) -> dict[str, Any]:
         """
         Get policy engine configuration.
@@ -463,15 +479,9 @@ class Settings(BaseSettings):
 
         evaluator = self.evaluators[0]
         config = dict(evaluator.config)
-
-        if (
-            evaluator.type == "judge"
-            and not config.get("models")
-            and self.proxy.default_model
-        ):
-            config["models"] = [
-                {"name": "primary", "model": self.proxy.default_model}
-            ]
+        self.inject_default_model(
+            evaluator.type, config, self.proxy.default_model
+        )
 
         return {
             "type": evaluator.type,

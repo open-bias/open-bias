@@ -119,8 +119,8 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             raise ValueError("Either config_path or workflow must be provided")
         
         # Create LLM client
-        # model comes from config (injected by Settings.get_policy_config)
-        model = config.get("llm_model") or config.get("default_model") or None
+        # model comes from config (injected by interceptor in hooks.py)
+        model = config.get("llm_model")
         self._llm_client = LLMClient(
             model=model,
             temperature=config.get("temperature", 0.0),

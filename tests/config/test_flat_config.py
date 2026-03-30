@@ -182,24 +182,6 @@ class TestEvaluatorYamlMapping:
         assert ev["phase"] == "post_call"
         assert ev["config"] == {}
 
-    def test_judge_model_shorthand(self):
-        """Judge evaluator with model shorthand synthesizes models list."""
-        source = self._build_source({
-            "evaluators": [
-                {
-                    "name": "safety",
-                    "type": "judge",
-                    "phase": "pre_call",
-                    "model": "anthropic/claude-sonnet-4-5",
-                },
-            ],
-        })
-        result = source._map_evaluators(source._yaml_data)
-        ev = result["evaluators"][0]
-        assert ev["config"]["models"] == [
-            {"name": "primary", "model": "anthropic/claude-sonnet-4-5"}
-        ]
-
     def test_judge_policies_shorthand(self):
         """Judge evaluator with policies shorthand maps to inline_policy."""
         source = self._build_source({
@@ -240,7 +222,6 @@ class TestEvaluatorYamlMapping:
                     "name": "safety",
                     "type": "judge",
                     "phase": "post_call",
-                    "model": "gpt-4o",
                     "pass_threshold": 0.6,
                     "temperature": 0.0,
                 },
@@ -250,7 +231,6 @@ class TestEvaluatorYamlMapping:
         ev = result["evaluators"][0]
         assert ev["config"]["pass_threshold"] == 0.6
         assert ev["config"]["temperature"] == 0.0
-        assert ev["config"]["models"] == [{"name": "primary", "model": "gpt-4o"}]
 
     def test_fsm_evaluator_policy_resolved(self):
         """FSM evaluator with policy path gets resolved relative to config file."""
@@ -320,14 +300,12 @@ class TestEvaluatorYamlMapping:
                     "name": "pre-screen",
                     "type": "judge",
                     "phase": "pre_call",
-                    "model": "gpt-4o",
                     "policies": ["No harmful content"],
                 },
                 {
                     "name": "post-eval",
                     "type": "judge",
                     "phase": "post_call",
-                    "model": "anthropic/claude-sonnet-4-5",
                     "rubric": "quality",
                 },
                 {

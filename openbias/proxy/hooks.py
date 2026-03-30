@@ -239,12 +239,10 @@ class Callback(CustomLogger):
                     f"Initializing evaluator '{ev_config.name}' "
                     f"(type={ev_config.type}, phase={ev_config.phase})"
                 )
-                default_model = self.settings.proxy.default_model
                 config = dict(ev_config.config)
-                if ev_config.type == "judge" and not config.get("models") and default_model:
-                    config["models"] = [{"name": "primary", "model": default_model}]
-                elif ev_config.type == "llm" and not config.get("llm_model") and default_model:
-                    config["llm_model"] = default_model
+                self.settings.inject_default_model(
+                    ev_config.type, config, self.settings.proxy.default_model
+                )
                 engine = await PolicyEngineRegistry.create_and_initialize(
                     ev_config.type, config
                 )
