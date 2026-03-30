@@ -870,6 +870,32 @@ class TestAsyncContextPassing:
 
         assert received_context.get("user_request_id") == "req-ctx-001"
 
+    async def test_async_post_call_context_has_suppress_trace(self):
+        """Async POST_CALL evaluators receive _suppress_trace=True and no _parent_span."""
+        received_context: dict[str, Any] = {}
+
+        async def _evaluate_response(
+            session_id: str,
+            response_data: Any,
+            request_data: dict[str, Any],
+            context: dict[str, Any] | None = None,
+        ) -> EngineResult:
+            received_context.update(context or {})
+            return EngineResult(decision=Decision.ALLOW)
+
+        evaluator = _mock_engine(name="ctx_suppress")
+        evaluator.evaluate_response = AsyncMock(side_effect=_evaluate_response)
+
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[evaluator]
+        )
+
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, "req-ctx-003")
+        await asyncio.sleep(0.05)
+
+        assert received_context.get("_suppress_trace") is True
+        assert "_parent_span" not in received_context
+
     async def test_sync_pre_call_receives_context(self):
         """Sync PRE_CALL evaluators receive context with user_request_id."""
         received_context: dict[str, Any] = {}
@@ -1420,6 +1446,59 @@ class TestSpanFactory:
         applied_span.set_attribute.assert_any_call(
             "openbias.evaluator.source", "async_applied"
         )
+
+    async def test_trace_callback_invoked_for_applied_async_results(self):
+        """trace_callback is called with result metadata and evaluator span at apply-time."""
+        verdict_metadata = {"judge": {"verdicts": [{"rubric_name": "safety"}]}}
+        async_evaluator = _mock_engine(
+            name="traced_eval",
+            decision=Decision.ALLOW,
+            metadata=verdict_metadata,
+            delay=0.01,
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
+        )
+
+        # Fire async evaluator during post_call
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
+        await asyncio.sleep(0.05)
+
+        # Now run pre_call with both span_factory and trace_callback
+        factory = _mock_span_factory()
+        trace_cb = MagicMock()
+        await interceptor.run_pre_call(
+            SESSION, _request(), "req-003",
+            span_factory=factory, trace_callback=trace_cb,
+        )
+
+        # trace_callback should have been called with the result metadata and span
+        trace_cb.assert_called_once()
+        call_args = trace_cb.call_args
+        assert call_args[0][0] == verdict_metadata  # result.metadata
+        assert call_args[0][1] is factory.spans[0]  # the evaluator span
+
+    async def test_trace_callback_not_called_without_span(self):
+        """trace_callback is NOT called when span_factory is not provided."""
+        async_evaluator = _mock_engine(
+            name="no_span_eval",
+            decision=Decision.ALLOW,
+            delay=0.01,
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
+        )
+
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
+        await asyncio.sleep(0.05)
+
+        trace_cb = MagicMock()
+        await interceptor.run_pre_call(
+            SESSION, _request(), "req-004", trace_callback=trace_cb,
+        )
+
+        # No span_factory means nullcontext yields None, so trace_callback should not fire
+        trace_cb.assert_not_called()
 
     async def test_span_factory_called_for_dispatched_async(self):
         """span_factory is called with post_call phase when dispatching async evaluators."""
