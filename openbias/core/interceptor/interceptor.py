@@ -250,7 +250,6 @@ class Interceptor:
         user_request_id: str = "",
         parent_span: Any | None = None,
         span_factory: Any | None = None,
-        async_span_group: Any | None = None,
     ) -> InterceptionResult:
         """
         Run POST_CALL phase.
@@ -346,11 +345,15 @@ class Interceptor:
         # because the evaluator runs long after this request's spans end.
         for evaluator in self._async_post_call_evaluators:
             _dispatch_ctx = (
-                async_span_group.dispatched(evaluator.name)
-                if async_span_group is not None
+                span_factory(evaluator.name, "post_call")
+                if span_factory is not None
                 else nullcontext()
             )
-            with _dispatch_ctx:
+            with _dispatch_ctx as _dispatch_span:
+                if _dispatch_span is not None and hasattr(_dispatch_span, "set_attribute"):
+                    _dispatch_span.set_attribute(
+                        "openbias.evaluator.source", "async_dispatched"
+                    )
                 self._start_async_evaluator(
                     evaluator, session_id, request_data, response_data,
                     context={"user_request_id": user_request_id, "_parent_span": parent_span},
