@@ -611,9 +611,6 @@ class Callback(CustomLogger):
         # Retrieve per-request grouping span created in pre_call
         request_span = request_span_var.get()
 
-        # Retrieve async_group stored in pre_call for cross-hook span coordination
-        async_group = data.get("metadata", {}).get("_openbias_async_group")
-
         interceptor = await self._get_interceptor()
 
         try:
@@ -679,7 +676,6 @@ class Callback(CustomLogger):
                         user_request_id=request_id,
                         parent_span=request_span,
                         span_factory=span_factory,
-                        async_span_group=async_group,
                     )
 
                     # Set output on span
@@ -726,11 +722,21 @@ class Callback(CustomLogger):
                                 parent_span=span,
                             )
 
+                    # Result span capturing the interceptor decision
+                    if span is not None:
+                        with self.tracer.trace_block(
+                            "result",
+                            session_id,
+                            attributes={
+                                "openbias.decision": "allow" if result.allowed else "block",
+                                "openbias.has_modifications": result.modified_data is not None,
+                            },
+                            parent_span=span,
+                        ):
+                            pass
+
             return response
         finally:
-            # Finalize async evaluator spans before ending the request span
-            if async_group:
-                async_group.finalize()
             # End request span after all post-call work is done
             if self.tracer and request_span is not None:
                 self.tracer.end_request_span(request_span)
