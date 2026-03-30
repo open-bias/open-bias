@@ -12,7 +12,7 @@ Covers:
 - fail_action upgrade logic
 - max_intervention_attempts escalation
 - Separate pre_call / post_call evaluator lists
-- span_factory and async_span_group integration
+- span_factory integration (sync, async applied, async dispatched)
 """
 
 import asyncio
@@ -1317,7 +1317,7 @@ class TestSeparateEvaluatorLists:
 
 
 # ===========================================================================
-# span_factory and async_span_group tests
+# span_factory tests
 # ===========================================================================
 
 
@@ -1337,28 +1337,6 @@ def _mock_span_factory():
     factory.spans = spans  # type: ignore[attr-defined]
     return factory
 
-
-def _mock_async_span_group():
-    """Create a mock async span group that records applied/dispatched calls."""
-    group = MagicMock()
-    applied_calls: list[str] = []
-    dispatched_calls: list[str] = []
-
-    @contextmanager
-    def applied(name):
-        applied_calls.append(name)
-        yield MagicMock()
-
-    @contextmanager
-    def dispatched(name):
-        dispatched_calls.append(name)
-        yield MagicMock()
-
-    group.applied = applied
-    group.dispatched = dispatched
-    group.applied_calls = applied_calls
-    group.dispatched_calls = dispatched_calls
-    return group
 
 
 class TestSpanFactory:
@@ -1415,8 +1393,8 @@ class TestSpanFactory:
         ctx = call_args.kwargs.get("context") or call_args[1].get("context")
         assert ctx["_parent_span"] is factory.spans[0]
 
-    async def test_async_span_group_applied_called(self):
-        """async_span_group.applied is called when applying pending async results."""
+    async def test_span_factory_called_for_applied_async_results(self):
+        """span_factory is called with pre_call phase when applying pending async results."""
         async_evaluator = _mock_engine(
             name="async_eval",
             decision=Decision.ALLOW,
@@ -1431,26 +1409,36 @@ class TestSpanFactory:
         await asyncio.sleep(0.05)  # Let the async task complete
 
         # Now run pre_call which collects async results
-        group = _mock_async_span_group()
+        factory = _mock_span_factory()
         await interceptor.run_pre_call(
-            SESSION, _request(), "req-002", async_span_group=group
+            SESSION, _request(), "req-002", span_factory=factory
         )
 
-        assert "async_eval" in group.applied_calls
+        assert ("async_eval", "pre_call") in factory.calls
+        # The span should have the async_applied source attribute
+        applied_span = factory.spans[factory.calls.index(("async_eval", "pre_call"))]
+        applied_span.set_attribute.assert_any_call(
+            "openbias.evaluator.source", "async_applied"
+        )
 
-    async def test_async_span_group_dispatched_called(self):
-        """async_span_group.dispatched is called when dispatching async evaluators."""
+    async def test_span_factory_called_for_dispatched_async(self):
+        """span_factory is called with post_call phase when dispatching async evaluators."""
         async_evaluator = _mock_engine(name="async_dispatch", delay=0.5)
         interceptor = Interceptor(
             pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
         )
 
-        group = _mock_async_span_group()
+        factory = _mock_span_factory()
         await interceptor.run_post_call(
-            SESSION, _request(), {"r": 1}, REQUEST_ID, async_span_group=group
+            SESSION, _request(), {"r": 1}, REQUEST_ID, span_factory=factory
         )
 
-        assert "async_dispatch" in group.dispatched_calls
+        assert ("async_dispatch", "post_call") in factory.calls
+        # The span should have the async_dispatched source attribute
+        dispatched_span = factory.spans[factory.calls.index(("async_dispatch", "post_call"))]
+        dispatched_span.set_attribute.assert_any_call(
+            "openbias.evaluator.source", "async_dispatched"
+        )
         await interceptor.shutdown()
 
     async def test_no_span_factory_preserves_behavior(self):
