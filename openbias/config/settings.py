@@ -46,19 +46,20 @@ logger = logging.getLogger(__name__)
 class OTelConfig(BaseModel):
     """OpenTelemetry tracing configuration.
 
-    Supports multiple exporters:
+    Tracing is auto-enabled when a ``type`` is explicitly set or when
+    Langfuse API keys are provided.  There is no manual ``enabled`` flag.
+
+    Supported exporters:
     - otlp: Standard OTLP endpoint (Jaeger, Zipkin, etc.)
     - langfuse: Langfuse's OTLP endpoint (requires public_key/secret_key)
     - console: Print traces to console (for debugging)
-    - none: Disable tracing
     """
 
     model_config = ConfigDict(populate_by_name=True)
 
-    enabled: bool = False
     endpoint: str = "http://localhost:4317"
     service_name: str = "openbias"
-    exporter_type: Literal["otlp", "langfuse", "console", "none"] = "none"
+    exporter_type: Literal["otlp", "langfuse", "console"] | None = None
     insecure: bool = True  # Use insecure connection (no TLS) for local dev
 
     # Langfuse-specific settings (used when exporter_type="langfuse")
@@ -70,6 +71,22 @@ class OTelConfig(BaseModel):
 
     # When True, user/assistant message content is replaced with "[REDACTED]" in traces
     redact_content: bool = False
+
+    @property
+    def enabled(self) -> bool:
+        """Tracing is on when a type is set or Langfuse keys are present."""
+        if self.exporter_type is not None:
+            return True
+        return bool(self.langfuse_public_key and self.langfuse_secret_key)
+
+    @property
+    def resolved_exporter_type(self) -> str:
+        """Return the effective exporter type, inferring langfuse from keys."""
+        if self.exporter_type is not None:
+            return self.exporter_type
+        if self.langfuse_public_key and self.langfuse_secret_key:
+            return "langfuse"
+        return "otlp"
 
 
 class ProxyConfig(BaseModel):
@@ -235,9 +252,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
         if isinstance(tracing_cfg, dict) and tracing_cfg:
             otel = result.setdefault("otel", {})
             if "type" in tracing_cfg:
-                tracing_type = tracing_cfg["type"]
-                otel["exporter_type"] = tracing_type
-                otel["enabled"] = tracing_type != "none"
+                otel["exporter_type"] = tracing_cfg["type"]
             for k in ("endpoint", "service_name", "insecure",
                       "langfuse_public_key", "langfuse_secret_key",
                       "langfuse_host", "redact_content"):

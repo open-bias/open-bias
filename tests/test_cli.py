@@ -91,7 +91,7 @@ class TestValidateCommand:
                 '    policies:\n'
                 '      - "Be professional"\n'
                 '      - "No PII"\n'
-                "tracing:\n  type: none\n"
+                ""
             )
 
             buf = StringIO()
@@ -120,7 +120,7 @@ class TestValidateCommand:
                 "    phase: post_call\n"
                 '    policies:\n'
                 '      - "Be professional"\n'
-                "tracing:\n  type: none\n"
+                ""
             )
 
             buf = StringIO()
@@ -149,7 +149,7 @@ class TestValidateCommand:
                 "    phase: post_call\n"
                 "    model: gpt-4o-mini\n"
                 "    rubric: nonexistent_rubric\n"
-                "tracing:\n  type: none\n"
+                ""
             )
 
             buf = StringIO()
@@ -220,7 +220,7 @@ class TestServeCommand:
             # Write a minimal valid yaml
             Path("openbias.yaml").write_text(
                 "engine: judge\nmodel: gpt-4o-mini\nport: 4000\n"
-                "policy:\n  fail_open: true\ntracing:\n  type: none\n"
+                "policy:\n  fail_open: true\n"
             )
             # Mock start_proxy so we don't actually start a server
             with patch("openbias.proxy.server.start_proxy"):
@@ -402,7 +402,7 @@ class TestTriggerCommand:
             Path("openbias.yaml").write_text(
                 "engine: judge\nmodel: gpt-4o-mini\n"
                 "policy:\n  - 'Be professional'\n"
-                "tracing:\n  type: none\n"
+                ""
             )
 
             from unittest.mock import AsyncMock
@@ -450,7 +450,7 @@ class TestTriggerCommand:
             Path("openbias.yaml").write_text(
                 "engine: judge\nmodel: gpt-4o-mini\n"
                 "policy:\n  - 'Be professional'\n"
-                "tracing:\n  type: none\n"
+                ""
             )
 
             from unittest.mock import AsyncMock
@@ -497,7 +497,7 @@ class TestTriggerCommand:
             Path("openbias.yaml").write_text(
                 "engine: judge\nmodel: gpt-4o-mini\n"
                 "policy:\n  - 'Be professional'\n"
-                "tracing:\n  type: none\n"
+                ""
             )
 
             from unittest.mock import AsyncMock

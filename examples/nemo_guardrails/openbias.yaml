@@ -7,6 +7,3 @@ evaluators:
     type: nemo
     policy: ./nemo_config/
     # fail_closed: false      # uncomment to deny on NeMo errors instead of warn
-
-tracing:
-  type: none

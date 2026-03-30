@@ -36,18 +36,17 @@ class TestTracingMapping:
         })
         otel = result["otel"]
         assert otel["exporter_type"] == "otlp"
-        assert otel["enabled"] is True
         assert otel["endpoint"] == "http://jaeger:4317"
         assert otel["service_name"] == "my-service"
 
-    def test_tracing_none_disables(self):
-        result = self._map({"evaluators": [], "tracing": {"type": "none"}})
-        assert result["otel"]["enabled"] is False
+    def test_tracing_not_configured(self):
+        """No tracing section means otel stays at defaults (disabled)."""
+        result = self._map({"evaluators": []})
+        assert "otel" not in result
 
     def test_tracing_console(self):
         result = self._map({"evaluators": [], "tracing": {"type": "console"}})
         assert result["otel"]["exporter_type"] == "console"
-        assert result["otel"]["enabled"] is True
 
     def test_tracing_insecure(self):
         result = self._map(
@@ -82,7 +81,6 @@ class TestTracingMapping:
         result = _build_source(data)._map_evaluators(data)
         otel = result["otel"]
         assert otel["exporter_type"] == "langfuse"
-        assert otel["enabled"] is True
         assert otel["endpoint"] == "http://localhost:4317"
         assert otel["service_name"] == "test-svc"
         assert otel["langfuse_public_key"] == "pk-test-123"

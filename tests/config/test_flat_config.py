@@ -164,7 +164,6 @@ class TestEvaluatorYamlMapping:
         })
         result = source._map_evaluators(source._yaml_data)
         assert result["otel"]["exporter_type"] == "otlp"
-        assert result["otel"]["enabled"] is True
         assert result["otel"]["endpoint"] == "http://jaeger:4317"
 
     def test_judge_evaluator_basic(self):

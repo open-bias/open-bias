@@ -82,8 +82,7 @@ class Tracer:
         )
         self._enabled = config.enabled
 
-        if not self._enabled or config.exporter_type == "none":
-            self._enabled = False
+        if not self._enabled:
             self._tracer = None
             logger.info("Tracer disabled")
             return
@@ -95,10 +94,11 @@ class Tracer:
         provider = TracerProvider(resource=resource)
 
         # Configure exporter based on type
-        if config.exporter_type == "console":
+        resolved_type = config.resolved_exporter_type
+        if resolved_type == "console":
             exporter = ConsoleSpanExporter()
             logger.info("Tracer using console exporter")
-        elif config.exporter_type == "langfuse":
+        elif resolved_type == "langfuse":
             # Langfuse OTLP endpoint with HTTP and Basic Auth
             if not config.langfuse_public_key or not config.langfuse_secret_key:
                 logger.warning("Tracer disabled: missing Langfuse credentials")

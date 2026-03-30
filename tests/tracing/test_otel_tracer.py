@@ -28,7 +28,6 @@ def mock_otel():
 
 def test_tracer_initialization(mock_otel):
     config = OTelConfig(
-        enabled=True,
         service_name="test-service",
         endpoint="localhost:4317",
         exporter_type="otlp"
@@ -41,7 +40,7 @@ def test_tracer_initialization(mock_otel):
     mock_otel["exporter"].assert_called_with(endpoint="localhost:4317", insecure=True)
 
 def test_tracer_disabled(mock_otel):
-    config = OTelConfig(enabled=False)
+    config = OTelConfig()
     
     tracer = Tracer(config)
     
@@ -49,7 +48,7 @@ def test_tracer_disabled(mock_otel):
     mock_otel["trace"].set_tracer_provider.assert_not_called()
 
 def test_log_event(mock_otel):
-    config = OTelConfig(enabled=True, exporter_type="otlp")
+    config = OTelConfig(exporter_type="otlp")
     tracer = Tracer(config)
     
     # Mock span context manager
@@ -71,7 +70,7 @@ def test_log_event(mock_otel):
     assert any(call.args[0] == "openbias.output.res" for call in calls)
 
 def test_log_llm_call(mock_otel):
-    config = OTelConfig(enabled=True, exporter_type="otlp")
+    config = OTelConfig(exporter_type="otlp")
     tracer = Tracer(config)
 
     mock_span = MagicMock()
@@ -104,7 +103,7 @@ def test_log_llm_call(mock_otel):
     assert attrs["gen_ai.response.model"] == "gpt-4"
 
 def test_shutdown(mock_otel):
-    config = OTelConfig(enabled=True, exporter_type="otlp")
+    config = OTelConfig(exporter_type="otlp")
     tracer = Tracer(config)
     
     tracer.shutdown()
@@ -124,7 +123,7 @@ class TestSessionEviction:
 
     def test_stale_sessions_evicted_by_ttl(self, mock_otel):
         """Sessions older than session_ttl_seconds should be ended and removed."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config, session_ttl_seconds=2)
 
         # Create session spans
@@ -154,7 +153,7 @@ class TestSessionEviction:
 
     def test_active_session_refreshed_on_access(self, mock_otel):
         """Accessing an existing session should refresh its timestamp so it isn't evicted."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config, session_ttl_seconds=10)
 
         mock_span = MagicMock()
@@ -172,7 +171,7 @@ class TestSessionEviction:
 
     def test_max_sessions_cap(self, mock_otel):
         """When max_sessions is exceeded, oldest sessions should be evicted."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config, max_sessions=3, session_ttl_seconds=9999)
 
         spans = [MagicMock() for _ in range(5)]
@@ -194,7 +193,7 @@ class TestSessionEviction:
 
     def test_end_trace_cleans_up_timestamps(self, mock_otel):
         """end_trace should remove the session from both tracking dicts."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config)
 
         mock_span = MagicMock()
@@ -209,7 +208,7 @@ class TestSessionEviction:
 
     def test_default_ttl_and_max_sessions(self, mock_otel):
         """Verify default values are applied when not explicitly provided."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config)
 
         assert tracer._sessions._ttl == Tracer.DEFAULT_SESSION_TTL
@@ -217,14 +216,14 @@ class TestSessionEviction:
 
     def test_custom_ttl_zero_allowed(self, mock_otel):
         """A TTL of 0 should be allowed (immediate eviction of all prior sessions)."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config, session_ttl_seconds=0)
 
         assert tracer._sessions._ttl == 0
 
     def test_shutdown_cleans_all_sessions(self, mock_otel):
         """shutdown() should end all remaining sessions and clear tracking."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config)
 
         spans = [MagicMock() for _ in range(3)]
@@ -248,7 +247,7 @@ class TestContentRedaction:
 
     def test_log_llm_call_default_includes_content(self, mock_otel):
         """When redact_content is False (default), full content is in span attributes."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config)
 
         mock_span = MagicMock()
@@ -267,7 +266,7 @@ class TestContentRedaction:
 
     def test_log_llm_call_redacted(self, mock_otel):
         """When redact_content is True, content is replaced with [REDACTED]."""
-        config = OTelConfig(enabled=True, exporter_type="otlp", redact_content=True)
+        config = OTelConfig(exporter_type="otlp", redact_content=True)
         tracer = Tracer(config)
 
         mock_span = MagicMock()
@@ -286,7 +285,7 @@ class TestContentRedaction:
 
     def test_trace_block_default_includes_input(self, mock_otel):
         """When redact_content is False, trace_block includes full input_data."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config)
 
         mock_span = MagicMock()
@@ -306,7 +305,7 @@ class TestContentRedaction:
 
     def test_trace_block_redacted(self, mock_otel):
         """When redact_content is True, trace_block replaces input with [REDACTED]."""
-        config = OTelConfig(enabled=True, exporter_type="otlp", redact_content=True)
+        config = OTelConfig(exporter_type="otlp", redact_content=True)
         tracer = Tracer(config)
 
         mock_span = MagicMock()
@@ -334,7 +333,7 @@ class TestSpanHierarchy:
 
     def test_start_request_span_creates_child_of_session(self, mock_otel):
         """start_request_span should create an 'openbias-request' span as a child of the session span."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config)
 
         # Set up a session span
@@ -378,7 +377,7 @@ class TestSpanHierarchy:
 
     def test_start_request_span_disabled(self, mock_otel):
         """start_request_span should return None when the tracer is disabled."""
-        config = OTelConfig(enabled=False)
+        config = OTelConfig()
         tracer = Tracer(config)
 
         result = tracer.start_request_span("sess-1", "req-1")
@@ -386,7 +385,7 @@ class TestSpanHierarchy:
 
     def test_end_request_span(self, mock_otel):
         """end_request_span should set OK status and end the span."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config)
 
         mock_span = MagicMock()
@@ -402,7 +401,7 @@ class TestSpanHierarchy:
 
     def test_end_request_span_none(self, mock_otel):
         """end_request_span(None) should not raise."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config)
 
         # Should not raise any exception
@@ -410,7 +409,7 @@ class TestSpanHierarchy:
 
     def test_trace_block_with_explicit_parent_span(self, mock_otel):
         """trace_block with parent_span should use it instead of _resolve_parent_context."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config)
 
         mock_parent = MagicMock()
@@ -438,7 +437,7 @@ class TestSpanHierarchy:
 
     def test_log_intervention_with_parent_span(self, mock_otel):
         """log_intervention with parent_span should forward it to log_event."""
-        config = OTelConfig(enabled=True, exporter_type="otlp")
+        config = OTelConfig(exporter_type="otlp")
         tracer = Tracer(config)
 
         mock_parent = MagicMock()

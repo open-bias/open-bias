@@ -3,8 +3,6 @@ evaluators:
     type: nemo
     policy: ../../examples/nemo_guardrails/nemo_config/
 
-tracing:
-  type: none
 
 eval:
   scenarios:

@@ -5,6 +5,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 
+from openbias.config.settings import OTelConfig
 from openbias.core.intervention.strategies import WorkflowViolationError
 from openbias.proxy.hooks import safe_hook, _fail_open_counter, get_fail_open_counts
 
@@ -178,7 +179,8 @@ def mock_settings():
     settings.session_ttl = 3600
     settings.max_sessions = 10000
     settings.evaluators = []
-    settings.otel.enabled = False
+    settings.otel = OTelConfig()
+
     settings.debug = False
     return settings
 
@@ -959,7 +961,8 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
     settings.session_ttl = 3600
     settings.max_sessions = 10000
     settings.evaluators = []
-    settings.otel.enabled = False
+    settings.otel = OTelConfig()
+
     settings.debug = False
 
     cb = Callback(settings=settings)

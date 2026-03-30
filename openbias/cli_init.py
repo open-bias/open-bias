@@ -319,7 +319,7 @@ def run_interactive_init() -> None:
         else:
             tracing_config = {"type": "console"}
     else:
-        tracing_config = {"type": "none"}
+        tracing_config = {}
 
     # -----------------------------------------------------------------------
     # 5. Advanced Configuration
