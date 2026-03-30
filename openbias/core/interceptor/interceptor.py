@@ -356,7 +356,7 @@ class Interceptor:
                     )
                 self._start_async_evaluator(
                     evaluator, session_id, request_data, response_data,
-                    context={"user_request_id": user_request_id, "_parent_span": parent_span},
+                    context={"user_request_id": user_request_id, "_suppress_trace": True},
                 )
 
         return InterceptionResult(
