@@ -401,6 +401,58 @@ async def test_post_call_intervention_replaces_response_content(
     assert result is response
 
 
+async def test_pre_call_skips_intervention_span_when_results_empty(
+    callback, mock_api_key, mock_cache
+):
+    """log_intervention is NOT called when modified_data exists but results list is empty."""
+    from openbias.core.interceptor.types import InterceptionResult
+
+    data = {"messages": [{"role": "user", "content": "hello"}]}
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_pre_call = AsyncMock(
+        return_value=InterceptionResult(
+            allowed=True,
+            modified_data={"messages": [{"role": "user", "content": "modified"}]},
+            metadata={"results": []},
+        )
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+
+    mock_tracer = MagicMock()
+    callback._tracer = mock_tracer
+
+    await callback.async_pre_call_hook(mock_api_key, mock_cache, data, "completion")
+
+    mock_tracer.log_intervention.assert_not_called()
+
+
+async def test_pre_call_logs_intervention_span_when_results_nonempty(
+    callback, mock_api_key, mock_cache
+):
+    """log_intervention IS called when modified_data exists and results list is non-empty."""
+    from openbias.core.interceptor.types import InterceptionResult
+
+    data = {"messages": [{"role": "user", "content": "hello"}]}
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_pre_call = AsyncMock(
+        return_value=InterceptionResult(
+            allowed=True,
+            modified_data={"messages": [{"role": "user", "content": "modified"}]},
+            metadata={"results": [{"evaluator": "test", "score": 0.5}]},
+        )
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+
+    mock_tracer = MagicMock()
+    callback._tracer = mock_tracer
+
+    await callback.async_pre_call_hook(mock_api_key, mock_cache, data, "completion")
+
+    mock_tracer.log_intervention.assert_called_once()
+
+
 async def test_post_call_failure_hook_exception_is_swallowed(
     callback, mock_api_key
 ):
