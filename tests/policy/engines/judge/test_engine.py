@@ -1259,7 +1259,7 @@ class TestInterventionCountBehavior:
 
         # Patch _build_result to always return BLOCK
         original_build = engine._build_result
-        engine._build_result = lambda verdicts, session: EngineResult(
+        engine._build_result = lambda verdicts, session, rubric_name="unknown": EngineResult(
             decision=Decision.BLOCK,
             message="blocked",
             metadata={"judge": {"verdicts": [], "session_turn": 0}, "violations": []},
@@ -1280,7 +1280,7 @@ class TestInterventionCountBehavior:
         await engine.initialize(judge_config)
         engine._client.call_judge = AsyncMock(return_value=_failing_judge_response())
 
-        engine._build_result = lambda verdicts, session: EngineResult(
+        engine._build_result = lambda verdicts, session, rubric_name="unknown": EngineResult(
             decision=Decision.INTERVENE,
             message="intervene",
             metadata={"judge": {"verdicts": [], "session_turn": 0}, "violations": []},
