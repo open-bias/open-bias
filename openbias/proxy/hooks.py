@@ -24,6 +24,7 @@ https://docs.litellm.ai/docs/observability/custom_callback
 """
 
 import asyncio
+import contextvars
 import json
 import logging
 import time
@@ -46,6 +47,10 @@ from openbias.policy.protocols import PolicyEngine
 from openbias.proxy.middleware import SessionExtractor
 
 logger = logging.getLogger(__name__)
+
+# ContextVar to carry the per-request OTEL span across hooks without polluting
+# data["metadata"] (which gets deepcopied and cannot hold RLock objects).
+request_span_var: contextvars.ContextVar[Any] = contextvars.ContextVar("request_span_var", default=None)
 
 # ---------------------------------------------------------------------------
 # Fail-open infrastructure
@@ -464,7 +469,7 @@ class Callback(CustomLogger):
             request_span = None
             if self.tracer:
                 request_span = self.tracer.start_request_span(session_id, request_id)
-            data["metadata"]["_openbias_request_span"] = request_span
+            request_span_var.set(request_span)
 
             # Wrap in a trace block under the request span
             if self.tracer:
@@ -564,7 +569,7 @@ class Callback(CustomLogger):
         llm_start_time = data.get("metadata", {}).get("_openbias_llm_start_time")
 
         # Retrieve per-request grouping span created in pre_call
-        request_span = data.get("metadata", {}).get("_openbias_request_span")
+        request_span = request_span_var.get()
 
         interceptor = await self._get_interceptor()
 
@@ -709,7 +714,7 @@ class Callback(CustomLogger):
         session_id_var.set(session_id)
 
         # Clean up request span on failure
-        request_span = request_data.get("metadata", {}).get("_openbias_request_span")
+        request_span = request_span_var.get()
         if self.tracer and request_span is not None:
             self.tracer.end_request_span(request_span)
 
