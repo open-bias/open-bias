@@ -105,3 +105,34 @@ class TestTracerIntegration:
         result = await engine.evaluate_response("s1", sample_response, sample_request)
         assert result.decision == Decision.ALLOW
 
+    async def test_parent_span_forwarded(
+        self, engine, judge_config, mock_tracer, sample_request, sample_response,
+    ):
+        """When _parent_span is in context, it is forwarded to log_judge_evaluation."""
+        await engine.initialize(judge_config)
+        engine.set_tracer(mock_tracer)
+        engine._client.call_judge = AsyncMock(return_value=_passing_response())
+
+        mock_span = MagicMock()
+        await engine.evaluate_response(
+            "s1", sample_response, sample_request, context={"_parent_span": mock_span}
+        )
+
+        mock_tracer.log_judge_evaluation.assert_called_once()
+        call_kwargs = mock_tracer.log_judge_evaluation.call_args[1]
+        assert call_kwargs["parent_span"] is mock_span
+
+    async def test_parent_span_none_by_default(
+        self, engine, judge_config, mock_tracer, sample_request, sample_response,
+    ):
+        """When no _parent_span is in context, parent_span=None is passed to log_judge_evaluation."""
+        await engine.initialize(judge_config)
+        engine.set_tracer(mock_tracer)
+        engine._client.call_judge = AsyncMock(return_value=_passing_response())
+
+        await engine.evaluate_response("s1", sample_response, sample_request)
+
+        mock_tracer.log_judge_evaluation.assert_called_once()
+        call_kwargs = mock_tracer.log_judge_evaluation.call_args[1]
+        assert call_kwargs["parent_span"] is None
+
