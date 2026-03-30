@@ -38,7 +38,6 @@ from litellm.caching.caching import DualCache
 from litellm.integrations.custom_logger import CustomLogger
 from litellm.proxy._types import UserAPIKeyAuth
 
-from opentelemetry.trace import Status, StatusCode
 
 from openbias.config.settings import Settings
 from openbias.core.utils import extract_response_content, extract_usage_info
@@ -164,62 +163,6 @@ class EvaluatorSpanFactory:
         ) as span:
             yield span
 
-
-class AsyncEvaluatorSpanGroup:
-    """Manages a single async_evaluators span under request_span.
-
-    Lazily created on first use. Groups both applied results and
-    dispatched markers as child spans.
-    """
-
-    def __init__(self, tracer, request_span, session_id):
-        self._tracer = tracer
-        self._request_span = request_span
-        self._session_id = session_id
-        self._group_span = None
-
-    def _ensure_group(self):
-        if self._group_span is None:
-            self._group_span = self._tracer.start_child_span(
-                "async_evaluators",
-                parent_span=self._request_span,
-                attributes={"openbias.session_id": self._session_id},
-            )
-
-    @contextmanager
-    def applied(self, evaluator_name: str):
-        """Span for an async result being applied from a previous request."""
-        self._ensure_group()
-        with self._tracer.trace_block(
-            f"applied:{evaluator_name}",
-            self._session_id,
-            attributes={
-                "openbias.evaluator.name": evaluator_name,
-                "openbias.evaluator.phase": "async_applied",
-            },
-            parent_span=self._group_span,
-        ) as span:
-            yield span
-
-    @contextmanager
-    def dispatched(self, evaluator_name: str):
-        """Zero-duration marker span for an async evaluator being started."""
-        self._ensure_group()
-        with self._tracer.trace_block(
-            f"dispatched:{evaluator_name}",
-            self._session_id,
-            attributes={
-                "openbias.evaluator.name": evaluator_name,
-                "openbias.evaluator.phase": "async_dispatched",
-            },
-            parent_span=self._group_span,
-        ) as span:
-            yield span
-
-    def finalize(self):
-        if self._group_span is not None:
-            self._group_span.set_status(Status(StatusCode.OK))
-            self._group_span.end()
 
 
 class Callback(CustomLogger):
