@@ -435,6 +435,26 @@ class Callback(CustomLogger):
                 logger.info(f"Tracer initialized: {self._tracer}")
         return self._tracer
 
+    def _make_trace_callback(self, session_id: str):
+        """Create a callback that re-emits judge verdict spans at apply-time."""
+        def callback(result_metadata, parent_span):
+            judge_data = result_metadata.get("judge", {})
+            for verdict in judge_data.get("verdicts", []):
+                self.tracer.log_judge_evaluation(
+                    session_id=session_id,
+                    rubric_name=verdict.get("rubric_name", "unknown"),
+                    scope=verdict.get("scope", "turn"),
+                    composite_score=verdict.get("composite_score", 0),
+                    action=verdict.get("action", "pass"),
+                    judge_model=verdict.get("judge_model", "unknown"),
+                    scores=verdict.get("scores"),
+                    latency_ms=verdict.get("latency_ms"),
+                    token_usage=verdict.get("token_usage"),
+                    metadata=verdict.get("metadata"),
+                    parent_span=parent_span,
+                )
+        return callback
+
     async def async_pre_call_hook(
         self,
         user_api_key_dict: UserAPIKeyAuth,
@@ -514,11 +534,14 @@ class Callback(CustomLogger):
             with cm as span:
                 span_factory = EvaluatorSpanFactory(self.tracer, span, session_id) if self.tracer and span else None
 
+                trace_callback = self._make_trace_callback(session_id) if self.tracer else None
+
                 result = await interceptor.run_pre_call(
                     session_id=session_id,
                     request_data=data,
                     user_request_id=request_id,
                     span_factory=span_factory,
+                    trace_callback=trace_callback,
                 )
 
                 # Set output on span
