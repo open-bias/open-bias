@@ -122,15 +122,16 @@ class TestTracerIntegration:
         call_kwargs = mock_tracer.log_judge_evaluation.call_args[1]
         assert call_kwargs["parent_span"] is mock_span
 
+    @pytest.mark.parametrize("context", [None, {}, {"unrelated_key": "value"}])
     async def test_parent_span_none_by_default(
-        self, engine, judge_config, mock_tracer, sample_request, sample_response,
+        self, engine, judge_config, mock_tracer, sample_request, sample_response, context,
     ):
         """When no _parent_span is in context, parent_span=None is passed to log_judge_evaluation."""
         await engine.initialize(judge_config)
         engine.set_tracer(mock_tracer)
         engine._client.call_judge = AsyncMock(return_value=_passing_response())
 
-        await engine.evaluate_response("s1", sample_response, sample_request)
+        await engine.evaluate_response("s1", sample_response, sample_request, context=context)
 
         mock_tracer.log_judge_evaluation.assert_called_once()
         call_kwargs = mock_tracer.log_judge_evaluation.call_args[1]
