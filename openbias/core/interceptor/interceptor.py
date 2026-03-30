@@ -8,6 +8,7 @@ handles async evaluator task management, and applies interventions.
 import asyncio
 import copy
 import logging
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -105,6 +106,8 @@ class Interceptor:
         session_id: str,
         request_data: dict[str, Any],
         user_request_id: str = "",
+        span_factory: Any | None = None,
+        async_span_group: Any | None = None,
     ) -> InterceptionResult:
         """
         Run PRE_CALL phase.
@@ -124,65 +127,27 @@ class Interceptor:
         # Step 1: Apply pending async results
         pending_results = self._collect_completed_async(session_id)
         for processed_count, pending in enumerate(pending_results, start=1):
-            result = pending.result
-            decision = self._effective_decision(result.decision, session_id)
-            all_metadata["results"].append(
-                {"evaluator": pending.evaluator_name, "decision": decision.value}
+            _async_ctx = (
+                async_span_group.applied(pending.evaluator_name)
+                if async_span_group is not None
+                else nullcontext()
             )
-
-            if decision == Decision.BLOCK:
-                logger.warning(
-                    f"Request blocked by async evaluator '{pending.evaluator_name}': "
-                    f"{result.message}"
-                )
-                # Only confirm tasks up to and including the blocking one.
-                # Any remaining completed-but-unprocessed tasks stay in the
-                # session so they are picked up on the next request.
-                self._confirm_collected(session_id, count=processed_count)
-                return InterceptionResult(
-                    allowed=False,
-                    message=result.message,
-                    metadata=all_metadata,
-                )
-
-            if decision == Decision.INTERVENE:
-                if result.modified_messages is not None:
-                    logger.info(
-                        f"Applying async message replacement from '{pending.evaluator_name}'"
-                    )
-                    modified_data = dict(modified_data)
-                    modified_data["messages"] = result.modified_messages
-                elif result.message:
-                    logger.info(
-                        f"Applying async intervention from '{pending.evaluator_name}'"
-                    )
-                    modified_data = self._apply_intervention(
-                        modified_data, result.message, self._default_strategy
-                    )
-
-        # Async results processed successfully — remove from session store
-        self._confirm_collected(session_id)
-
-        # Step 2: Run sync PRE_CALL evaluators
-        # Note: INTERVENE results accumulate — each evaluator sees the already-modified
-        # request_data from prior evaluators. Order in evaluators list matters.
-        for evaluator in self._sync_pre_call_evaluators:
-            try:
-                result = await evaluator.evaluate_request(
-                    session_id=session_id,
-                    request_data=modified_data,
-                    context={"user_request_id": user_request_id},
-                )
+            with _async_ctx:
+                result = pending.result
                 decision = self._effective_decision(result.decision, session_id)
                 all_metadata["results"].append(
-                    {"evaluator": evaluator.name, "decision": decision.value}
+                    {"evaluator": pending.evaluator_name, "decision": decision.value}
                 )
 
                 if decision == Decision.BLOCK:
                     logger.warning(
-                        f"Request blocked by sync evaluator '{evaluator.name}': "
+                        f"Request blocked by async evaluator '{pending.evaluator_name}': "
                         f"{result.message}"
                     )
+                    # Only confirm tasks up to and including the blocking one.
+                    # Any remaining completed-but-unprocessed tasks stay in the
+                    # session so they are picked up on the next request.
+                    self._confirm_collected(session_id, count=processed_count)
                     return InterceptionResult(
                         allowed=False,
                         message=result.message,
@@ -192,24 +157,81 @@ class Interceptor:
                 if decision == Decision.INTERVENE:
                     if result.modified_messages is not None:
                         logger.info(
-                            f"Applying sync message replacement from '{evaluator.name}'"
+                            f"Applying async message replacement from '{pending.evaluator_name}'"
                         )
                         modified_data = dict(modified_data)
                         modified_data["messages"] = result.modified_messages
                     elif result.message:
                         logger.info(
-                            f"Applying sync intervention from '{evaluator.name}'"
+                            f"Applying async intervention from '{pending.evaluator_name}'"
                         )
                         modified_data = self._apply_intervention(
                             modified_data, result.message, self._default_strategy
                         )
 
-            except Exception as e:
-                logger.error(f"Evaluator '{evaluator.name}' failed: {e}")
-                # Fail-open: log and continue instead of blocking
-                all_metadata["results"].append(
-                    {"evaluator": evaluator.name, "decision": "error", "error": str(e)}
-                )
+        # Async results processed successfully — remove from session store
+        self._confirm_collected(session_id)
+
+        # Step 2: Run sync PRE_CALL evaluators
+        # Note: INTERVENE results accumulate — each evaluator sees the already-modified
+        # request_data from prior evaluators. Order in evaluators list matters.
+        for evaluator in self._sync_pre_call_evaluators:
+            _eval_ctx = (
+                span_factory(evaluator.name, "pre_call")
+                if span_factory is not None
+                else nullcontext()
+            )
+            with _eval_ctx as _eval_span:
+                try:
+                    ctx: dict[str, Any] = {"user_request_id": user_request_id}
+                    if _eval_span is not None:
+                        ctx["_parent_span"] = _eval_span
+                    result = await evaluator.evaluate_request(
+                        session_id=session_id,
+                        request_data=modified_data,
+                        context=ctx,
+                    )
+                    decision = self._effective_decision(result.decision, session_id)
+                    if _eval_span is not None and hasattr(_eval_span, "set_attribute"):
+                        _eval_span.set_attribute(
+                            "openbias.evaluator.decision", decision.value
+                        )
+                    all_metadata["results"].append(
+                        {"evaluator": evaluator.name, "decision": decision.value}
+                    )
+
+                    if decision == Decision.BLOCK:
+                        logger.warning(
+                            f"Request blocked by sync evaluator '{evaluator.name}': "
+                            f"{result.message}"
+                        )
+                        return InterceptionResult(
+                            allowed=False,
+                            message=result.message,
+                            metadata=all_metadata,
+                        )
+
+                    if decision == Decision.INTERVENE:
+                        if result.modified_messages is not None:
+                            logger.info(
+                                f"Applying sync message replacement from '{evaluator.name}'"
+                            )
+                            modified_data = dict(modified_data)
+                            modified_data["messages"] = result.modified_messages
+                        elif result.message:
+                            logger.info(
+                                f"Applying sync intervention from '{evaluator.name}'"
+                            )
+                            modified_data = self._apply_intervention(
+                                modified_data, result.message, self._default_strategy
+                            )
+
+                except Exception as e:
+                    logger.error(f"Evaluator '{evaluator.name}' failed: {e}")
+                    # Fail-open: log and continue instead of blocking
+                    all_metadata["results"].append(
+                        {"evaluator": evaluator.name, "decision": "error", "error": str(e)}
+                    )
 
         return InterceptionResult(
             allowed=True,
@@ -224,6 +246,8 @@ class Interceptor:
         response_data: Any,
         user_request_id: str = "",
         parent_span: Any | None = None,
+        span_factory: Any | None = None,
+        async_span_group: Any | None = None,
     ) -> InterceptionResult:
         """
         Run POST_CALL phase.
@@ -240,58 +264,72 @@ class Interceptor:
 
         # Step 1: Run sync POST_CALL evaluators
         for evaluator in self._sync_post_call_evaluators:
-            try:
-                result = await evaluator.evaluate_response(
-                    session_id=session_id,
-                    response_data=response_data,
-                    request_data=request_data,
-                    context={"user_request_id": user_request_id, "_parent_span": parent_span},
-                )
-                decision = self._effective_decision(result.decision, session_id)
-                all_metadata["results"].append(
-                    {"evaluator": evaluator.name, "decision": decision.value}
-                )
-
-                if decision == Decision.BLOCK:
-                    logger.warning(
-                        f"Response blocked by sync evaluator '{evaluator.name}': "
-                        f"{result.message}"
-                    )
-                    return InterceptionResult(
-                        allowed=False,
-                        message=result.message,
-                        metadata=all_metadata,
-                    )
-
-                if decision == Decision.INTERVENE:
-                    logger.info(
-                        f"Sync POST_CALL evaluator '{evaluator.name}' returned INTERVENE: "
-                        f"{result.message}"
-                    )
-                    intervention_info: dict[str, Any] = {
-                        "evaluator": evaluator.name,
-                        "message": result.message,
+            _eval_ctx = (
+                span_factory(evaluator.name, "post_call")
+                if span_factory is not None
+                else nullcontext()
+            )
+            with _eval_ctx as _eval_span:
+                try:
+                    ctx: dict[str, Any] = {
+                        "user_request_id": user_request_id,
+                        "_parent_span": _eval_span if _eval_span is not None else parent_span,
                     }
-                    if result.modified_messages is not None:
-                        intervention_info["has_modified_messages"] = True
-                    all_metadata["interventions"].append(intervention_info)
-                    # Store the evaluator result for the hooks layer to act on
-                    if modified_data is None:
-                        modified_data = {}
-                    modified_data.setdefault("_interventions", []).append(
-                        {
+                    result = await evaluator.evaluate_response(
+                        session_id=session_id,
+                        response_data=response_data,
+                        request_data=request_data,
+                        context=ctx,
+                    )
+                    decision = self._effective_decision(result.decision, session_id)
+                    if _eval_span is not None and hasattr(_eval_span, "set_attribute"):
+                        _eval_span.set_attribute(
+                            "openbias.evaluator.decision", decision.value
+                        )
+                    all_metadata["results"].append(
+                        {"evaluator": evaluator.name, "decision": decision.value}
+                    )
+
+                    if decision == Decision.BLOCK:
+                        logger.warning(
+                            f"Response blocked by sync evaluator '{evaluator.name}': "
+                            f"{result.message}"
+                        )
+                        return InterceptionResult(
+                            allowed=False,
+                            message=result.message,
+                            metadata=all_metadata,
+                        )
+
+                    if decision == Decision.INTERVENE:
+                        logger.info(
+                            f"Sync POST_CALL evaluator '{evaluator.name}' returned INTERVENE: "
+                            f"{result.message}"
+                        )
+                        intervention_info: dict[str, Any] = {
                             "evaluator": evaluator.name,
                             "message": result.message,
-                            "modified_messages": result.modified_messages,
-                            "metadata": result.metadata,
                         }
-                    )
+                        if result.modified_messages is not None:
+                            intervention_info["has_modified_messages"] = True
+                        all_metadata["interventions"].append(intervention_info)
+                        # Store the evaluator result for the hooks layer to act on
+                        if modified_data is None:
+                            modified_data = {}
+                        modified_data.setdefault("_interventions", []).append(
+                            {
+                                "evaluator": evaluator.name,
+                                "message": result.message,
+                                "modified_messages": result.modified_messages,
+                                "metadata": result.metadata,
+                            }
+                        )
 
-            except Exception as e:
-                logger.error(f"Evaluator '{evaluator.name}' failed: {e}")
-                all_metadata["results"].append(
-                    {"evaluator": evaluator.name, "decision": "error", "error": str(e)}
-                )
+                except Exception as e:
+                    logger.error(f"Evaluator '{evaluator.name}' failed: {e}")
+                    all_metadata["results"].append(
+                        {"evaluator": evaluator.name, "decision": "error", "error": str(e)}
+                    )
 
         # Step 2: Start async POST_CALL evaluators in background
         # Note: _parent_span may be ended before async tasks finish, so
@@ -299,10 +337,16 @@ class Interceptor:
         # trace backend.  This is acceptable — async results are applied
         # on the *next* request, and the span still provides lineage.
         for evaluator in self._async_post_call_evaluators:
-            self._start_async_evaluator(
-                evaluator, session_id, request_data, response_data,
-                context={"user_request_id": user_request_id, "_parent_span": parent_span},
+            _dispatch_ctx = (
+                async_span_group.dispatched(evaluator.name)
+                if async_span_group is not None
+                else nullcontext()
             )
+            with _dispatch_ctx:
+                self._start_async_evaluator(
+                    evaluator, session_id, request_data, response_data,
+                    context={"user_request_id": user_request_id, "_parent_span": parent_span},
+                )
 
         return InterceptionResult(
             allowed=True,
