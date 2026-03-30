@@ -187,6 +187,51 @@ class Tracer:
 
         return self._sessions.get(session_id)
 
+    def _resolve_parent_context(self, session_id: str) -> trace.Context | None:
+        """Resolve the parent context for a new span.
+
+        If there is an active recording span in the current context (e.g. from
+        a ``trace_block``), use it as the parent so that sub-spans nest
+        correctly.  Otherwise, fall back to the session-level root span.
+        """
+        current = trace.get_current_span()
+        if current and current.is_recording():
+            return None  # OTEL will automatically use the current span as parent
+
+        parent_span = self._get_or_create_session_span(session_id)
+        return trace.set_span_in_context(parent_span) if parent_span else None
+
+    def start_request_span(self, session_id: str, request_id: str) -> trace.Span | None:
+        """Start a request-level span as a child of the session span.
+
+        Returns the span (not set as current) or ``None`` if tracing is disabled.
+        """
+        if not self._enabled or not self._tracer:
+            return None
+
+        session_span = self._get_or_create_session_span(session_id)
+        parent_ctx = trace.set_span_in_context(session_span)
+
+        span = self._tracer.start_span(
+            "openbias-request",
+            context=parent_ctx,
+            attributes={
+                "openbias.session_id": session_id,
+                "openbias.request_id": request_id,
+            },
+        )
+        return span
+
+    def end_request_span(self, span: trace.Span | None) -> None:
+        """End a request span previously started with :meth:`start_request_span`."""
+        if span is None:
+            return
+        try:
+            span.set_status(Status(StatusCode.OK))
+            span.end()
+        except Exception:
+            logger.debug("Failed to end request span", exc_info=True)
+
     def _safe_json(self, obj: Any) -> str:
         """Safely serialize object to JSON string for span attributes."""
         try:
@@ -215,6 +260,7 @@ class Tracer:
         attributes: dict[str, Any] | None = None,
         input_data: Any | None = None,
         metadata: dict[str, Any] | None = None,
+        parent_span: Any | None = None,
     ):
         """
         Context manager to trace a block of code.
@@ -226,13 +272,16 @@ class Tracer:
             attributes: Additional span attributes
             input_data: Input data to record (will be JSON serialized)
             metadata: Additional metadata for the span
+            parent_span: Optional explicit parent span to nest under
         """
         if not self._enabled or not self._tracer:
             yield None
             return
 
-        parent_span = self._get_or_create_session_span(session_id)
-        parent_ctx = trace.set_span_in_context(parent_span) if parent_span else None
+        if parent_span is not None:
+            parent_ctx = trace.set_span_in_context(parent_span)
+        else:
+            parent_ctx = self._resolve_parent_context(session_id)
 
         span_attrs = {
             "openbias.session_id": session_id,
@@ -268,6 +317,7 @@ class Tracer:
         metadata: dict[str, Any] | None = None,
         input_data: dict[str, Any] | None = None,
         output_data: dict[str, Any] | None = None,
+        parent_span: Any | None = None,
     ) -> None:
         """
         Log an Open Bias event as an OTEL span.
@@ -277,8 +327,10 @@ class Tracer:
         if not self._enabled or not self._tracer:
             return
 
-        parent_span = self._get_or_create_session_span(session_id)
-        parent_ctx = trace.set_span_in_context(parent_span) if parent_span else None
+        if parent_span is not None:
+            parent_ctx = trace.set_span_in_context(parent_span)
+        else:
+            parent_ctx = self._resolve_parent_context(session_id)
 
         with self._tracer.start_as_current_span(
             name,
@@ -310,6 +362,7 @@ class Tracer:
         session_id: str,
         intervention_name: str,
         context: dict[str, Any] | None = None,
+        parent_span: Any | None = None,
     ) -> None:
         """Log an intervention being applied."""
         self.log_event(
@@ -320,6 +373,7 @@ class Tracer:
                 "intervention_name": intervention_name,
                 **(context or {}),
             },
+            parent_span=parent_span,
         )
 
     def log_llm_call(
@@ -347,10 +401,11 @@ class Tracer:
         if not self._enabled or not self._tracer:
             return
 
-        # Use provided parent or get session span
-        if parent_span is None:
-            parent_span = self._get_or_create_session_span(session_id)
-        parent_ctx = trace.set_span_in_context(parent_span) if parent_span else None
+        # Use provided parent, active context span, or session span
+        if parent_span is not None:
+            parent_ctx = trace.set_span_in_context(parent_span)
+        else:
+            parent_ctx = self._resolve_parent_context(session_id)
 
         # Build span attributes with GenAI semantic conventions
         span_attrs = {
@@ -437,8 +492,7 @@ class Tracer:
         if not self._enabled or not self._tracer:
             return
 
-        parent_span = self._get_or_create_session_span(session_id)
-        parent_ctx = trace.set_span_in_context(parent_span) if parent_span else None
+        parent_ctx = self._resolve_parent_context(session_id)
 
         span_attrs = {
             "openbias.session_id": session_id,

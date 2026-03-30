@@ -3,6 +3,8 @@ import time
 import pytest
 from unittest.mock import MagicMock, patch
 
+from opentelemetry.trace import StatusCode
+
 from openbias.tracing.otel_tracer import Tracer
 from openbias.config.settings import OTelConfig
 
@@ -321,3 +323,137 @@ class TestContentRedaction:
         set_calls = {c.args[0]: c.args[1] for c in mock_span.set_attribute.call_args_list}
         assert set_calls.get("input.value") == "[REDACTED]"
         assert set_calls.get("langfuse.span.input") == "[REDACTED]"
+
+
+# ---------------------------------------------------------------------------
+# Span hierarchy tests
+# ---------------------------------------------------------------------------
+
+class TestSpanHierarchy:
+    """Tests for request-level span hierarchy and explicit parent_span support."""
+
+    def test_start_request_span_creates_child_of_session(self, mock_otel):
+        """start_request_span should create an 'openbias-request' span as a child of the session span."""
+        config = OTelConfig(enabled=True, exporter_type="otlp")
+        tracer = Tracer(config)
+
+        # Set up a session span
+        mock_session_span = MagicMock()
+        mock_otel["tracer"].start_span.return_value = mock_session_span
+        tracer._get_or_create_session_span("sess-1")
+
+        # Now set up the request span return
+        mock_request_span = MagicMock()
+        mock_otel["tracer"].start_span.return_value = mock_request_span
+
+        mock_ctx = MagicMock()
+        mock_otel["trace"].set_span_in_context.return_value = mock_ctx
+
+        result = tracer.start_request_span("sess-1", "req-1")
+
+        # Verify set_span_in_context was called with the session span
+        mock_otel["trace"].set_span_in_context.assert_called_with(mock_session_span)
+
+        # Find the "openbias-request" start_span call
+        request_call = None
+        for call in mock_otel["tracer"].start_span.call_args_list:
+            args = call[0] if call[0] else ()
+            kwargs = call[1] if call[1] else {}
+            name = args[0] if args else kwargs.get("name")
+            if name == "openbias-request":
+                request_call = call
+                break
+        assert request_call is not None, "start_span('openbias-request', ...) not found"
+
+        # Verify attributes include session_id and request_id
+        call_kwargs = request_call[1] if request_call[1] else {}
+        attrs = call_kwargs.get("attributes", {})
+        assert attrs.get("openbias.session_id") == "sess-1"
+        assert attrs.get("openbias.request_id") == "req-1"
+
+        # Verify the context passed uses the session span context
+        assert call_kwargs.get("context") is mock_ctx
+
+        assert result is mock_request_span
+
+    def test_start_request_span_disabled(self, mock_otel):
+        """start_request_span should return None when the tracer is disabled."""
+        config = OTelConfig(enabled=False)
+        tracer = Tracer(config)
+
+        result = tracer.start_request_span("sess-1", "req-1")
+        assert result is None
+
+    def test_end_request_span(self, mock_otel):
+        """end_request_span should set OK status and end the span."""
+        config = OTelConfig(enabled=True, exporter_type="otlp")
+        tracer = Tracer(config)
+
+        mock_span = MagicMock()
+        tracer.end_request_span(mock_span)
+
+        # Verify set_status was called with OK status
+        mock_span.set_status.assert_called_once()
+        status_arg = mock_span.set_status.call_args[0][0]
+        assert status_arg.status_code == StatusCode.OK
+
+        # Verify end() was called
+        mock_span.end.assert_called_once()
+
+    def test_end_request_span_none(self, mock_otel):
+        """end_request_span(None) should not raise."""
+        config = OTelConfig(enabled=True, exporter_type="otlp")
+        tracer = Tracer(config)
+
+        # Should not raise any exception
+        tracer.end_request_span(None)
+
+    def test_trace_block_with_explicit_parent_span(self, mock_otel):
+        """trace_block with parent_span should use it instead of _resolve_parent_context."""
+        config = OTelConfig(enabled=True, exporter_type="otlp")
+        tracer = Tracer(config)
+
+        mock_parent = MagicMock()
+        mock_span = MagicMock()
+        mock_ctx = MagicMock()
+
+        mock_otel["trace"].set_span_in_context.return_value = mock_ctx
+        mock_otel["tracer"].start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=mock_span
+        )
+        mock_otel["tracer"].start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        with tracer.trace_block("test-span", "sess-1", parent_span=mock_parent):
+            pass
+
+        # Verify set_span_in_context was called with the explicit parent span
+        mock_otel["trace"].set_span_in_context.assert_called_with(mock_parent)
+
+        # Verify start_as_current_span used that context
+        mock_otel["tracer"].start_as_current_span.assert_called_once()
+        call_kwargs = mock_otel["tracer"].start_as_current_span.call_args[1]
+        assert call_kwargs.get("context") is mock_ctx
+
+    def test_log_intervention_with_parent_span(self, mock_otel):
+        """log_intervention with parent_span should forward it to log_event."""
+        config = OTelConfig(enabled=True, exporter_type="otlp")
+        tracer = Tracer(config)
+
+        mock_parent = MagicMock()
+        mock_span = MagicMock()
+        mock_ctx = MagicMock()
+
+        mock_otel["trace"].set_span_in_context.return_value = mock_ctx
+        mock_otel["tracer"].start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=mock_span
+        )
+        mock_otel["tracer"].start_as_current_span.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        tracer.log_intervention("sess-1", "test-intervention", parent_span=mock_parent)
+
+        # Verify set_span_in_context was called with the explicit parent span
+        mock_otel["trace"].set_span_in_context.assert_called_with(mock_parent)
