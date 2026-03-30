@@ -632,6 +632,7 @@ class Callback(CustomLogger):
                         request_data=data,
                         response_data=response,
                         user_request_id=request_id,
+                        parent_span=request_span,
                     )
 
                     # Set output on span

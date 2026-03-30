@@ -237,6 +237,7 @@ class JudgePolicyEngine(PolicyEngine):
         tool_definitions = self._extract_tool_definitions(request_data)
         conversation = self._extract_conversation(request_data)
         metadata = (context or {}).get("metadata", {})
+        parent_span = (context or {}).get("_parent_span")
 
         primary_model = self._client.primary_model
         if not primary_model:
@@ -261,7 +262,7 @@ class JudgePolicyEngine(PolicyEngine):
                     tool_definitions=tool_definitions,
                     fail_action=VerdictAction.INTERVENE,
                 )
-                self._trace_verdict(session_id, verdict, rubric.name)
+                self._trace_verdict(session_id, verdict, rubric.name, parent_span=parent_span)
                 verdicts.append(verdict)
             except Exception as e:
                 logger.error(
@@ -447,6 +448,7 @@ class JudgePolicyEngine(PolicyEngine):
         session_id: str,
         verdict: JudgeVerdict,
         rubric_name: str,
+        parent_span: Any | None = None,
     ) -> None:
         """Log a verdict to the OTEL tracer if available."""
         if not self._tracer:
@@ -474,6 +476,7 @@ class JudgePolicyEngine(PolicyEngine):
                 latency_ms=verdict.latency_ms,
                 token_usage=verdict.token_usage,
                 metadata=verdict.metadata,
+                parent_span=parent_span,
             )
         except Exception as e:
             logger.debug(f"Failed to trace verdict: {e}")

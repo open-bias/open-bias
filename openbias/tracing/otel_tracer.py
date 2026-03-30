@@ -473,6 +473,7 @@ class Tracer:
         latency_ms: float | None = None,
         token_usage: int | None = None,
         metadata: dict[str, Any] | None = None,
+        parent_span: Any | None = None,
     ) -> None:
         """
         Log a judge evaluation as an OTEL span with judge-specific attributes.
@@ -492,7 +493,10 @@ class Tracer:
         if not self._enabled or not self._tracer:
             return
 
-        parent_ctx = self._resolve_parent_context(session_id)
+        if parent_span is not None:
+            parent_ctx = trace.set_span_in_context(parent_span)
+        else:
+            parent_ctx = self._resolve_parent_context(session_id)
 
         span_attrs = {
             "openbias.session_id": session_id,

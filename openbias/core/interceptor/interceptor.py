@@ -223,6 +223,7 @@ class Interceptor:
         request_data: dict[str, Any],
         response_data: Any,
         user_request_id: str = "",
+        parent_span: Any | None = None,
     ) -> InterceptionResult:
         """
         Run POST_CALL phase.
@@ -244,7 +245,7 @@ class Interceptor:
                     session_id=session_id,
                     response_data=response_data,
                     request_data=request_data,
-                    context={"user_request_id": user_request_id},
+                    context={"user_request_id": user_request_id, "_parent_span": parent_span},
                 )
                 decision = self._effective_decision(result.decision, session_id)
                 all_metadata["results"].append(
@@ -296,7 +297,7 @@ class Interceptor:
         for evaluator in self._async_post_call_evaluators:
             self._start_async_evaluator(
                 evaluator, session_id, request_data, response_data,
-                context={"user_request_id": user_request_id},
+                context={"user_request_id": user_request_id, "_parent_span": parent_span},
             )
 
         return InterceptionResult(
