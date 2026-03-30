@@ -107,7 +107,6 @@ class Interceptor:
         request_data: dict[str, Any],
         user_request_id: str = "",
         span_factory: Any | None = None,
-        async_span_group: Any | None = None,
     ) -> InterceptionResult:
         """
         Run PRE_CALL phase.
@@ -128,11 +127,15 @@ class Interceptor:
         pending_results = self._collect_completed_async(session_id)
         for processed_count, pending in enumerate(pending_results, start=1):
             _async_ctx = (
-                async_span_group.applied(pending.evaluator_name)
-                if async_span_group is not None
+                span_factory(pending.evaluator_name, "pre_call")
+                if span_factory is not None
                 else nullcontext()
             )
-            with _async_ctx:
+            with _async_ctx as _async_span:
+                if _async_span is not None and hasattr(_async_span, "set_attribute"):
+                    _async_span.set_attribute(
+                        "openbias.evaluator.source", "async_applied"
+                    )
                 result = pending.result
                 decision = self._effective_decision(result.decision, session_id)
                 all_metadata["results"].append(
