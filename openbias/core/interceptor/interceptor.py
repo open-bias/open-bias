@@ -107,6 +107,7 @@ class Interceptor:
         request_data: dict[str, Any],
         user_request_id: str = "",
         span_factory: Any | None = None,
+        trace_callback: Any | None = None,
     ) -> InterceptionResult:
         """
         Run PRE_CALL phase.
@@ -136,6 +137,9 @@ class Interceptor:
                     _async_span.set_attribute(
                         "openbias.evaluator.source", "async_applied"
                     )
+                # Re-emit verdict traces under this evaluator span
+                if trace_callback is not None and _async_span is not None:
+                    trace_callback(pending.result.metadata, _async_span)
                 result = pending.result
                 decision = self._effective_decision(result.decision, session_id)
                 all_metadata["results"].append(
