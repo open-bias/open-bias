@@ -212,6 +212,8 @@ class JudgePolicyEngine(PolicyEngine):
                 session_id=session_id,
                 fail_action=VerdictAction.INTERVENE,
             )
+            parent_span = (context or {}).get("_parent_span")
+            self._trace_verdict(session_id, verdict, rubric.name, parent_span=parent_span)
             return self._build_result([verdict], self._get_or_create_session(session_id))
         except Exception as e:
             logger.error(f"Pre-call evaluation failed: {e}")
