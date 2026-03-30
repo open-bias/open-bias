@@ -431,16 +431,24 @@ class Tracer:
             if messages:
                 if self.config.redact_content:
                     span.set_attribute("gen_ai.content.prompt", "[REDACTED]")
+                    span.set_attribute("input.value", "[REDACTED]")
+                    span.set_attribute("langfuse.span.input", "[REDACTED]")
                 else:
                     messages_json = self._safe_json(messages)
                     span.set_attribute("gen_ai.content.prompt", messages_json)
+                    span.set_attribute("input.value", messages_json)
+                    span.set_attribute("langfuse.span.input", messages_json)
 
             # Set output (response)
             if response_content:
                 if self.config.redact_content:
                     span.set_attribute("gen_ai.content.completion", "[REDACTED]")
+                    span.set_attribute("output.value", "[REDACTED]")
+                    span.set_attribute("langfuse.span.output", "[REDACTED]")
                 else:
                     span.set_attribute("gen_ai.content.completion", response_content)
+                    span.set_attribute("output.value", response_content)
+                    span.set_attribute("langfuse.span.output", response_content)
 
             # Add usage info with GenAI semantic conventions
             if usage:
