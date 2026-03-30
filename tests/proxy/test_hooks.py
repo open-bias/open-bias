@@ -2,12 +2,19 @@
 
 import asyncio
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from contextlib import contextmanager
+from unittest.mock import AsyncMock, MagicMock, patch, call
 from datetime import datetime, timezone
 
 from openbias.config.settings import OTelConfig
 from openbias.core.intervention.strategies import WorkflowViolationError
-from openbias.proxy.hooks import safe_hook, _fail_open_counter, get_fail_open_counts
+from openbias.proxy.hooks import (
+    safe_hook,
+    _fail_open_counter,
+    get_fail_open_counts,
+    EvaluatorSpanFactory,
+    AsyncEvaluatorSpanGroup,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1289,3 +1296,153 @@ async def test_cleanup_session_resets_all_evaluators(mock_settings):
 
     engine1.reset_session.assert_awaited_once_with("test-session")
     engine2.reset_session.assert_awaited_once_with("test-session")
+
+
+# ===========================================================================
+# EvaluatorSpanFactory unit tests
+# ===========================================================================
+
+
+class TestEvaluatorSpanFactory:
+
+    def test_creates_span_via_trace_block(self):
+        """EvaluatorSpanFactory delegates to tracer.trace_block with correct args."""
+        mock_span = MagicMock()
+        mock_tracer = MagicMock()
+
+        @contextmanager
+        def fake_trace_block(name, session_id, attributes=None, parent_span=None):
+            yield mock_span
+
+        mock_tracer.trace_block = MagicMock(side_effect=fake_trace_block)
+        mock_phase_span = MagicMock()
+
+        factory = EvaluatorSpanFactory(mock_tracer, mock_phase_span, "sess-1")
+
+        with factory("my_evaluator", "pre_call") as span:
+            assert span is mock_span
+
+        mock_tracer.trace_block.assert_called_once_with(
+            "evaluator:my_evaluator",
+            "sess-1",
+            attributes={
+                "openbias.evaluator.name": "my_evaluator",
+                "openbias.evaluator.phase": "pre_call",
+            },
+            parent_span=mock_phase_span,
+        )
+
+
+# ===========================================================================
+# AsyncEvaluatorSpanGroup unit tests
+# ===========================================================================
+
+
+class TestAsyncEvaluatorSpanGroup:
+
+    def test_applied_creates_group_and_child(self):
+        """applied() lazily creates the group span and opens a child trace_block."""
+        mock_tracer = MagicMock()
+        mock_request_span = MagicMock()
+        mock_group_span = MagicMock()
+        mock_child_span = MagicMock()
+
+        mock_tracer._tracer.start_span.return_value = mock_group_span
+
+        @contextmanager
+        def fake_trace_block(name, session_id, attributes=None, parent_span=None):
+            yield mock_child_span
+
+        mock_tracer.trace_block = MagicMock(side_effect=fake_trace_block)
+
+        with patch("openbias.proxy.hooks.trace.set_span_in_context") as mock_set_ctx:
+            mock_set_ctx.return_value = "fake_context"
+            group = AsyncEvaluatorSpanGroup(mock_tracer, mock_request_span, "sess-1")
+
+            with group.applied("eval1") as span:
+                assert span is mock_child_span
+
+        # Group span was lazily created
+        mock_tracer._tracer.start_span.assert_called_once_with(
+            "async_evaluators",
+            context="fake_context",
+            attributes={"openbias.session_id": "sess-1"},
+        )
+        # Child trace_block was called with the group span as parent
+        mock_tracer.trace_block.assert_called_once_with(
+            "applied:eval1",
+            "sess-1",
+            attributes={
+                "openbias.evaluator.name": "eval1",
+                "openbias.evaluator.phase": "async_applied",
+            },
+            parent_span=mock_group_span,
+        )
+
+    def test_dispatched_creates_child(self):
+        """dispatched() creates a child span under the group span."""
+        mock_tracer = MagicMock()
+        mock_request_span = MagicMock()
+        mock_group_span = MagicMock()
+        mock_child_span = MagicMock()
+
+        mock_tracer._tracer.start_span.return_value = mock_group_span
+
+        @contextmanager
+        def fake_trace_block(name, session_id, attributes=None, parent_span=None):
+            yield mock_child_span
+
+        mock_tracer.trace_block = MagicMock(side_effect=fake_trace_block)
+
+        with patch("openbias.proxy.hooks.trace.set_span_in_context"):
+            group = AsyncEvaluatorSpanGroup(mock_tracer, mock_request_span, "sess-1")
+
+            with group.dispatched("eval1") as span:
+                assert span is mock_child_span
+
+        mock_tracer.trace_block.assert_called_once_with(
+            "dispatched:eval1",
+            "sess-1",
+            attributes={
+                "openbias.evaluator.name": "eval1",
+                "openbias.evaluator.phase": "async_dispatched",
+            },
+            parent_span=mock_group_span,
+        )
+
+    def test_finalize_ends_group_span(self):
+        """finalize() sets status OK and ends the group span."""
+        mock_tracer = MagicMock()
+        mock_request_span = MagicMock()
+        mock_group_span = MagicMock()
+
+        mock_tracer._tracer.start_span.return_value = mock_group_span
+
+        @contextmanager
+        def fake_trace_block(name, session_id, attributes=None, parent_span=None):
+            yield MagicMock()
+
+        mock_tracer.trace_block = MagicMock(side_effect=fake_trace_block)
+
+        with patch("openbias.proxy.hooks.trace.set_span_in_context"):
+            group = AsyncEvaluatorSpanGroup(mock_tracer, mock_request_span, "sess-1")
+            # Trigger group creation
+            with group.applied("eval1"):
+                pass
+
+            group.finalize()
+
+        mock_group_span.set_status.assert_called_once()
+        mock_group_span.end.assert_called_once()
+
+    def test_finalize_noop_when_unused(self):
+        """finalize() does nothing when no spans were ever created."""
+        mock_tracer = MagicMock()
+        mock_request_span = MagicMock()
+
+        group = AsyncEvaluatorSpanGroup(mock_tracer, mock_request_span, "sess-1")
+        # Should not raise
+        group.finalize()
+
+        # No group span was created, so no calls to start_span
+        mock_tracer._tracer.start_span.assert_not_called()

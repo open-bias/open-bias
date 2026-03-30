@@ -12,10 +12,12 @@ Covers:
 - fail_action upgrade logic
 - max_intervention_attempts escalation
 - Separate pre_call / post_call evaluator lists
+- span_factory and async_span_group integration
 """
 
 import asyncio
 import time
+from contextlib import contextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -1312,3 +1314,159 @@ class TestSeparateEvaluatorLists:
         )
         assert post_result.allowed is True
         pre_eval.evaluate_response.assert_not_called()
+
+
+# ===========================================================================
+# span_factory and async_span_group tests
+# ===========================================================================
+
+
+def _mock_span_factory():
+    """Create a mock span factory that records calls and yields mock spans."""
+    calls: list[tuple[str, str]] = []
+    spans: list[MagicMock] = []
+
+    @contextmanager
+    def factory(evaluator_name, phase):
+        span = MagicMock()
+        calls.append((evaluator_name, phase))
+        spans.append(span)
+        yield span
+
+    factory.calls = calls  # type: ignore[attr-defined]
+    factory.spans = spans  # type: ignore[attr-defined]
+    return factory
+
+
+def _mock_async_span_group():
+    """Create a mock async span group that records applied/dispatched calls."""
+    group = MagicMock()
+    applied_calls: list[str] = []
+    dispatched_calls: list[str] = []
+
+    @contextmanager
+    def applied(name):
+        applied_calls.append(name)
+        yield MagicMock()
+
+    @contextmanager
+    def dispatched(name):
+        dispatched_calls.append(name)
+        yield MagicMock()
+
+    group.applied = applied
+    group.dispatched = dispatched
+    group.applied_calls = applied_calls
+    group.dispatched_calls = dispatched_calls
+    return group
+
+
+class TestSpanFactory:
+
+    async def test_span_factory_called_per_pre_call_evaluator(self):
+        """span_factory is called once per sync pre-call evaluator."""
+        e1 = _mock_engine(name="eval_a")
+        e2 = _mock_engine(name="eval_b")
+        interceptor = Interceptor(pre_call_evaluators=[e1, e2], post_call_evaluators=[])
+
+        factory = _mock_span_factory()
+        await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID, span_factory=factory)
+
+        assert factory.calls == [("eval_a", "pre_call"), ("eval_b", "pre_call")]
+
+    async def test_span_factory_called_per_post_call_evaluator(self):
+        """span_factory is called once per sync post-call evaluator."""
+        e1 = _mock_engine(name="eval_x")
+        e2 = _mock_engine(name="eval_y")
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[e1, e2], mode="sync"
+        )
+
+        factory = _mock_span_factory()
+        await interceptor.run_post_call(
+            SESSION, _request(), {"r": 1}, REQUEST_ID, span_factory=factory
+        )
+
+        assert factory.calls == [("eval_x", "post_call"), ("eval_y", "post_call")]
+
+    async def test_span_factory_sets_decision_attribute(self):
+        """The yielded span gets an openbias.evaluator.decision attribute."""
+        evaluator = _mock_engine(name="decider", decision=Decision.ALLOW)
+        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
+
+        factory = _mock_span_factory()
+        await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID, span_factory=factory)
+
+        assert len(factory.spans) == 1
+        factory.spans[0].set_attribute.assert_any_call(
+            "openbias.evaluator.decision", "allow"
+        )
+
+    async def test_span_factory_passes_parent_span_to_evaluator(self):
+        """The yielded span is passed as _parent_span in the evaluator context."""
+        evaluator = _mock_engine(name="ctx_check")
+        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
+
+        factory = _mock_span_factory()
+        await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID, span_factory=factory)
+
+        assert len(factory.spans) == 1
+        call_args = evaluator.evaluate_request.call_args
+        ctx = call_args.kwargs.get("context") or call_args[1].get("context")
+        assert ctx["_parent_span"] is factory.spans[0]
+
+    async def test_async_span_group_applied_called(self):
+        """async_span_group.applied is called when applying pending async results."""
+        async_evaluator = _mock_engine(
+            name="async_eval",
+            decision=Decision.ALLOW,
+            delay=0.01,
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
+        )
+
+        # Fire async evaluator during post_call
+        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
+        await asyncio.sleep(0.05)  # Let the async task complete
+
+        # Now run pre_call which collects async results
+        group = _mock_async_span_group()
+        await interceptor.run_pre_call(
+            SESSION, _request(), "req-002", async_span_group=group
+        )
+
+        assert "async_eval" in group.applied_calls
+
+    async def test_async_span_group_dispatched_called(self):
+        """async_span_group.dispatched is called when dispatching async evaluators."""
+        async_evaluator = _mock_engine(name="async_dispatch", delay=0.5)
+        interceptor = Interceptor(
+            pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
+        )
+
+        group = _mock_async_span_group()
+        await interceptor.run_post_call(
+            SESSION, _request(), {"r": 1}, REQUEST_ID, async_span_group=group
+        )
+
+        assert "async_dispatch" in group.dispatched_calls
+        await interceptor.shutdown()
+
+    async def test_no_span_factory_preserves_behavior(self):
+        """Calling run_pre_call and run_post_call without span_factory works normally."""
+        pre_eval = _mock_engine(name="pre", decision=Decision.ALLOW)
+        post_eval = _mock_engine(name="post", decision=Decision.ALLOW)
+        interceptor = Interceptor(
+            pre_call_evaluators=[pre_eval],
+            post_call_evaluators=[post_eval],
+            mode="sync",
+        )
+
+        pre_result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+        assert pre_result.allowed is True
+
+        post_result = await interceptor.run_post_call(
+            SESSION, _request(), {"r": 1}, REQUEST_ID
+        )
+        assert post_result.allowed is True

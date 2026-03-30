@@ -3,9 +3,10 @@ Tests for judge engine OTEL tracing integration.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from openbias.policy.engines.judge.engine import JudgePolicyEngine
+from openbias.policy.engines.judge.models import VerdictAction
 from openbias.policy.protocols import Decision
 
 
@@ -136,4 +137,39 @@ class TestTracerIntegration:
         mock_tracer.log_judge_evaluation.assert_called_once()
         call_kwargs = mock_tracer.log_judge_evaluation.call_args[1]
         assert call_kwargs["parent_span"] is None
+
+
+class TestTraceVerdictFromEvaluateRequest:
+    """Test that evaluate_request calls _trace_verdict with correct args."""
+
+    async def test_evaluate_request_traces_verdict(
+        self, engine, judge_config, sample_request,
+    ):
+        """evaluate_request calls _trace_verdict with session_id, verdict, rubric name, and parent_span."""
+        await engine.initialize(judge_config)
+
+        # Create a mock verdict
+        mock_verdict = MagicMock()
+        mock_verdict.action = VerdictAction.PASS
+        mock_verdict.scores = []
+        mock_verdict.composite_score = 5.0
+        mock_verdict.scope = MagicMock()
+        mock_verdict.scope.value = "turn"
+        mock_verdict.judge_model = "gpt-4o-mini"
+
+        engine._evaluator.evaluate_turn = AsyncMock(return_value=mock_verdict)
+
+        mock_parent_span = MagicMock()
+        context = {"_parent_span": mock_parent_span}
+
+        with patch.object(engine, "_trace_verdict") as mock_trace:
+            with patch.object(engine, "_build_result", return_value=MagicMock(decision=Decision.ALLOW)):
+                await engine.evaluate_request("s1", sample_request, context=context)
+
+            mock_trace.assert_called_once_with(
+                "s1",
+                mock_verdict,
+                "agent_behavior",  # default rubric name
+                parent_span=mock_parent_span,
+            )
 
