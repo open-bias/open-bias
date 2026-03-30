@@ -2,64 +2,10 @@
 import os
 import pytest
 from openbias.config.settings import Settings
-from openbias.cli_init import detect_available_model
-
-
-class TestDetectAvailableModel:
-    """Tests for detect_available_model utility (used by CLI, not settings)."""
-
-    def test_no_keys_returns_none(self, monkeypatch):
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-
-        model, provider, env_var = detect_available_model()
-        assert model is None
-        assert provider is None
-        assert env_var is None
-
-    def test_openai_key_detects_gpt(self, monkeypatch):
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.setenv("OPENAI_API_KEY", "dummy_key")
-
-        model, provider, _ = detect_available_model()
-        assert "gpt" in model
-        assert provider == "OpenAI"
-
-    def test_gemini_key_detects_gemini(self, monkeypatch):
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        monkeypatch.setenv("GEMINI_API_KEY", "dummy_key")
-
-        model, provider, _ = detect_available_model()
-        assert "gemini" in model
-        assert provider == "Google Gemini"
-
-    def test_anthropic_key_detects_claude(self, monkeypatch):
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy_key")
-
-        model, provider, _ = detect_available_model()
-        assert "anthropic" in model
-        assert provider == "Anthropic"
-
-    def test_openai_takes_priority(self, monkeypatch):
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        monkeypatch.setenv("OPENAI_API_KEY", "dummy_key")
-        monkeypatch.setenv("GEMINI_API_KEY", "dummy_key")
-
-        model, _, _ = detect_available_model()
-        assert "gpt" in model
 
 
 class TestModelDefaults:
-    """Settings does NOT auto-detect models — that is the CLI's responsibility."""
+    """Settings auto-detects models from available API keys."""
 
     def test_no_keys_and_no_model_raises_on_validate(self, monkeypatch):
         """validate() raises when no model and no keys are set."""

@@ -412,7 +412,7 @@ class Settings(BaseSettings):
     def _auto_detect_model(self) -> str | None:
         """Pick a default model based on which API key is available.
 
-        Priority mirrors detect_available_model() in cli_init.py:
+        Priority:
           1. OpenAI  -> gpt-4o-mini
           2. Gemini  -> gemini/gemini-2.5-flash
           3. Anthropic -> anthropic/claude-sonnet-4-5

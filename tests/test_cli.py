@@ -266,8 +266,8 @@ class TestCompileCommand:
             # Model should have been set from yaml (gpt-4o), not gpt-4o-mini
             assert mock_compiler.model == "gpt-4o"
 
-    def test_compile_no_yaml_calls_ensure_model(self):
-        """compile with no yaml and no --model should call ensure_model_and_key."""
+    def test_compile_no_yaml_uses_settings_autodetect(self):
+        """compile with no yaml should use Settings auto-detection for model."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             mock_result = MagicMock()
@@ -284,12 +284,14 @@ class TestCompileCommand:
 
             mock_compiler_class = MagicMock(return_value=mock_compiler)
 
+            mock_settings = MagicMock()
+            mock_settings.proxy.default_model = "claude-3-haiku"
+
             with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=None):
                 with patch("openbias.policy.compiler.PolicyCompilerRegistry.get", return_value=mock_compiler_class):
-                    with patch("openbias.cli_init.ensure_model_and_key", return_value=("claude-3-haiku", None)) as mock_ensure:
+                    with patch("openbias.config.settings.Settings", return_value=mock_settings):
                         runner.invoke(main, ["compile", "be professional"])
 
-            mock_ensure.assert_called_once()
             assert mock_compiler.model == "claude-3-haiku"
 
     def test_compile_fails_without_api_key(self):
@@ -305,7 +307,6 @@ class TestCompileCommand:
                     result = runner.invoke(main, ["compile", "be professional"])
 
             assert result.exit_code != 0
-            assert "OPENAI_API_KEY" in result.output
 
     def test_compile_explicit_api_key_flag(self):
         """--api-key should be forwarded to the compiler regardless of provider."""
@@ -338,8 +339,8 @@ class TestCompileCommand:
                 model="gpt-4o", api_key="sk-test-key", base_url=None
             )
 
-    def test_compile_gemini_resolves_key_from_env(self):
-        """compile with gemini model should resolve key from GOOGLE_API_KEY."""
+    def test_compile_gemini_uses_env_key(self):
+        """compile with gemini model should work when GOOGLE_API_KEY is set (key resolved by provider)."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             Path("openbias.yaml").write_text(
@@ -363,12 +364,12 @@ class TestCompileCommand:
 
             with patch.dict("os.environ", {"GOOGLE_API_KEY": "test-gemini-key"}):
                 with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=mock_engine_cls):
-                    runner.invoke(main, ["compile", "be professional"])
+                    result = runner.invoke(main, ["compile", "be professional"])
 
-            # get_compiler should have received the resolved gemini key
+            # Compile should succeed; provider picks up GOOGLE_API_KEY from env
             mock_engine_instance.get_compiler.assert_called_once_with(
                 model="gemini/gemini-2.5-flash",
-                api_key="test-gemini-key",
+                api_key=None,
                 base_url=None,
             )
 

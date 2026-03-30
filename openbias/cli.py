@@ -787,25 +787,17 @@ def compile(
         context["domain"] = domain
 
     async def run_compile() -> None:
-        from openbias.cli_init import ensure_model_and_key
         from openbias.config.settings import Settings
         from openbias.policy.compiler import PolicyCompilerRegistry
         from openbias.policy.registry import PolicyEngineRegistry
 
         try:
-            # --- Resolve model (yaml > interactive) and validate API key ---
-            yaml_model = None
-            try:
-                _settings = Settings()
-                yaml_model = _settings.proxy.default_model
-            except Exception:
-                pass
-
-            resolved_model, resolved_api_key = ensure_model_and_key(
-                model=yaml_model,
-                explicit_api_key=api_key,
-                auto_confirm=True,
-            )
+            # --- Resolve model from Settings (YAML + env auto-detection) ---
+            _settings = Settings()
+            if not api_key:
+                _settings.validate()
+            resolved_model = _settings.proxy.default_model
+            resolved_api_key = api_key  # explicit --api-key flag, or None
 
             # --- Get compiler via engine (preferred) or registry (fallback) ---
             compiler = None
