@@ -495,9 +495,6 @@ class Callback(CustomLogger):
                 request_span = self.tracer.start_request_span(session_id, request_id)
             request_span_var.set(request_span)
 
-            # Create async evaluator span group for cross-hook communication
-            async_group = AsyncEvaluatorSpanGroup(self.tracer, request_span, session_id) if self.tracer and request_span else None
-
             # Wrap in a trace block under the request span
             if self.tracer:
                 cm = self.tracer.trace_block(
@@ -522,7 +519,6 @@ class Callback(CustomLogger):
                     request_data=data,
                     user_request_id=request_id,
                     span_factory=span_factory,
-                    async_span_group=async_group,
                 )
 
                 # Set output on span
@@ -558,8 +554,18 @@ class Callback(CustomLogger):
                             parent_span=span,
                         )
 
-            # Store async_group in metadata so post_call can access it
-            data["metadata"]["_openbias_async_group"] = async_group
+                # Result span capturing the interceptor decision
+                if span is not None:
+                    with self.tracer.trace_block(
+                        "result",
+                        session_id,
+                        attributes={
+                            "openbias.decision": "allow" if result.allowed else "block",
+                            "openbias.has_modifications": result.modified_data is not None,
+                        },
+                        parent_span=span,
+                    ):
+                        pass
 
         # Capture start time at the end of pre-call to accurately measure LLM latency in trace
         data["metadata"]["_openbias_llm_start_time"] = time.time()
