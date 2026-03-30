@@ -294,6 +294,10 @@ class Interceptor:
                 )
 
         # Step 2: Start async POST_CALL evaluators in background
+        # Note: _parent_span may be ended before async tasks finish, so
+        # child spans may fall outside the parent's time window in the
+        # trace backend.  This is acceptable — async results are applied
+        # on the *next* request, and the span still provides lineage.
         for evaluator in self._async_post_call_evaluators:
             self._start_async_evaluator(
                 evaluator, session_id, request_data, response_data,

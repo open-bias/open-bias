@@ -489,6 +489,9 @@ class Tracer:
             latency_ms: Evaluation latency in milliseconds.
             token_usage: Total tokens consumed.
             metadata: Additional metadata.
+            parent_span: Optional explicit parent span for nesting.
+                When provided, the judge span is a child of this span
+                instead of resolving the parent from the session.
         """
         if not self._enabled or not self._tracer:
             return
