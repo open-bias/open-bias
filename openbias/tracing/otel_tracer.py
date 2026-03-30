@@ -201,6 +201,28 @@ class Tracer:
         parent_span = self._get_or_create_session_span(session_id)
         return trace.set_span_in_context(parent_span) if parent_span else None
 
+    def start_child_span(
+        self,
+        name: str,
+        parent_span: trace.Span,
+        attributes: dict[str, Any] | None = None,
+    ) -> trace.Span | None:
+        """Start a span as a child of the given parent span.
+
+        Returns the span (not set as current) or ``None`` if tracing is
+        disabled.  This is the public API for creating non-context-managed
+        spans that need explicit ``end()`` calls.
+        """
+        if not self._enabled or not self._tracer:
+            return None
+
+        parent_ctx = trace.set_span_in_context(parent_span)
+        return self._tracer.start_span(
+            name,
+            context=parent_ctx,
+            attributes=attributes or {},
+        )
+
     def start_request_span(self, session_id: str, request_id: str) -> trace.Span | None:
         """Start a request-level span as a child of the session span.
 

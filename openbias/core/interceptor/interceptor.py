@@ -336,6 +336,11 @@ class Interceptor:
         # child spans may fall outside the parent's time window in the
         # trace backend.  This is acceptable — async results are applied
         # on the *next* request, and the span still provides lineage.
+        #
+        # The dispatched span from async_span_group is a zero-duration
+        # marker recording *that* an async evaluator was started.  It is
+        # intentionally not passed as _parent_span to the evaluator
+        # because the evaluator runs long after this request's spans end.
         for evaluator in self._async_post_call_evaluators:
             _dispatch_ctx = (
                 async_span_group.dispatched(evaluator.name)

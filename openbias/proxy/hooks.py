@@ -38,7 +38,6 @@ from litellm.caching.caching import DualCache
 from litellm.integrations.custom_logger import CustomLogger
 from litellm.proxy._types import UserAPIKeyAuth
 
-from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
 from openbias.config.settings import Settings
@@ -181,9 +180,9 @@ class AsyncEvaluatorSpanGroup:
 
     def _ensure_group(self):
         if self._group_span is None:
-            self._group_span = self._tracer._tracer.start_span(
+            self._group_span = self._tracer.start_child_span(
                 "async_evaluators",
-                context=trace.set_span_in_context(self._request_span),
+                parent_span=self._request_span,
                 attributes={"openbias.session_id": self._session_id},
             )
 
