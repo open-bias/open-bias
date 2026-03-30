@@ -519,7 +519,7 @@ class Callback(CustomLogger):
                     data = result.modified_data
 
                     # Log intervention via OTEL (inside trace block for proper nesting)
-                    if self.tracer:
+                    if self.tracer and result.metadata.get("results"):
                         self.tracer.log_intervention(
                             session_id=session_id,
                             intervention_name="pre_call_intervention",
@@ -671,7 +671,7 @@ class Callback(CustomLogger):
                                 f"'{intervention.get('evaluator')}' for session {session_id}"
                             )
 
-                        if self.tracer:
+                        if self.tracer and result.metadata.get("results"):
                             self.tracer.log_intervention(
                                 session_id=session_id,
                                 intervention_name="post_call_intervention",
