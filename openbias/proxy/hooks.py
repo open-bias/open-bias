@@ -450,7 +450,19 @@ class Callback(CustomLogger):
 
         interceptor = await self._get_interceptor()
         if interceptor:
-            # Wrap in a trace block
+            request_id = str(uuid.uuid4())
+            request_id_var.set(request_id)
+            if "metadata" not in data:
+                data["metadata"] = {}
+            data["metadata"]["_openbias_request_id"] = request_id
+
+            # Create per-request grouping span
+            request_span = None
+            if self.tracer:
+                request_span = self.tracer.start_request_span(session_id, request_id)
+            data["metadata"]["_openbias_request_span"] = request_span
+
+            # Wrap in a trace block under the request span
             if self.tracer:
                 cm = self.tracer.trace_block(
                     "interceptor_pre_call",
@@ -461,17 +473,12 @@ class Callback(CustomLogger):
                         "call_type": call_type,
                         "model": data.get("model", "unknown"),
                     },
+                    parent_span=request_span,
                 )
             else:
                 cm = nullcontext()
 
             with cm as span:
-                request_id = str(uuid.uuid4())
-                request_id_var.set(request_id)
-                if "metadata" not in data:
-                    data["metadata"] = {}
-                data["metadata"]["_openbias_request_id"] = request_id
-
                 result = await interceptor.run_pre_call(
                     session_id=session_id,
                     request_data=data,
@@ -488,27 +495,28 @@ class Callback(CustomLogger):
                     span.set_attribute("output.value", output_json)
                     span.set_attribute("langfuse.span.output", output_json)
 
-            # Handle result
-            if not result.allowed:
-                message = result.message or "Request blocked by policy"
-                logger.warning(
-                    f"Request blocked for session {session_id}: {message}"
-                )
-                # LiteLLM convention: returning an Exception instance (not raising)
-                # signals the proxy to reject the request with this error message.
-                return Exception(message)
-
-            # Apply modifications if any
-            if result.modified_data:
-                data = result.modified_data
-
-                # Log intervention via OTEL
-                if self.tracer:
-                    self.tracer.log_intervention(
-                        session_id=session_id,
-                        intervention_name="pre_call_intervention",
-                        context=result.metadata,
+                # Handle result INSIDE trace block so interventions nest correctly
+                if not result.allowed:
+                    message = result.message or "Request blocked by policy"
+                    logger.warning(
+                        f"Request blocked for session {session_id}: {message}"
                     )
+                    # LiteLLM convention: returning an Exception instance (not raising)
+                    # signals the proxy to reject the request with this error message.
+                    return Exception(message)
+
+                # Apply modifications if any
+                if result.modified_data:
+                    data = result.modified_data
+
+                    # Log intervention via OTEL (inside trace block for proper nesting)
+                    if self.tracer:
+                        self.tracer.log_intervention(
+                            session_id=session_id,
+                            intervention_name="pre_call_intervention",
+                            context=result.metadata,
+                            parent_span=span,
+                        )
 
         # Capture start time at the end of pre-call to accurately measure LLM latency in trace
         data["metadata"]["_openbias_llm_start_time"] = time.time()
@@ -551,110 +559,121 @@ class Callback(CustomLogger):
         llm_end_time = time.time()
         llm_start_time = data.get("metadata", {}).get("_openbias_llm_start_time")
 
+        # Retrieve per-request grouping span created in pre_call
+        request_span = data.get("metadata", {}).get("_openbias_request_span")
+
         interceptor = await self._get_interceptor()
 
-        # Log LLM call via OTEL BEFORE interceptor.
-        # Guard against duplicate entries: _openbias_traced is set after logging so that
-        # _log_success_impl (or any future caller) can detect that this request was already traced.
-        already_traced = data.get("metadata", {}).get("_openbias_traced", False)
-        if self.tracer and not already_traced:
-            response_content = extract_response_content(response) or None
+        try:
+            # Log LLM call via OTEL BEFORE interceptor.
+            # Guard against duplicate entries: _openbias_traced is set after logging so that
+            # _log_success_impl (or any future caller) can detect that this request was already traced.
+            already_traced = data.get("metadata", {}).get("_openbias_traced", False)
+            if self.tracer and not already_traced:
+                response_content = extract_response_content(response) or None
 
-            usage_info = extract_usage_info(response)
+                usage_info = extract_usage_info(response)
 
-            self.tracer.log_llm_call(
-                session_id=session_id,
-                model=data.get("model", "unknown"),
-                messages=data.get("messages", []),
-                response_content=response_content,
-                response_model=getattr(response, "model", None),
-                usage=usage_info,
-                metadata={
-                    "has_interceptor": interceptor is not None,
-                    "hook": "post_call_success",
-                },
-                start_time=llm_start_time,
-                end_time=llm_end_time,
-            )
-            data.setdefault("metadata", {})["_openbias_traced"] = True
-
-        if interceptor:
-            # Extract response content for tracing
-            response_content_for_trace = extract_response_content(response) or None
-
-            if self.tracer:
-                cm = self.tracer.trace_block(
-                    "interceptor_post_call",
-                    session_id,
-                    attributes={"hook": "post_call_success"},
-                    input_data={
-                        "response": response_content_for_trace,
-                        "messages": data.get("messages", []),
-                    },
-                    metadata={
-                        "model": data.get("model", "unknown"),
-                    },
-                )
-            else:
-                cm = nullcontext()
-
-            with cm as span:
-                request_id = (
-                    data.get("metadata", {}).get("_openbias_request_id")
-                    or str(uuid.uuid4())
-                )
-
-                result = await interceptor.run_post_call(
+                self.tracer.log_llm_call(
                     session_id=session_id,
-                    request_data=data,
-                    response_data=response,
-                    user_request_id=request_id,
+                    model=data.get("model", "unknown"),
+                    messages=data.get("messages", []),
+                    response_content=response_content,
+                    response_model=getattr(response, "model", None),
+                    usage=usage_info,
+                    metadata={
+                        "has_interceptor": interceptor is not None,
+                        "hook": "post_call_success",
+                    },
+                    start_time=llm_start_time,
+                    end_time=llm_end_time,
+                    parent_span=request_span,
                 )
+                data.setdefault("metadata", {})["_openbias_traced"] = True
 
-                # Set output on span
-                if span is not None:
-                    output_data = {
-                        "allowed": result.allowed,
-                        "has_modifications": result.modified_data is not None,
-                    }
-                    output_json = json.dumps(output_data, default=str)
-                    span.set_attribute("output.value", output_json)
-                    span.set_attribute("langfuse.span.output", output_json)
-
-            # Handle sync POST_CALL results
-            if not result.allowed:
-                message = result.message or "Response blocked by policy"
-                logger.warning(
-                    f"Response blocked for session {session_id}: {message}"
-                )
-                raise WorkflowViolationError(
-                    message, context=result.metadata
-                )
-
-            if result.modified_data and "_interventions" in result.modified_data:
-                from openbias.core.intervention.strategies import (
-                    ResponseModificationStrategy,
-                )
-
-                for intervention in result.modified_data["_interventions"]:
-                    response = ResponseModificationStrategy.apply_to_response(
-                        response,
-                        message=intervention.get("message"),
-                        modified_messages=intervention.get("modified_messages"),
-                    )
-                    logger.info(
-                        f"Applied POST_CALL intervention from "
-                        f"'{intervention.get('evaluator')}' for session {session_id}"
-                    )
+            if interceptor:
+                # Extract response content for tracing
+                response_content_for_trace = extract_response_content(response) or None
 
                 if self.tracer:
-                    self.tracer.log_intervention(
-                        session_id=session_id,
-                        intervention_name="post_call_intervention",
-                        context=result.metadata,
+                    cm = self.tracer.trace_block(
+                        "interceptor_post_call",
+                        session_id,
+                        attributes={"hook": "post_call_success"},
+                        input_data={
+                            "response": response_content_for_trace,
+                            "messages": data.get("messages", []),
+                        },
+                        metadata={
+                            "model": data.get("model", "unknown"),
+                        },
+                        parent_span=request_span,
+                    )
+                else:
+                    cm = nullcontext()
+
+                with cm as span:
+                    request_id = (
+                        data.get("metadata", {}).get("_openbias_request_id")
+                        or str(uuid.uuid4())
                     )
 
-        return response
+                    result = await interceptor.run_post_call(
+                        session_id=session_id,
+                        request_data=data,
+                        response_data=response,
+                        user_request_id=request_id,
+                    )
+
+                    # Set output on span
+                    if span is not None:
+                        output_data = {
+                            "allowed": result.allowed,
+                            "has_modifications": result.modified_data is not None,
+                        }
+                        output_json = json.dumps(output_data, default=str)
+                        span.set_attribute("output.value", output_json)
+                        span.set_attribute("langfuse.span.output", output_json)
+
+                    # Handle sync POST_CALL results INSIDE trace block for proper nesting
+                    if not result.allowed:
+                        message = result.message or "Response blocked by policy"
+                        logger.warning(
+                            f"Response blocked for session {session_id}: {message}"
+                        )
+                        raise WorkflowViolationError(
+                            message, context=result.metadata
+                        )
+
+                    if result.modified_data and "_interventions" in result.modified_data:
+                        from openbias.core.intervention.strategies import (
+                            ResponseModificationStrategy,
+                        )
+
+                        for intervention in result.modified_data["_interventions"]:
+                            response = ResponseModificationStrategy.apply_to_response(
+                                response,
+                                message=intervention.get("message"),
+                                modified_messages=intervention.get("modified_messages"),
+                            )
+                            logger.info(
+                                f"Applied POST_CALL intervention from "
+                                f"'{intervention.get('evaluator')}' for session {session_id}"
+                            )
+
+                        if self.tracer:
+                            self.tracer.log_intervention(
+                                session_id=session_id,
+                                intervention_name="post_call_intervention",
+                                context=result.metadata,
+                                parent_span=span,
+                            )
+
+            return response
+        finally:
+            # End request span after all post-call work is done
+            if self.tracer and request_span is not None:
+                self.tracer.end_request_span(request_span)
 
     async def async_post_call_failure_hook(
         self,
@@ -684,6 +703,11 @@ class Callback(CustomLogger):
         """Inner implementation for async_post_call_failure_hook."""
         session_id = SessionExtractor.extract_session_id(request_data)
         session_id_var.set(session_id)
+
+        # Clean up request span on failure
+        request_span = request_data.get("metadata", {}).get("_openbias_request_span")
+        if self.tracer and request_span is not None:
+            self.tracer.end_request_span(request_span)
 
         logger.warning(f"LLM call failed for session {session_id}: {original_exception}")
 
