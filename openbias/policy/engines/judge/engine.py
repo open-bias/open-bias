@@ -214,7 +214,7 @@ class JudgePolicyEngine(PolicyEngine):
             )
             parent_span = (context or {}).get("_parent_span")
             self._trace_verdict(session_id, verdict, rubric.name, parent_span=parent_span)
-            return self._build_result([verdict], self._get_or_create_session(session_id))
+            return self._build_result([verdict], self._get_or_create_session(session_id), rubric_name=rubric.name)
         except Exception as e:
             logger.error(f"Pre-call evaluation failed: {e}")
             return EngineResult(decision=Decision.ALLOW)
@@ -280,7 +280,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         # Build result before recording verdicts so escalation checks
         # compare against prior session state, not the current turn's own data
-        result = self._build_result(verdicts, session)
+        result = self._build_result(verdicts, session, rubric_name=rubric.name)
 
         # Record verdicts to session after result is built
         session.turn_count += 1
@@ -496,6 +496,7 @@ class JudgePolicyEngine(PolicyEngine):
         self,
         verdicts: list[JudgeVerdict],
         session: JudgeSessionContext,
+        rubric_name: str = "unknown",
     ) -> EngineResult:
         """Build EngineResult from judge verdicts.
 
@@ -543,7 +544,10 @@ class JudgePolicyEngine(PolicyEngine):
 
         metadata: dict[str, Any] = {
             "judge": {
-                "verdicts": [v.to_dict() for v in verdicts],
+                "verdicts": [
+                    {**v.to_dict(), "rubric_name": rubric_name}
+                    for v in verdicts
+                ],
                 "session_turn": session.turn_count + 1,
             },
             "violations": [
