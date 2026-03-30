@@ -285,9 +285,6 @@ class YamlConfigSource(PydanticBaseSettingsSource):
                     continue
 
                 if ev_type == "judge":
-                    if k == "model":
-                        config["models"] = [{"name": "primary", "model": v}]
-                        continue
                     if k == "policies":
                         config["inline_policy"] = v
                         continue
