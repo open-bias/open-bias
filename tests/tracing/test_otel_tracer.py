@@ -263,6 +263,10 @@ class TestContentRedaction:
         set_calls = {c.args[0]: c.args[1] for c in mock_span.set_attribute.call_args_list}
         assert "secret data" in set_calls.get("gen_ai.content.prompt", "")
         assert set_calls.get("gen_ai.content.completion") == "secret response"
+        assert "secret data" in set_calls.get("input.value", "")
+        assert "secret data" in set_calls.get("langfuse.span.input", "")
+        assert set_calls.get("output.value") == "secret response"
+        assert set_calls.get("langfuse.span.output") == "secret response"
 
     def test_log_llm_call_redacted(self, mock_otel):
         """When redact_content is True, content is replaced with [REDACTED]."""
@@ -282,6 +286,10 @@ class TestContentRedaction:
         set_calls = {c.args[0]: c.args[1] for c in mock_span.set_attribute.call_args_list}
         assert set_calls.get("gen_ai.content.prompt") == "[REDACTED]"
         assert set_calls.get("gen_ai.content.completion") == "[REDACTED]"
+        assert set_calls.get("input.value") == "[REDACTED]"
+        assert set_calls.get("langfuse.span.input") == "[REDACTED]"
+        assert set_calls.get("output.value") == "[REDACTED]"
+        assert set_calls.get("langfuse.span.output") == "[REDACTED]"
 
     def test_trace_block_default_includes_input(self, mock_otel):
         """When redact_content is False, trace_block includes full input_data."""
