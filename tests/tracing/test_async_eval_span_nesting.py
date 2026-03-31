@@ -6,16 +6,37 @@ Unlike the mock-based tests, this proves that the OTEL SDK actually
 records the parent-child chain: phase → evaluator → judge_evaluation_turn.
 """
 
+import threading
+
 import pytest
 from unittest.mock import patch, MagicMock
 
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from opentelemetry.sdk.trace.export.in_memory import InMemorySpanExporter
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter, SpanExportResult
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 
 from openbias.config.settings import OTelConfig
 from openbias.tracing.otel_tracer import Tracer
+
+
+class InMemorySpanExporter(SpanExporter):
+    """Minimal in-memory exporter for testing."""
+
+    def __init__(self):
+        self._spans = []
+        self._lock = threading.Lock()
+
+    def export(self, spans):
+        with self._lock:
+            self._spans.extend(spans)
+        return SpanExportResult.SUCCESS
+
+    def get_finished_spans(self):
+        with self._lock:
+            return list(self._spans)
+
+    def shutdown(self):
+        pass
 
 
 @pytest.fixture()
