@@ -553,6 +553,8 @@ class Callback(CustomLogger):
                     output_json = json.dumps(output_data, default=str)
                     span.set_attribute("output.value", output_json)
                     span.set_attribute("langfuse.span.output", output_json)
+                    span.set_attribute("openbias.decision", "allow" if result.allowed else "block")
+                    span.set_attribute("openbias.has_modifications", result.modified_data is not None)
 
                 # Handle result INSIDE trace block so interventions nest correctly
                 if not result.allowed:
@@ -576,19 +578,6 @@ class Callback(CustomLogger):
                             context=result.metadata,
                             parent_span=span,
                         )
-
-                # Result span capturing the interceptor decision
-                if span is not None:
-                    with self.tracer.trace_block(
-                        "result",
-                        session_id,
-                        attributes={
-                            "openbias.decision": "allow" if result.allowed else "block",
-                            "openbias.has_modifications": result.modified_data is not None,
-                        },
-                        parent_span=span,
-                    ):
-                        pass
 
         # Capture start time at the end of pre-call to accurately measure LLM latency in trace
         data["metadata"]["_openbias_llm_start_time"] = time.time()
@@ -710,6 +699,8 @@ class Callback(CustomLogger):
                         output_json = json.dumps(output_data, default=str)
                         span.set_attribute("output.value", output_json)
                         span.set_attribute("langfuse.span.output", output_json)
+                        span.set_attribute("openbias.decision", "allow" if result.allowed else "block")
+                        span.set_attribute("openbias.has_modifications", result.modified_data is not None)
 
                     # Handle sync POST_CALL results INSIDE trace block for proper nesting
                     if not result.allowed:
@@ -744,19 +735,6 @@ class Callback(CustomLogger):
                                 context=result.metadata,
                                 parent_span=span,
                             )
-
-                    # Result span capturing the interceptor decision
-                    if span is not None:
-                        with self.tracer.trace_block(
-                            "result",
-                            session_id,
-                            attributes={
-                                "openbias.decision": "allow" if result.allowed else "block",
-                                "openbias.has_modifications": result.modified_data is not None,
-                            },
-                            parent_span=span,
-                        ):
-                            pass
 
             return response
         finally:
