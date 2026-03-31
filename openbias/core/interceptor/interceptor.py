@@ -33,6 +33,29 @@ class _PendingResult:
     result: EngineResult
 
 
+@dataclass
+class _AsyncTraceContext:
+    """Serializable tracing context propagated across async evaluator boundaries."""
+
+    session_id: str
+    request_id: str
+    evaluator_name: str
+    origin_trace_id: str | None = None
+    origin_span_id: str | None = None
+
+    def as_dict(self) -> dict[str, str]:
+        payload = {
+            "session_id": self.session_id,
+            "request_id": self.request_id,
+            "evaluator_name": self.evaluator_name,
+        }
+        if self.origin_trace_id:
+            payload["origin_trace_id"] = self.origin_trace_id
+        if self.origin_span_id:
+            payload["origin_span_id"] = self.origin_span_id
+        return payload
+
+
 class Interceptor:
     """
     Orchestrator for running policy evaluators during LLM request lifecycle.
@@ -137,6 +160,7 @@ class Interceptor:
                     _async_span.set_attribute(
                         "openbias.evaluator.source", "async_applied"
                     )
+                    _async_span.set_attribute("openbias.async.phase", "applied")
                 # Re-emit verdict traces under this evaluator span
                 if trace_callback is not None and _async_span is not None:
                     trace_callback(pending.result.metadata, _async_span)
@@ -254,6 +278,7 @@ class Interceptor:
         user_request_id: str = "",
         parent_span: Any | None = None,
         span_factory: Any | None = None,
+        async_span_factory: Any | None = None,
     ) -> InterceptionResult:
         """
         Run POST_CALL phase.
@@ -358,9 +383,21 @@ class Interceptor:
                     _dispatch_span.set_attribute(
                         "openbias.evaluator.source", "async_dispatched"
                     )
+                    _dispatch_span.set_attribute("openbias.async.phase", "dispatched")
+                    if user_request_id:
+                        _dispatch_span.set_attribute("openbias.request_id", user_request_id)
                 self._start_async_evaluator(
                     evaluator, session_id, request_data, response_data,
-                    context={"user_request_id": user_request_id, "_suppress_trace": True},
+                    context={
+                        "user_request_id": user_request_id,
+                        "_async_trace_context": self._build_async_trace_context(
+                            session_id=session_id,
+                            request_id=user_request_id,
+                            evaluator_name=evaluator.name,
+                            dispatch_span=_dispatch_span,
+                        ),
+                    },
+                    async_span_factory=async_span_factory,
                 )
 
         return InterceptionResult(
@@ -484,24 +521,35 @@ class Interceptor:
         request_data: dict[str, Any],
         response_data: Any,
         context: dict[str, Any] | None = None,
+        async_span_factory: Any | None = None,
     ) -> None:
         """Start an async evaluator task in the background."""
 
         async def run_evaluator() -> _PendingResult:
+            eval_context = dict(context or {})
+            trace_context = eval_context.get("_async_trace_context")
+            _exec_ctx = (
+                async_span_factory(evaluator.name, trace_context)
+                if async_span_factory is not None
+                else nullcontext()
+            )
             try:
-                if response_data is None:
-                    result = await evaluator.evaluate_request(
-                        session_id=session_id,
-                        request_data=request_data,
-                        context=context,
-                    )
-                else:
-                    result = await evaluator.evaluate_response(
-                        session_id=session_id,
-                        response_data=response_data,
-                        request_data=request_data,
-                        context=context,
-                    )
+                with _exec_ctx as _exec_span:
+                    if _exec_span is not None:
+                        eval_context["_parent_span"] = _exec_span
+                    if response_data is None:
+                        result = await evaluator.evaluate_request(
+                            session_id=session_id,
+                            request_data=request_data,
+                            context=eval_context,
+                        )
+                    else:
+                        result = await evaluator.evaluate_response(
+                            session_id=session_id,
+                            response_data=response_data,
+                            request_data=request_data,
+                            context=eval_context,
+                        )
                 return _PendingResult(evaluator_name=evaluator.name, result=result)
             except Exception as e:
                 logger.error(f"Async evaluator '{evaluator.name}' failed: {e}")
@@ -527,6 +575,29 @@ class Interceptor:
         tasks.append(task)
 
         logger.debug(f"Started async evaluator '{evaluator.name}' for session {session_id}")
+
+    @staticmethod
+    def _build_async_trace_context(
+        session_id: str,
+        request_id: str,
+        evaluator_name: str,
+        dispatch_span: Any | None,
+    ) -> dict[str, str]:
+        """Build a serializable async trace payload from dispatch-time context."""
+        payload = _AsyncTraceContext(
+            session_id=session_id,
+            request_id=request_id,
+            evaluator_name=evaluator_name,
+        )
+        if dispatch_span is not None and hasattr(dispatch_span, "get_span_context"):
+            try:
+                span_context = dispatch_span.get_span_context()
+                if span_context is not None:
+                    payload.origin_trace_id = format(span_context.trace_id, "032x")
+                    payload.origin_span_id = format(span_context.span_id, "016x")
+            except Exception:
+                logger.debug("Failed to serialize async trace context", exc_info=True)
+        return payload.as_dict()
 
     def _apply_intervention(
         self,
@@ -563,9 +634,17 @@ class Interceptor:
 
     def _on_session_evict(self, session_id: str, tasks: list[asyncio.Task[_PendingResult]]) -> None:
         """Cancel all async tasks and clean up intervention count when a session is evicted."""
+        pending_count = 0
         for task in tasks:
             if not task.done():
+                pending_count += 1
                 task.cancel()
+        if pending_count:
+            logger.warning(
+                "openbias.async.phase=dropped dropping %d pending async evaluator tasks for evicted session %s",
+                pending_count,
+                session_id,
+            )
         self._intervention_counts.pop(session_id, None)
 
     async def cleanup_session(self, session_id: str) -> None:

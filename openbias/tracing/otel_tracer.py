@@ -21,7 +21,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExport
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter as OTLPSpanExporterHTTP
-from opentelemetry.trace import Status, StatusCode
+from opentelemetry.trace import Link, SpanContext, Status, StatusCode, TraceFlags, TraceState
 
 from openbias.config.settings import OTelConfig
 
@@ -283,6 +283,7 @@ class Tracer:
         input_data: Any | None = None,
         metadata: dict[str, Any] | None = None,
         parent_span: Any | None = None,
+        links: list[Link] | None = None,
     ):
         """
         Context manager to trace a block of code.
@@ -295,6 +296,7 @@ class Tracer:
             input_data: Input data to record (will be JSON serialized)
             metadata: Additional metadata for the span
             parent_span: Optional explicit parent span to nest under
+            links: Optional OTEL links to correlate async work
         """
         if not self._enabled or not self._tracer:
             yield None
@@ -314,6 +316,7 @@ class Tracer:
             name,
             context=parent_ctx,
             attributes=span_attrs,
+            links=links,
         ) as span:
             # Set input data using Langfuse-compatible attributes
             if input_data is not None:
@@ -331,6 +334,25 @@ class Tracer:
                     span.set_attribute(f"openbias.metadata.{key}", str(value))
             
             yield span
+
+    def build_span_link(self, trace_id_hex: str | None, span_id_hex: str | None) -> Link | None:
+        """Build an OTEL Link from serialized trace/span IDs."""
+        if not trace_id_hex or not span_id_hex:
+            return None
+        try:
+            span_context = SpanContext(
+                trace_id=int(trace_id_hex, 16),
+                span_id=int(span_id_hex, 16),
+                is_remote=True,
+                trace_flags=TraceFlags(TraceFlags.SAMPLED),
+                trace_state=TraceState(),
+            )
+            if not span_context.is_valid:
+                return None
+            return Link(span_context)
+        except Exception:
+            logger.debug("Failed to build OTEL link from serialized context", exc_info=True)
+            return None
 
     def log_event(
         self,

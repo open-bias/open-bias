@@ -870,8 +870,8 @@ class TestAsyncContextPassing:
 
         assert received_context.get("user_request_id") == "req-ctx-001"
 
-    async def test_async_post_call_context_has_suppress_trace(self):
-        """Async POST_CALL evaluators receive _suppress_trace=True and no _parent_span."""
+    async def test_async_post_call_context_has_trace_context(self):
+        """Async POST_CALL evaluators receive serialized async trace context."""
         received_context: dict[str, Any] = {}
 
         async def _evaluate_response(
@@ -893,8 +893,11 @@ class TestAsyncContextPassing:
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, "req-ctx-003")
         await asyncio.sleep(0.05)
 
-        assert received_context.get("_suppress_trace") is True
-        assert "_parent_span" not in received_context
+        trace_ctx = received_context.get("_async_trace_context")
+        assert isinstance(trace_ctx, dict)
+        assert trace_ctx.get("session_id") == SESSION
+        assert trace_ctx.get("request_id") == "req-ctx-003"
+        assert trace_ctx.get("evaluator_name") == "ctx_suppress"
 
     async def test_sync_pre_call_receives_context(self):
         """Sync PRE_CALL evaluators receive context with user_request_id."""
@@ -918,6 +921,35 @@ class TestAsyncContextPassing:
         await interceptor.run_pre_call(SESSION, _request(), "req-ctx-002")
 
         assert received_context.get("user_request_id") == "req-ctx-002"
+
+    async def test_async_execution_span_forwarded_as_parent_span(self):
+        """Async evaluator receives execution span as _parent_span when factory provided."""
+        received_context: dict[str, Any] = {}
+
+        async def _evaluate_response(
+            session_id: str,
+            response_data: Any,
+            request_data: dict[str, Any],
+            context: dict[str, Any] | None = None,
+        ) -> EngineResult:
+            received_context.update(context or {})
+            return EngineResult(decision=Decision.ALLOW)
+
+        evaluator = _mock_engine(name="ctx_exec_span")
+        evaluator.evaluate_response = AsyncMock(side_effect=_evaluate_response)
+        interceptor = Interceptor(pre_call_evaluators=[], post_call_evaluators=[evaluator])
+
+        factory = _mock_span_factory()
+        await interceptor.run_post_call(
+            SESSION,
+            _request(),
+            {"r": 1},
+            "req-ctx-004",
+            async_span_factory=lambda name, trace_ctx: factory(name, "async_execute"),
+        )
+        await asyncio.sleep(0.05)
+
+        assert "_parent_span" in received_context
 
 
 # ===========================================================================

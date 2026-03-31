@@ -13,6 +13,7 @@ from openbias.proxy.hooks import (
     _fail_open_counter,
     get_fail_open_counts,
     EvaluatorSpanFactory,
+    request_span_var,
 )
 
 
@@ -300,6 +301,33 @@ async def test_pre_call_hook_returns_exception_on_block(
     assert "blocked by policy" in str(result)
 
 
+async def test_pre_call_block_ends_request_span_when_tracing_enabled(
+    callback, mock_api_key, mock_cache
+):
+    """Blocking in pre-call should end the request span immediately."""
+    from openbias.core.interceptor.types import InterceptionResult
+
+    data = {"messages": [{"role": "user", "content": "hello"}], "model": "gpt-4"}
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_pre_call = AsyncMock(
+        return_value=InterceptionResult(allowed=False, message="blocked by policy")
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+
+    mock_tracer = MagicMock()
+    mock_request_span = MagicMock()
+    mock_tracer.start_request_span.return_value = mock_request_span
+    callback._tracer = mock_tracer
+
+    result = await callback.async_pre_call_hook(
+        mock_api_key, mock_cache, data, "completion"
+    )
+
+    assert isinstance(result, Exception)
+    mock_tracer.end_request_span.assert_called_once_with(mock_request_span)
+    assert request_span_var.get() is None
+
+
 async def test_post_call_hook_block_raises_workflow_violation(
     callback, mock_api_key
 ):
@@ -457,6 +485,22 @@ async def test_pre_call_logs_intervention_span_when_results_nonempty(
     await callback.async_pre_call_hook(mock_api_key, mock_cache, data, "completion")
 
     mock_tracer.log_intervention.assert_called_once()
+
+
+def test_trace_callback_logs_async_apply_event(callback):
+    """Apply-time trace callback emits async_result_applied instead of verdict replay."""
+    mock_tracer = MagicMock()
+    callback._tracer = mock_tracer
+    parent_span = MagicMock()
+
+    callback_fn = callback._make_trace_callback("sess-1")
+    callback_fn({"judge": {"verdicts": [{"rubric_name": "safety"}]}}, parent_span)
+
+    mock_tracer.log_event.assert_called_once()
+    call_kwargs = mock_tracer.log_event.call_args.kwargs
+    assert call_kwargs["session_id"] == "sess-1"
+    assert call_kwargs["name"] == "async_result_applied"
+    assert call_kwargs["parent_span"] is parent_span
 
 
 async def test_post_call_failure_hook_exception_is_swallowed(

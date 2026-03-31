@@ -165,6 +165,47 @@ class EvaluatorSpanFactory:
 
 
 
+class AsyncEvaluatorExecutionSpanFactory:
+    """Creates async execution spans linked to dispatch-time trace context."""
+
+    def __init__(self, tracer, session_id):
+        self._tracer = tracer
+        self._session_id = session_id
+
+    @contextmanager
+    def __call__(self, evaluator_name: str, trace_context: dict[str, Any] | None = None):
+        attrs = {
+            "openbias.evaluator.name": evaluator_name,
+            "openbias.evaluator.phase": "async_execute",
+            "openbias.async.phase": "executing",
+        }
+        links = []
+        if trace_context:
+            request_id = trace_context.get("request_id")
+            origin_trace_id = trace_context.get("origin_trace_id")
+            origin_span_id = trace_context.get("origin_span_id")
+            if request_id:
+                attrs["openbias.request_id"] = request_id
+            if origin_trace_id:
+                attrs["openbias.origin.trace_id"] = origin_trace_id
+            if origin_span_id:
+                attrs["openbias.origin.span_id"] = origin_span_id
+            link = self._tracer.build_span_link(
+                trace_id_hex=origin_trace_id,
+                span_id_hex=origin_span_id,
+            )
+            if link is not None:
+                links.append(link)
+
+        with self._tracer.trace_block(
+            f"evaluator:{evaluator_name}:async_execute",
+            self._session_id,
+            attributes=attrs,
+            links=links or None,
+        ) as span:
+            yield span
+
+
 class Callback(CustomLogger):
     """
     Main Open Bias callback for LiteLLM.
@@ -436,23 +477,17 @@ class Callback(CustomLogger):
         return self._tracer
 
     def _make_trace_callback(self, session_id: str):
-        """Create a callback that re-emits judge verdict spans at apply-time."""
+        """Create apply-time callback for async result observability."""
         def callback(result_metadata, parent_span):
-            judge_data = result_metadata.get("judge", {})
-            for verdict in judge_data.get("verdicts", []):
-                self.tracer.log_judge_evaluation(
-                    session_id=session_id,
-                    rubric_name=verdict.get("rubric_name", "unknown"),
-                    scope=verdict.get("scope", "turn"),
-                    composite_score=verdict.get("composite_score", 0),
-                    action=verdict.get("action", "pass"),
-                    judge_model=verdict.get("judge_model", "unknown"),
-                    scores=verdict.get("scores"),
-                    latency_ms=verdict.get("latency_ms"),
-                    token_usage=verdict.get("token_usage"),
-                    metadata=verdict.get("metadata"),
-                    parent_span=parent_span,
-                )
+            self.tracer.log_event(
+                session_id=session_id,
+                name="async_result_applied",
+                metadata={
+                    "openbias.async.phase": "applied",
+                    "metadata_keys": list((result_metadata or {}).keys()),
+                },
+                parent_span=parent_span,
+            )
         return callback
 
     async def async_pre_call_hook(
@@ -486,6 +521,7 @@ class Callback(CustomLogger):
     ) -> Exception | str | dict | None:
         """Inner implementation for async_pre_call_hook."""
         session_id = SessionExtractor.extract_session_id(data)
+        request_span_var.set(None)
 
         # Persist session ID in metadata to ensure consistency across hooks
         # This prevents generating a new random UUID in post_call/failure hooks
@@ -501,19 +537,20 @@ class Callback(CustomLogger):
 
         logger.debug(f"pre_call_hook: session={session_id}, call_type={call_type}")
 
+        request_id = str(uuid.uuid4())
+        request_id_var.set(request_id)
+        if "metadata" not in data:
+            data["metadata"] = {}
+        data["metadata"]["_openbias_request_id"] = request_id
+
+        # Create per-request grouping span for all requests.
+        request_span = None
+        if self.tracer:
+            request_span = self.tracer.start_request_span(session_id, request_id)
+        request_span_var.set(request_span)
+
         interceptor = await self._get_interceptor()
         if interceptor:
-            request_id = str(uuid.uuid4())
-            request_id_var.set(request_id)
-            if "metadata" not in data:
-                data["metadata"] = {}
-            data["metadata"]["_openbias_request_id"] = request_id
-
-            # Create per-request grouping span
-            request_span = None
-            if self.tracer:
-                request_span = self.tracer.start_request_span(session_id, request_id)
-            request_span_var.set(request_span)
 
             # Wrap in a trace block under the request span
             if self.tracer:
@@ -562,6 +599,9 @@ class Callback(CustomLogger):
                     logger.warning(
                         f"Request blocked for session {session_id}: {message}"
                     )
+                    if self.tracer and request_span is not None:
+                        self.tracer.end_request_span(request_span)
+                    request_span_var.set(None)
                     # LiteLLM convention: returning an Exception instance (not raising)
                     # signals the proxy to reject the request with this error message.
                     return Exception(message)
@@ -688,6 +728,11 @@ class Callback(CustomLogger):
                         user_request_id=request_id,
                         parent_span=request_span,
                         span_factory=span_factory,
+                        async_span_factory=(
+                            AsyncEvaluatorExecutionSpanFactory(self.tracer, session_id)
+                            if self.tracer
+                            else None
+                        ),
                     )
 
                     # Set output on span
@@ -741,6 +786,7 @@ class Callback(CustomLogger):
             # End request span after all post-call work is done
             if self.tracer and request_span is not None:
                 self.tracer.end_request_span(request_span)
+            request_span_var.set(None)
 
     async def async_post_call_failure_hook(
         self,
@@ -775,6 +821,7 @@ class Callback(CustomLogger):
         request_span = request_span_var.get()
         if self.tracer and request_span is not None:
             self.tracer.end_request_span(request_span)
+        request_span_var.set(None)
 
         logger.warning(f"LLM call failed for session {session_id}: {original_exception}")
 
