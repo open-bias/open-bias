@@ -346,7 +346,7 @@ class TestPerRuleCriteria:
         """3 rules defined, 1 violated → result cites the specific rule."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_policy": [
+            "inline_rules": [
                 "Never provide financial advice",
                 "Be professional",
                 "Do not share personal opinions",
@@ -376,7 +376,7 @@ class TestPerRuleCriteria:
         """All rules pass → ALLOW."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_policy": ["Be helpful", "Be safe"],
+            "inline_rules": ["Be helpful", "Be safe"],
         }
         await engine.initialize(config)
 
@@ -399,7 +399,7 @@ class TestPerRuleCriteria:
         """Multiple rules violated → all are listed in the intervention message."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_policy": ["No financial advice", "Be professional", "No personal opinions"],
+            "inline_rules": ["No financial advice", "Be professional", "No personal opinions"],
         }
         await engine.initialize(config)
 
@@ -587,7 +587,7 @@ class TestInlinePolicy:
         """Engine should load inline rules and set default rubric."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_policy": [
+            "inline_rules": [
                 "No financial advice",
                 "Be professional",
             ],
@@ -605,7 +605,7 @@ class TestInlinePolicy:
         """Dict-format inline policy should raise ValueError."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_policy": {
+            "inline_rules": {
                 "rules": ["Never lie", "Stay on topic"],
             },
         }
@@ -616,7 +616,7 @@ class TestInlinePolicy:
         """Dict-format inline policy with rubrics should raise ValueError."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_policy": {
+            "inline_rules": {
                 "rubrics": [{
                     "name": "my_custom",
                     "description": "Test rubric",
@@ -635,7 +635,7 @@ class TestInlinePolicy:
         """custom_rubrics_path and inline_rules should coexist."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_policy": ["Be kind"],
+            "inline_rules": ["Be kind"],
         }
         await engine.initialize(config)
         # Should have the inline_rules rubric as default
@@ -715,7 +715,7 @@ class TestMissingCriterionFalsePositive:
         engine = JudgePolicyEngine()
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_policy": ["No financial advice", "Be professional"],
+            "inline_rules": ["No financial advice", "Be professional"],
         }
         await engine.initialize(config)
 
@@ -766,7 +766,7 @@ class TestRubricIsolation:
 
         await engine_a.initialize({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_policy": ["Never share secrets"],
+            "inline_rules": ["Never share secrets"],
         })
         await engine_b.initialize({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
@@ -784,7 +784,7 @@ class TestRubricIsolation:
         engine = JudgePolicyEngine()
         await engine.initialize({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_policy": ["Custom rule"],
+            "inline_rules": ["Custom rule"],
         })
 
         # A fresh registry should not have the inline_rules
@@ -806,7 +806,7 @@ class TestValidateConfig:
     def test_valid_config_with_inline_rules(self):
         errors = JudgePolicyEngine.validate_config({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_policy": ["Be professional", "No PII"],
+            "inline_rules": ["Be professional", "No PII"],
         })
         assert errors == []
 
@@ -844,9 +844,9 @@ class TestValidateConfig:
     def test_invalid_inline_rules_type(self):
         errors = JudgePolicyEngine.validate_config({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_policy": {"rules": ["bad format"]},
+            "inline_rules": {"rules": ["bad format"]},
         })
-        assert any("Invalid inline policy" in e for e in errors)
+        assert any("Invalid inline rules" in e for e in errors)
 
     def test_multiple_errors_collected(self):
         errors = JudgePolicyEngine.validate_config({

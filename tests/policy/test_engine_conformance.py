@@ -309,7 +309,7 @@ class TestJudgeEngineConformance:
         engine = JudgePolicyEngine()
         await engine.initialize({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_policy": ["Be helpful", "Be safe"],
+            "inline_rules": ["Be helpful", "Be safe"],
         })
 
         # Mock the judge call to return a failing verdict

@@ -253,7 +253,7 @@ class TestServeCommand:
                         "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
                         new_callable=AsyncMock,
                     ) as mock_compile:
-                        mock_compile.return_value = {"inline_policy": ["Be professional"]}
+                        mock_compile.return_value = {"inline_rules": ["Be professional"]}
                         result = runner.invoke(main, ["serve"])
 
             assert result.exit_code == 0
