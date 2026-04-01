@@ -63,7 +63,7 @@ def print_report(results: list[EvalResult], verbose: bool = False) -> None:
                     f"  {marker} Turn {turn.turn_index}: status={status}, violations={v_count}"
                 )
                 for v in turn.response_eval.violations:
-                    console.print(f"      - {v.rule_name}: {v.reason}")
+                    console.print(f"      - {v.reason}")
 
     # Final status
     total_violations = metrics.violation_count
@@ -87,8 +87,6 @@ def export_json(results: list[EvalResult]) -> dict[str, Any]:
         for turn in result.turns:
             all_violations = [
                 {
-                    "rule_id": v.rule_id,
-                    "name": v.rule_name,
                     "message": v.reason,
                     "severity": v.severity,
                     "engine": v.engine,
