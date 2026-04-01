@@ -76,23 +76,23 @@ class TestNemoCompilerProperties:
 class TestBuildCompilationPrompt:
     """Test _build_compilation_prompt."""
 
-    def test_includes_natural_language(self, compiler):
+    def test_includes_rules_text(self, compiler):
         prompt = compiler._build_compilation_prompt("Block hacking requests")
         assert "Block hacking requests" in prompt
 
     def test_includes_schema_instructions(self, compiler):
-        prompt = compiler._build_compilation_prompt("some policy")
+        prompt = compiler._build_compilation_prompt("some rules")
         assert "config_yml" in prompt
         assert "colang_files" in prompt
 
     def test_includes_domain_context(self, compiler):
         prompt = compiler._build_compilation_prompt(
-            "some policy", context={"domain": "healthcare"}
+            "some rules", context={"domain": "healthcare"}
         )
         assert "healthcare" in prompt
 
     def test_works_without_context(self, compiler):
-        prompt = compiler._build_compilation_prompt("some policy")
+        prompt = compiler._build_compilation_prompt("some rules")
         assert isinstance(prompt, str)
         assert len(prompt) > 0
 
@@ -157,12 +157,12 @@ class TestParseCompilationResponse:
 
     def test_metadata_includes_file_count(self, compiler, valid_llm_response):
         result = compiler._parse_compilation_response(
-            valid_llm_response, "test policy"
+            valid_llm_response, "test rules"
         )
         assert result.metadata["colang_file_count"] == 2
 
     def test_empty_colang_files_are_dropped(self, compiler):
-        """Empty colang files (e.g. output_rails.co for input-only policies) are
+        """Empty colang files (e.g. output_rails.co for input-only rules) are
         dropped from the config rather than kept as empty strings."""
         response = {
             "config_yml": "models:\n  - type: main\n",
@@ -177,8 +177,8 @@ class TestParseCompilationResponse:
         assert "output_rails.co" not in result.config["colang_files"]
         assert any("output_rails.co" in w for w in result.warnings)
 
-    def test_input_only_policy_passes_validation(self, compiler):
-        """A policy that only produces input rails should compile and validate."""
+    def test_input_only_rules_passes_validation(self, compiler):
+        """Rules that only produce input rails should compile and validate."""
         result = CompilationResult(
             success=True,
             config={
@@ -334,7 +334,7 @@ class TestCompileEndToEnd:
             new_callable=AsyncMock,
             return_value="not valid json {{{",
         ):
-            result = await compiler.compile("test policy")
+            result = await compiler.compile("test rules")
 
         assert result.success is False
         assert any("JSON" in e for e in result.errors)
@@ -346,7 +346,7 @@ class TestCompileEndToEnd:
             new_callable=AsyncMock,
             side_effect=RuntimeError("LLM unavailable"),
         ):
-            result = await compiler.compile("test policy")
+            result = await compiler.compile("test rules")
 
         assert result.success is False
         assert any("RuntimeError" in e for e in result.errors)

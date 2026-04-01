@@ -1,4 +1,4 @@
-"""Tests for policy compiler protocol and registry."""
+"""Tests for rules compiler protocol and registry."""
 
 import pytest
 from pathlib import Path
@@ -60,12 +60,12 @@ class MockCompiler(PolicyCompiler):
 
     async def compile(
         self,
-        natural_language: str,
+        rules_text: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> CompilationResult:
         return CompilationResult(
             success=True,
-            config={"policy": natural_language},
+            config={"rules": rules_text},
         )
 
     def export(self, result: CompilationResult, output_path: Path) -> None:
@@ -126,10 +126,10 @@ class TestPolicyCompiler:
 
     async def test_compile(self, compiler):
         """Test basic compilation."""
-        result = await compiler.compile("test policy")
+        result = await compiler.compile("test rules")
 
         assert result.success is True
-        assert result.config == {"policy": "test policy"}
+        assert result.config == {"rules": "test rules"}
 
     def test_export(self, compiler, tmp_path):
         """Test exporting compilation result."""

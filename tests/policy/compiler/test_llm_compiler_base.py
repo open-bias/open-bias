@@ -10,10 +10,10 @@ class ConcreteCompiler(LLMPolicyCompiler):
     def export(self, result, output_path):
         pass
 
-    def _build_compilation_prompt(self, natural_language, context=None):
-        return f"Prompt: {natural_language}"
+    def _build_compilation_prompt(self, rules_text, context=None):
+        return f"Prompt: {rules_text}"
 
-    def _parse_compilation_response(self, response, natural_language):
+    def _parse_compilation_response(self, response, rules_text):
         return CompilationResult(success=True, config=response)
 
 @pytest.fixture
@@ -82,7 +82,7 @@ async def test_validation_errors_stored_in_errors_not_warnings(
     mock_response.choices = [AsyncMock(message=AsyncMock(content='{"key": "value"}'))]
     mock_acompletion.return_value = mock_response
 
-    result = await compiler_with_validation_errors.compile("some policy")
+    result = await compiler_with_validation_errors.compile("some rules")
 
     assert result.success is False
     assert "missing required field: states" in result.errors
