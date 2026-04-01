@@ -259,8 +259,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
 
         if transition_result == TransitionResult.INVALID_TRANSITION:
             violation_records.append(ViolationRecord(
-                rule_id="fsm_invalid_transition",
-                rule_name="invalid_transition",
                 reason=error or f"Invalid transition to '{classification.state_name}'",
                 severity="error",
                 scope="turn",
@@ -269,13 +267,12 @@ class FSMPolicyEngine(StatefulPolicyEngine):
 
         for cv in constraint_violations:
             violation_records.append(ViolationRecord(
-                rule_id=f"fsm_constraint_{cv.constraint_name}",
-                rule_name=cv.constraint_name,
                 reason=cv.message,
                 severity="error",
                 scope="turn",
                 engine=self.name,
                 extra={
+                    "constraint_name": cv.constraint_name,
                     "constraint_type": cv.constraint_type.value,
                     **cv.details,
                 },
