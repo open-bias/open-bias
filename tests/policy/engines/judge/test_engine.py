@@ -14,7 +14,7 @@ from openbias.policy.engines.judge.models import (
     EvaluationScope,
     JudgeScore,
 )
-from openbias.policy.protocols import Decision
+from openbias.policy.protocols import EvaluationStatus
 from openbias.policy.registry import PolicyEngineRegistry
 
 
@@ -138,7 +138,7 @@ class TestEvaluateRequest:
 
         result = await engine.evaluate_request("s1", sample_request)
 
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
         engine._client.call_judge.assert_called_once()
 
     async def test_failing_request(self, engine, sample_request):
@@ -151,9 +151,8 @@ class TestEvaluateRequest:
 
         result = await engine.evaluate_request("s1", sample_request)
 
-        assert result.decision == Decision.INTERVENE
-        violations = result.metadata.get("violations", [])
-        assert len(violations) > 0
+        assert result.status == EvaluationStatus.VIOLATION
+        assert len(result.violations) > 0
 
     async def test_empty_user_message_allows(self, engine):
         """No user message in request → ALLOW without calling judge."""
@@ -163,7 +162,7 @@ class TestEvaluateRequest:
         await engine.initialize(config)
 
         result = await engine.evaluate_request("s1", {"messages": []})
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
 
     async def test_judge_error_failopen(self, engine, sample_request):
         """Judge LLM error → fail-open to ALLOW."""
@@ -174,7 +173,7 @@ class TestEvaluateRequest:
         engine._client.call_judge = AsyncMock(side_effect=Exception("LLM error"))
 
         result = await engine.evaluate_request("s1", sample_request)
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
 
 
 class TestEvaluateResponse:
@@ -187,21 +186,20 @@ class TestEvaluateResponse:
         engine._client.call_judge = AsyncMock(return_value=_passing_judge_response())
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == Decision.ALLOW
-        assert len(result.metadata.get("violations", [])) == 0
+        assert result.status == EvaluationStatus.ALLOW
+        assert len(result.violations) == 0
 
     async def test_failing_response(self, engine, judge_config, sample_request, sample_response):
         await engine.initialize(judge_config)
         engine._client.call_judge = AsyncMock(return_value=_failing_judge_response())
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == Decision.INTERVENE
-        violations = result.metadata.get("violations", [])
-        assert len(violations) > 0
-        for v in violations:
-            assert "name" in v
-            assert "message" in v
-            assert "severity" in v
+        assert result.status == EvaluationStatus.VIOLATION
+        assert len(result.violations) > 0
+        for v in result.violations:
+            assert v.rule_name
+            assert v.reason
+            assert v.severity
 
     async def test_judge_metadata_in_result(self, engine, judge_config, sample_request, sample_response):
         await engine.initialize(judge_config)
@@ -235,7 +233,7 @@ class TestEvaluateResponse:
         engine._client.call_judge = AsyncMock(side_effect=Exception("LLM error"))
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
 
     async def test_string_response_data(self, engine, judge_config, sample_request):
         """Should handle string response_data."""
@@ -243,7 +241,7 @@ class TestEvaluateResponse:
         engine._client.call_judge = AsyncMock(return_value=_passing_judge_response())
 
         result = await engine.evaluate_response("s1", "Hello!", sample_request)
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
 
 
 class TestSessionManagement:
@@ -372,9 +370,9 @@ class TestPerRuleCriteria:
         engine._client.call_judge = AsyncMock(return_value=judge_response)
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == Decision.INTERVENE
-        assert "Gave stock tips" in result.message
-        assert "Please adjust your response accordingly." in result.message
+        assert result.status == EvaluationStatus.VIOLATION
+        assert any("Gave stock tips" in v.reason for v in result.violations)
+        assert any("Please adjust your response accordingly." in v.reason for v in result.violations)
 
     async def test_all_rules_pass(self, engine, sample_request, sample_response):
         """All rules pass → ALLOW."""
@@ -397,7 +395,7 @@ class TestPerRuleCriteria:
         engine._client.call_judge = AsyncMock(return_value=judge_response)
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
 
     async def test_multiple_rules_violated_all_listed(self, engine, sample_request, sample_response):
         """Multiple rules violated → all are listed in the intervention message."""
@@ -421,10 +419,10 @@ class TestPerRuleCriteria:
         engine._client.call_judge = AsyncMock(return_value=judge_response)
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == Decision.INTERVENE
+        assert result.status == EvaluationStatus.VIOLATION
         # Both failed criteria reasoning should be cited
-        assert "Gave investment tips" in result.message
-        assert "Shared personal view" in result.message
+        assert any("Gave investment tips" in v.reason for v in result.violations)
+        assert any("Shared personal view" in v.reason for v in result.violations)
 
 
 class TestTargetedInterventionMessages:

@@ -8,7 +8,7 @@ mock_nemo = MagicMock()
 sys.modules["nemoguardrails"] = mock_nemo
 
 from openbias.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
-from openbias.policy.protocols import Decision
+from openbias.policy.protocols import EvaluationStatus
 
 
 def _make_result(activated_rails: list | None = None) -> MagicMock:
@@ -75,7 +75,7 @@ async def test_evaluate_request_allow(engine, mock_rails):
         request_data={"messages": [{"role": "user", "content": "hello"}]}
     )
 
-    assert result.decision == Decision.ALLOW
+    assert result.status == EvaluationStatus.ALLOW
 
 
 async def test_evaluate_request_blocked(engine, mock_rails):
@@ -91,8 +91,8 @@ async def test_evaluate_request_blocked(engine, mock_rails):
         request_data={"messages": [{"role": "user", "content": "bad request"}]}
     )
 
-    assert result.decision == Decision.INTERVENE
-    assert result.message is not None
+    assert result.status == EvaluationStatus.VIOLATION
+    assert len(result.violations) > 0
 
 
 async def test_evaluate_request_blocked_violations_metadata(engine, mock_rails):
@@ -107,11 +107,10 @@ async def test_evaluate_request_blocked_violations_metadata(engine, mock_rails):
         request_data={"messages": [{"role": "user", "content": "bad request"}]}
     )
 
-    assert result.decision == Decision.INTERVENE
-    violations = result.metadata.get("violations", [])
-    assert len(violations) == 1
-    assert violations[0]["name"] == "nemo_input_blocked"
-    assert violations[0]["message"] == "block jailbreak"
+    assert result.status == EvaluationStatus.VIOLATION
+    assert len(result.violations) == 1
+    assert result.violations[0].rule_name == "nemo_input_blocked"
+    assert result.violations[0].reason == "block jailbreak"
 
 
 async def test_evaluate_response_allow(engine, mock_rails):
@@ -126,7 +125,7 @@ async def test_evaluate_response_allow(engine, mock_rails):
         request_data={"messages": []}
     )
 
-    assert result.decision == Decision.ALLOW
+    assert result.status == EvaluationStatus.ALLOW
 
 
 async def test_evaluate_response_blocked(engine, mock_rails):
@@ -142,8 +141,8 @@ async def test_evaluate_response_blocked(engine, mock_rails):
         request_data={"messages": []}
     )
 
-    assert result.decision == Decision.INTERVENE
-    assert result.message is not None
+    assert result.status == EvaluationStatus.VIOLATION
+    assert len(result.violations) > 0
 
 
 async def test_evaluate_response_blocked_violations_metadata(engine, mock_rails):
@@ -159,11 +158,10 @@ async def test_evaluate_response_blocked_violations_metadata(engine, mock_rails)
         request_data={"messages": []}
     )
 
-    assert result.decision == Decision.INTERVENE
-    violations = result.metadata.get("violations", [])
-    assert len(violations) == 1
-    assert violations[0]["name"] == "nemo_output_blocked"
-    assert violations[0]["message"] == "block unsafe content"
+    assert result.status == EvaluationStatus.VIOLATION
+    assert len(result.violations) == 1
+    assert result.violations[0].rule_name == "nemo_output_blocked"
+    assert result.violations[0].reason == "block unsafe content"
 
 
 async def test_evaluate_request_plain_string_result_no_false_positive(engine, mock_rails):
@@ -178,7 +176,7 @@ async def test_evaluate_request_plain_string_result_no_false_positive(engine, mo
         request_data={"messages": [{"role": "user", "content": "tell me a story"}]}
     )
 
-    assert result.decision == Decision.ALLOW
+    assert result.status == EvaluationStatus.ALLOW
 
 
 async def test_evaluate_response_plain_string_result_no_false_positive(engine, mock_rails):
@@ -193,7 +191,7 @@ async def test_evaluate_response_plain_string_result_no_false_positive(engine, m
         request_data={"messages": []}
     )
 
-    assert result.decision == Decision.ALLOW
+    assert result.status == EvaluationStatus.ALLOW
 
 
 async def test_check_rail_activations_no_log_attr():
@@ -231,7 +229,7 @@ async def test_evaluate_request_error_fail_open(engine, mock_rails):
     )
 
     # Default is fail open
-    assert result.decision == Decision.ALLOW
+    assert result.status == EvaluationStatus.ALLOW
     assert "error" in result.metadata
 
 
@@ -250,11 +248,10 @@ async def test_evaluate_request_error_fail_closed(engine, mock_rails):
 
     # Engine is a pure evaluator: reports VIOLATION, not BLOCK.
     # The interceptor maps violations to block/intervene via fail_action.
-    assert result.decision == Decision.INTERVENE
-    assert result.message is not None
+    assert result.status == EvaluationStatus.VIOLATION
+    assert len(result.violations) > 0
     # Provider decision metadata is preserved for interceptor to inspect
-    violations = result.metadata.get("violations", [])
-    assert any(v.get("provider_decision") == "block" for v in violations)
+    assert any(v.extra.get("provider_decision") == "block" for v in result.violations)
 
 
 async def test_violations_use_fallback_type_when_missing(engine, mock_rails):
@@ -271,9 +268,8 @@ async def test_violations_use_fallback_type_when_missing(engine, mock_rails):
         request_data={"messages": [{"role": "user", "content": "test"}]}
     )
 
-    assert result.decision == Decision.INTERVENE
-    violations = result.metadata.get("violations", [])
-    assert violations[0]["name"] == "nemo_input_blocked"
+    assert result.status == EvaluationStatus.VIOLATION
+    assert result.violations[0].rule_name == "nemo_input_blocked"
 
 
 async def test_multiple_rail_activations_produce_multiple_violations(engine, mock_rails):
@@ -291,9 +287,8 @@ async def test_multiple_rail_activations_produce_multiple_violations(engine, moc
         request_data={"messages": [{"role": "user", "content": "test"}]}
     )
 
-    assert result.decision == Decision.INTERVENE
-    violations = result.metadata.get("violations", [])
-    assert len(violations) == 2
+    assert result.status == EvaluationStatus.VIOLATION
+    assert len(result.violations) == 2
 
 
 async def test_get_session_state_returns_none(engine):
@@ -394,10 +389,9 @@ async def test_evaluate_request_varied_rail_types(
         request_data={"messages": [{"role": "user", "content": "test"}]},
     )
 
-    assert result.decision == Decision.INTERVENE
-    violations = result.metadata["violations"]
-    assert violations[0]["name"] == expected_violation_name
-    assert violations[0]["message"] == rail_name
+    assert result.status == EvaluationStatus.VIOLATION
+    assert result.violations[0].rule_name == expected_violation_name
+    assert result.violations[0].reason == rail_name
 
 
 @pytest.mark.parametrize(
@@ -424,10 +418,9 @@ async def test_evaluate_response_varied_rail_types(
         request_data={"messages": [{"role": "user", "content": "q"}]},
     )
 
-    assert result.decision == Decision.INTERVENE
-    violations = result.metadata["violations"]
-    assert violations[0]["name"] == expected_violation_name
-    assert violations[0]["message"] == rail_name
+    assert result.status == EvaluationStatus.VIOLATION
+    assert result.violations[0].rule_name == expected_violation_name
+    assert result.violations[0].reason == rail_name
 
 
 @pytest.mark.parametrize(
@@ -468,9 +461,8 @@ async def test_evaluate_request_violation_fallback_values(
         request_data={"messages": [{"role": "user", "content": "x"}]},
     )
 
-    assert result.decision == Decision.INTERVENE
-    violations = result.metadata["violations"]
-    assert violations[0]["message"] == expected_msg
+    assert result.status == EvaluationStatus.VIOLATION
+    assert result.violations[0].reason == expected_msg
 
 
 # ---------------------------------------------------------------------------
@@ -500,4 +492,4 @@ async def test_plain_string_result_no_false_positive_varied(engine, mock_rails, 
         request_data={"messages": [{"role": "user", "content": "hello"}]},
     )
 
-    assert result.decision == Decision.ALLOW
+    assert result.status == EvaluationStatus.ALLOW

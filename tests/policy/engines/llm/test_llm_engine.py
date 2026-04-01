@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from openbias.policy.engines.llm import LLMPolicyEngine
 from openbias.policy.engines.llm.models import ConfidenceTier, SessionContext
-from openbias.policy.protocols import Decision
+from openbias.policy.protocols import EvaluationStatus
 
 
 @pytest.fixture
@@ -95,7 +95,7 @@ class TestEvaluateRequest:
         await engine.initialize({"workflow": sample_workflow})
 
         result = await engine.evaluate_request("session1", {"messages": []})
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
 
 
 class TestEvaluateResponse:
@@ -129,7 +129,7 @@ class TestEvaluateResponse:
             {"messages": []},
         )
         
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
         assert "state" in result.metadata
 
 
@@ -230,8 +230,7 @@ class TestCriticalViolationDecision:
             {"messages": []},
         )
 
-        assert result.decision == Decision.INTERVENE
-        assert result.decision != Decision.BLOCK
+        assert result.status == EvaluationStatus.VIOLATION
 
     async def test_max_severity_metadata_critical(self, engine, sample_workflow):
         """max_severity metadata should reflect the highest severity violation."""

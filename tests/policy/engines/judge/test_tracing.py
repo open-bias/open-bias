@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from openbias.policy.engines.judge.engine import JudgePolicyEngine
 from openbias.policy.engines.judge.models import VerdictAction
-from openbias.policy.protocols import Decision
+from openbias.policy.protocols import EvaluationStatus
 
 
 @pytest.fixture
@@ -93,7 +93,7 @@ class TestTracerIntegration:
         engine._client.call_judge = AsyncMock(return_value=_passing_response())
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
 
     async def test_tracer_error_does_not_break_eval(
         self, engine, judge_config, mock_tracer, sample_request, sample_response,
@@ -105,7 +105,7 @@ class TestTracerIntegration:
         mock_tracer.log_judge_evaluation.side_effect = Exception("Trace failed")
 
         result = await engine.evaluate_response("s1", sample_response, sample_request)
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
 
     async def test_parent_span_forwarded(
         self, engine, judge_config, mock_tracer, sample_request, sample_response,
@@ -175,7 +175,7 @@ class TestTraceAlwaysOn:
         engine._evaluator.evaluate_turn = AsyncMock(return_value=mock_verdict)
 
         with patch.object(engine, "_trace_verdict") as mock_trace:
-            with patch.object(engine, "_build_result", return_value=MagicMock(decision=Decision.ALLOW)):
+            with patch.object(engine, "_build_result", return_value=MagicMock(status=EvaluationStatus.ALLOW)):
                 await engine.evaluate_request(
                     "s1", sample_request,
                     context={"_suppress_trace": True},
@@ -208,7 +208,7 @@ class TestTraceVerdictFromEvaluateRequest:
         context = {"_parent_span": mock_parent_span}
 
         with patch.object(engine, "_trace_verdict") as mock_trace:
-            with patch.object(engine, "_build_result", return_value=MagicMock(decision=Decision.ALLOW)):
+            with patch.object(engine, "_build_result", return_value=MagicMock(status=EvaluationStatus.ALLOW)):
                 await engine.evaluate_request("s1", sample_request, context=context)
 
             mock_trace.assert_called_once_with(

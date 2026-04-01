@@ -11,7 +11,7 @@ from openbias.policy.engines.judge.prompts import (
     format_tool_calls_block,
     _classify_tool_operation,
 )
-from openbias.policy.protocols import Decision
+from openbias.policy.protocols import EvaluationStatus
 
 
 class TestExtractToolCalls:
@@ -355,8 +355,8 @@ class TestToolCallEndToEnd:
         )
 
         # Low composite score should trigger non-ALLOW decision
-        assert result.decision in (Decision.INTERVENE, Decision.BLOCK)
-        assert len(result.metadata.get("violations", [])) > 0
+        assert result.status == EvaluationStatus.VIOLATION
+        assert len(result.violations) > 0
 
     async def test_response_without_tool_calls_still_works(
         self, engine, config, request_with_tool_messages
@@ -387,7 +387,7 @@ class TestToolCallEndToEnd:
         result = await engine.evaluate_response(
             "s1", simple_response, request_with_tool_messages
         )
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
 
 
 class TestExtractToolDefinitions:

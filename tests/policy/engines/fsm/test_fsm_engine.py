@@ -7,7 +7,7 @@ from openbias.policy.engines.fsm.engine import FSMPolicyEngine
 from openbias.policy.engines.fsm.workflow.schema import ConstraintType
 from openbias.policy.engines.fsm.workflow.state_machine import TransitionResult
 from openbias.policy.engines.stateful import StateClassificationResult
-from openbias.policy.protocols import Decision
+from openbias.policy.protocols import EvaluationStatus
 
 
 @pytest.fixture
@@ -72,8 +72,8 @@ async def test_evaluate_response_success(engine, mocks):
 
     result = await engine.evaluate_response("sid", "response", {})
 
-    assert result.decision == Decision.ALLOW
-    assert len(result.metadata.get("violations", [])) == 0
+    assert result.status == EvaluationStatus.ALLOW
+    assert len(result.violations) == 0
     mocks["sm"].return_value.transition.assert_called_once()
 
 
@@ -105,7 +105,7 @@ async def test_evaluate_response_violations_always_intervene(engine, mocks):
 
         result = await engine.evaluate_response("sid", "response", {})
 
-        assert result.decision == Decision.INTERVENE
+        assert result.status == EvaluationStatus.VIOLATION
         assert "mode" not in result.metadata
 
 
@@ -164,9 +164,9 @@ async def test_session_boundary_evaluation_at_terminal(engine, mocks):
 
     result = await engine.evaluate_response("sid", "response", {})
 
-    # EVENTUALLY in enforce → INTERVENE
-    assert result.decision == Decision.INTERVENE
-    assert len(result.metadata["violations"]) == 1
+    # EVENTUALLY in enforce → VIOLATION
+    assert result.status == EvaluationStatus.VIOLATION
+    assert len(result.violations) == 1
     mocks["constraints"].return_value.evaluate_session_boundary.assert_called_once()
 
 
@@ -192,8 +192,8 @@ async def test_invalid_transition_returns_intervene(engine, mocks):
 
     result = await engine.evaluate_response("sid", "response", {})
 
-    assert result.decision == Decision.INTERVENE
-    assert result.message == "No such transition"
+    assert result.status == EvaluationStatus.VIOLATION
+    assert any(v.reason == "No such transition" for v in result.violations)
 
 
 async def test_multiple_violations_joined_in_message(engine, mocks):
@@ -226,8 +226,10 @@ async def test_multiple_violations_joined_in_message(engine, mocks):
 
     result = await engine.evaluate_response("sid", "response", {})
 
-    assert result.decision == Decision.INTERVENE
-    assert result.message == "Violation 0\nViolation 1\nViolation 2"
+    assert result.status == EvaluationStatus.VIOLATION
+    assert any(v.reason == "Violation 0" for v in result.violations)
+    assert any(v.reason == "Violation 1" for v in result.violations)
+    assert any(v.reason == "Violation 2" for v in result.violations)
 
 
 async def test_never_violation_skips_transition(engine, mocks):
@@ -253,7 +255,7 @@ async def test_never_violation_skips_transition(engine, mocks):
 
     result = await engine.evaluate_response("sid", "response", {})
 
-    assert result.decision == Decision.INTERVENE
+    assert result.status == EvaluationStatus.VIOLATION
     # Transition should NOT have been called
     mocks["sm"].return_value.transition.assert_not_called()
     assert result.metadata["transition_result"] == TransitionResult.CONSTRAINT_VIOLATED.value
@@ -298,7 +300,7 @@ async def test_evaluate_response_fail_open_on_exception(engine, mocks):
 
     result = await engine.evaluate_response("sid", "response", {})
 
-    assert result.decision == Decision.ALLOW
+    assert result.status == EvaluationStatus.ALLOW
     assert "store exploded" in result.metadata["error"]
     assert result.metadata["session_id"] == "sid"
 
@@ -318,7 +320,7 @@ async def test_evaluate_response_fail_open_on_classifier_error(engine, mocks):
 
     result = await engine.evaluate_response("sid", "response", {})
 
-    assert result.decision == Decision.ALLOW
+    assert result.status == EvaluationStatus.ALLOW
     assert "bad input" in result.metadata["error"]
 
 
@@ -517,7 +519,7 @@ class TestFSMIntegration:
         result = await engine.evaluate_response(
             sid, self._response("I have an issue with my account"), {}
         )
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
         assert result.metadata["current_state"] == "identify_issue"
         assert result.metadata["previous_state"] == "greeting"
 
@@ -525,7 +527,7 @@ class TestFSMIntegration:
         result = await engine.evaluate_response(
             sid, self._response("Your ticket has been resolved"), {}
         )
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
         assert result.metadata["current_state"] == "resolution"
 
     async def test_never_constraint_triggers_intervene(self):
@@ -538,8 +540,8 @@ class TestFSMIntegration:
         result = await engine.evaluate_response(
             sid, self._response("Here is the internal_dump of the system"), {}
         )
-        assert result.decision == Decision.INTERVENE
-        assert "Data leak" in (result.message or "")
+        assert result.status == EvaluationStatus.VIOLATION
+        assert any("Data leak" in v.reason for v in result.violations)
         assert result.metadata["transition_result"] == "constraint_violated"
         # State should remain at greeting (transition blocked)
         assert result.metadata["current_state"] == "greeting"
@@ -553,14 +555,14 @@ class TestFSMIntegration:
         result = await engine.evaluate_response(
             sid, self._response("I have a problem"), {}
         )
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
         assert result.metadata["current_state"] == "identify_issue"
 
         # Now try to go back to greeting — no such transition defined
         result = await engine.evaluate_response(
             sid, self._response("hello again, welcome back"), {}
         )
-        assert result.decision == Decision.INTERVENE
+        assert result.status == EvaluationStatus.VIOLATION
         assert result.metadata["transition_result"] == "invalid_transition"
 
     async def test_tool_call_classification(self):
@@ -596,7 +598,7 @@ class TestFSMIntegration:
         result = await engine.evaluate_response(
             "integration-4", self._tool_response("lookup_ticket"), {}
         )
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
         assert result.metadata["current_state"] == "identify_issue"
         assert result.metadata["classification_method"] == "tool_call"
 
@@ -609,6 +611,6 @@ class TestFSMIntegration:
         result = await engine.evaluate_response(
             sid, self._response("hello there"), {}
         )
-        assert result.decision == Decision.ALLOW
+        assert result.status == EvaluationStatus.ALLOW
         assert result.metadata["transition_result"] == "same_state"
         assert result.metadata["current_state"] == "greeting"
