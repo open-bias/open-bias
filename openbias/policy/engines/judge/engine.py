@@ -585,25 +585,19 @@ class JudgePolicyEngine(PolicyEngine):
         return definitions
 
     def _build_violation_message(self, verdict: JudgeVerdict) -> str:
-        """Build a natural language intervention message from failed criteria.
+        """Build a diagnostic reason string from failed criteria.
+
+        The reason field is diagnostic: it explains *what* went wrong and
+        *why*.  User-facing prose and enforcement decisions belong in the
+        interceptor layer.
 
         Prioritizes corrective_actions (judge-generated guidance) over raw
-        criterion data. Produces prose that LLMs can follow, not machine
-        labels.
-
-        Falls back to the verdict summary when no per-criterion failure
-        data is available.
+        criterion data.  Falls back to the verdict summary when no
+        per-criterion failure data is available.
         """
         failed_criteria: list[str] = verdict.metadata.get("criterion_failures", [])
         if not failed_criteria:
-            summary = verdict.summary or "Policy violation detected."
-            # If the summary lacks directive language, append actionable guidance
-            directive_markers = ("must", "should", "please", "stop", "avoid", "do not", "don't")
-            if not any(marker in summary.lower() for marker in directive_markers):
-                summary += (
-                    " Please review and adjust your response to comply with the policy."
-                )
-            return summary
+            return verdict.summary or "Policy violation detected."
 
         score_map = {s.criterion: s for s in verdict.scores}
 
@@ -611,18 +605,16 @@ class JudgePolicyEngine(PolicyEngine):
         for criterion_name in failed_criteria:
             score = score_map.get(criterion_name)
             if not score:
-                paragraphs.append(f"A policy criterion was not met ({criterion_name}).")
+                paragraphs.append(f"Criterion not met: {criterion_name}.")
                 continue
 
             if score.corrective_actions:
-                # Lead with the corrective action — this is the most useful signal
                 parts: list[str] = [score.corrective_actions]
                 if score.evidence:
                     quotes = ", ".join(f'"{e}"' for e in score.evidence)
-                    parts.append(f"(Evidence from your response: {quotes})")
+                    parts.append(f"(Evidence: {quotes})")
                 paragraphs.append(" ".join(parts))
             else:
-                # Fall back to reasoning + criterion description
                 parts = []
                 if score.reasoning:
                     parts.append(score.reasoning.rstrip(".") + ".")
@@ -630,9 +622,7 @@ class JudgePolicyEngine(PolicyEngine):
                     quotes = ", ".join(f'"{e}"' for e in score.evidence)
                     parts.append(f"(Evidence: {quotes})")
                 paragraphs.append(" ".join(parts) if parts else
-                                  f"A policy criterion was not met ({criterion_name}).")
+                                  f"Criterion not met: {criterion_name}.")
 
-        message = "\n\n".join(paragraphs)
-        message += "\n\nPlease adjust your response accordingly."
-        return message
+        return "\n\n".join(paragraphs)
 

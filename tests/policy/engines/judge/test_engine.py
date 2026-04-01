@@ -372,7 +372,6 @@ class TestPerRuleCriteria:
         result = await engine.evaluate_response("s1", sample_response, sample_request)
         assert result.status == EvaluationStatus.VIOLATION
         assert any("Gave stock tips" in v.reason for v in result.violations)
-        assert any("Please adjust your response accordingly." in v.reason for v in result.violations)
 
     async def test_all_rules_pass(self, engine, sample_request, sample_response):
         """All rules pass → ALLOW."""
@@ -464,8 +463,8 @@ class TestTargetedInterventionMessages:
         assert "Ask for explicit user confirmation" in message
         # Evidence inlined as quotes
         assert "delete_database(table='users')" in message
-        # Closing guidance
-        assert "Please adjust your response accordingly." in message
+        # No user-facing directive prose — reason is diagnostic only
+        assert "Please adjust" not in message
 
     def test_multiple_failures_all_included(self, engine):
         """Multiple failures should all be included as separate paragraphs."""
@@ -553,8 +552,8 @@ class TestTargetedInterventionMessages:
 
         message = engine._build_violation_message(verdict)
         assert "Minor issues with response quality." in message
-        # Non-directive summaries get actionable guidance appended
-        assert "Please review and adjust" in message
+        # Diagnostic only — no user-facing directive prose
+        assert "Please review and adjust" not in message
 
     def test_no_machine_slugs_in_output(self, engine):
         """Output must not contain criterion slugs like rule_1_*."""
