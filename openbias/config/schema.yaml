@@ -23,8 +23,16 @@
 # In async mode, evaluators run without blocking the response.
 mode: async
 
-# Action when a policy violation is detected: block | intervene | shadow
+# Enforcement action when an engine detects a policy violation:
+#   block     — reject the request/response immediately
+#   intervene — modify the request/response to steer the conversation
+#   shadow    — log the violation but allow through unchanged (monitor-only)
 # (default: intervene)
+#
+# Engines are pure evaluators: they detect violations and report them.
+# The interceptor is the sole enforcement gateway that maps violations
+# to the configured fail_action behavior.
+#
 # Note: block is automatically normalized to intervene when mode is async,
 # since async evaluation cannot block a response that has already been sent.
 fail_action: intervene
@@ -133,13 +141,15 @@ evaluators:
 
   # --- NeMo Guardrails evaluator (type: nemo) ---
   #
-  # Integrates NVIDIA NeMo Guardrails for input/output rail enforcement.
+  # Integrates NVIDIA NeMo Guardrails for input/output rail detection.
+  # NeMo is treated as a warn-only signal provider: rail activations are
+  # reported as violations to the interceptor, which decides enforcement.
   #
   # - name: nemo-rails
   #   type: nemo
   #   phase: post_call
   #   policy: ./nemo_config/         # path to NeMo config directory
-  #   fail_closed: false             # deny on NeMo errors (default: false = warn)
+  #   fail_closed: false             # report error as violation (default: false = allow)
   #   rails:                         # which rails to enable (omit for all)
   #     - input
   #     - output
