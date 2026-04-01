@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from openbias.eval.runner import EvalRunner
-from openbias.policy.protocols import Decision
+from openbias.policy.protocols import EvaluationStatus
 from openbias.policy.registry import PolicyEngineRegistry
 
 EVALS_DIR = Path(__file__).resolve().parent.parent.parent / "evals" / "fsm"
@@ -48,7 +48,7 @@ async def test_happy_path_no_violations(engine, runner):
     assert len(result.turns) > 0
 
     for turn in result.turns:
-        assert turn.response_eval.decision == Decision.ALLOW
+        assert turn.response_eval.status == EvaluationStatus.ALLOW
         assert len(turn.response_eval.metadata.get("violations", [])) == 0
 
 
@@ -68,7 +68,7 @@ async def test_skip_verification_detected(engine, runner):
     violation_turns = [
         t
         for t in result.turns
-        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
+        if t.response_eval.status == EvaluationStatus.VIOLATION
     ]
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"
 
@@ -96,7 +96,7 @@ async def test_escalation_path_no_violations(engine, runner):
     assert len(result.turns) > 0
 
     for turn in result.turns:
-        assert turn.response_eval.decision == Decision.ALLOW
+        assert turn.response_eval.status == EvaluationStatus.ALLOW
         assert len(turn.response_eval.metadata.get("violations", [])) == 0
 
 
@@ -113,7 +113,7 @@ async def test_multi_issue_no_violations(engine, runner):
     assert len(result.turns) > 0
 
     for turn in result.turns:
-        assert turn.response_eval.decision == Decision.ALLOW
+        assert turn.response_eval.status == EvaluationStatus.ALLOW
         assert len(turn.response_eval.metadata.get("violations", [])) == 0
 
 
@@ -133,7 +133,7 @@ async def test_direct_account_action_detected(engine, runner):
     violation_turns = [
         t
         for t in result.turns
-        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
+        if t.response_eval.status == EvaluationStatus.VIOLATION
     ]
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"
 

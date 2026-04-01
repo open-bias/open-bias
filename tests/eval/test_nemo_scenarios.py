@@ -19,7 +19,7 @@ else:
 
 from openbias.eval.runner import EvalRunner
 from openbias.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
-from openbias.policy.protocols import Decision
+from openbias.policy.protocols import EvaluationStatus
 
 EVALS_DIR = Path(__file__).resolve().parent.parent.parent / "evals" / "nemo"
 
@@ -93,7 +93,7 @@ async def test_clean_support_no_violations(engine, runner):
     assert len(result.turns) > 0
 
     for turn in result.turns:
-        assert turn.response_eval.decision == Decision.ALLOW
+        assert turn.response_eval.status == EvaluationStatus.ALLOW
         assert len(turn.response_eval.metadata.get("violations", [])) == 0
 
 
@@ -124,7 +124,7 @@ async def test_financial_advice_blocked(engine, runner):
     violation_turns = [
         t
         for t in result.turns
-        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
+        if t.response_eval.status == EvaluationStatus.VIOLATION
     ]
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"
 
@@ -156,6 +156,6 @@ async def test_security_bypass_blocked(engine, runner):
     violation_turns = [
         t
         for t in result.turns
-        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
+        if t.response_eval.status == EvaluationStatus.VIOLATION
     ]
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"

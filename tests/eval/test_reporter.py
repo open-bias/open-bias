@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from openbias.eval.reporter import export_json, print_report
-from openbias.policy.protocols import Decision
+from openbias.policy.protocols import EvaluationStatus
 from tests.eval.conftest import make_result, make_turn
 
 # ---------------------------------------------------------------------------
@@ -20,7 +20,7 @@ class TestExportJson:
         assert data["scenarios"] == []
 
     def test_single_allow_turn(self):
-        turn = make_turn(0, Decision.ALLOW)
+        turn = make_turn(0, EvaluationStatus.ALLOW)
         result = make_result(turns=[turn])
         data = export_json([result])
 
@@ -37,22 +37,22 @@ class TestExportJson:
 
         t = scenario["turns"][0]
         assert t["turn_index"] == 0
-        assert t["response_decision"] == "allow"
+        assert t["response_status"] == "allow"
         assert t["intervention_needed"] is False
 
     def test_block_turn_marks_intervention_needed(self):
-        turn = make_turn(0, Decision.BLOCK)
+        turn = make_turn(0, EvaluationStatus.VIOLATION)
         data = export_json([make_result(turns=[turn])])
         assert data["scenarios"][0]["turns"][0]["intervention_needed"] is True
 
     def test_intervene_turn_marks_intervention_needed(self):
-        turn = make_turn(0, Decision.INTERVENE)
+        turn = make_turn(0, EvaluationStatus.VIOLATION)
         data = export_json([make_result(turns=[turn])])
         assert data["scenarios"][0]["turns"][0]["intervention_needed"] is True
 
     def test_violations_serialized_as_dicts(self):
         violations = [{"name": "v1", "severity": "high", "message": "bad"}]
-        turn = make_turn(0, Decision.INTERVENE, violations=violations)
+        turn = make_turn(0, EvaluationStatus.VIOLATION, violations=violations)
         data = export_json([make_result(turns=[turn])])
         t = data["scenarios"][0]["turns"][0]
         assert len(t["violations"]) == 1
@@ -64,8 +64,8 @@ class TestExportJson:
         assert data["scenarios"][0]["error"] == "something broke"
 
     def test_multiple_scenarios_summary(self):
-        r1 = make_result(turns=[make_turn(0, Decision.ALLOW)])
-        r2 = make_result(turns=[make_turn(0, Decision.BLOCK)])
+        r1 = make_result(turns=[make_turn(0, EvaluationStatus.ALLOW)])
+        r2 = make_result(turns=[make_turn(0, EvaluationStatus.VIOLATION)])
         data = export_json([r1, r2])
         assert data["summary"]["total_scenarios"] == 2
         assert data["summary"]["total_turns"] == 2
@@ -73,14 +73,14 @@ class TestExportJson:
 
     def test_request_block_marks_intervention_needed(self):
         """request_eval BLOCK should set intervention_needed=True even when response is ALLOW."""
-        turn = make_turn(0, decision=Decision.ALLOW, request_decision=Decision.BLOCK)
+        turn = make_turn(0, status=EvaluationStatus.ALLOW, request_status=EvaluationStatus.VIOLATION)
         data = export_json([make_result(turns=[turn])])
         assert data["scenarios"][0]["turns"][0]["intervention_needed"] is True
 
     def test_request_violations_included_in_violations(self):
         """Violations from request_eval must appear in the violations list."""
         request_violations = [{"name": "input_rail", "message": "blocked input"}]
-        turn = make_turn(0, decision=Decision.ALLOW, request_decision=Decision.BLOCK,
+        turn = make_turn(0, status=EvaluationStatus.ALLOW, request_status=EvaluationStatus.VIOLATION,
                          request_violations=request_violations)
         data = export_json([make_result(turns=[turn])])
         t = data["scenarios"][0]["turns"][0]
@@ -93,9 +93,9 @@ class TestExportJson:
         response_violations = [{"name": "output_policy"}]
         turn = make_turn(
             0,
-            decision=Decision.INTERVENE,
+            status=EvaluationStatus.VIOLATION,
             violations=response_violations,
-            request_decision=Decision.BLOCK,
+            request_status=EvaluationStatus.VIOLATION,
             request_violations=request_violations,
         )
         data = export_json([make_result(turns=[turn])])
@@ -125,7 +125,7 @@ class TestPrintReport:
 
     def test_violations_trigger_warning(self):
         violations = [{"name": "v1"}]
-        turn = make_turn(0, Decision.INTERVENE, violations=violations)
+        turn = make_turn(0, EvaluationStatus.VIOLATION, violations=violations)
         result = make_result(turns=[turn])
 
         with patch(f"{_CLI_UI}.config_panel"), \
@@ -149,7 +149,7 @@ class TestPrintReport:
             mock_warning.assert_called()
 
     def test_verbose_mode_prints_per_turn(self):
-        turn = make_turn(0, Decision.ALLOW)
+        turn = make_turn(0, EvaluationStatus.ALLOW)
         result = make_result(turns=[turn])
 
         with patch(f"{_CLI_UI}.config_panel"), \
@@ -162,7 +162,7 @@ class TestPrintReport:
             assert mock_console.print.call_count > 0
 
     def test_clean_run_calls_success(self):
-        turn = make_turn(0, Decision.ALLOW)
+        turn = make_turn(0, EvaluationStatus.ALLOW)
         result = make_result(turns=[turn])
 
         with patch(f"{_CLI_UI}.config_panel"), \
@@ -178,8 +178,8 @@ class TestPrintReport:
         request_violations = [{"name": "input_rail", "message": "blocked input"}]
         turn = make_turn(
             0,
-            decision=Decision.ALLOW,
-            request_decision=Decision.BLOCK,
+            status=EvaluationStatus.ALLOW,
+            request_status=EvaluationStatus.VIOLATION,
             request_violations=request_violations,
         )
         result = make_result(turns=[turn])
@@ -203,9 +203,9 @@ class TestPrintReport:
         response_violations = [{"name": "output_policy"}]
         turn = make_turn(
             0,
-            decision=Decision.INTERVENE,
+            status=EvaluationStatus.VIOLATION,
             violations=response_violations,
-            request_decision=Decision.BLOCK,
+            request_status=EvaluationStatus.VIOLATION,
             request_violations=request_violations,
         )
         result = make_result(turns=[turn])

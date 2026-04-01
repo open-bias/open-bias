@@ -16,21 +16,28 @@ def make_turn(
     meta = {"violations": violations or []}
     request_meta = {"violations": request_violations or []}
 
-    def _make_eval(st: EvaluationStatus, m: dict) -> EvaluationResult:
-        if st == EvaluationStatus.VIOLATION:
-            return EvaluationResult(
-                status=st,
-                violations=[ViolationRecord(rule_id="test", rule_name="test", reason="violation", engine="test")],
-                metadata=m,
-            )
-        return EvaluationResult(status=st, metadata=m)
+    def _make_eval(st: EvaluationStatus, m: dict, v_list: list | None = None) -> EvaluationResult:
+        records: list[ViolationRecord] = []
+        if v_list:
+            records = [
+                ViolationRecord(
+                    rule_id=v.get("name", "test"),
+                    rule_name=v.get("name", "test"),
+                    reason="violation",
+                    engine="test",
+                )
+                for v in v_list
+            ]
+        elif st == EvaluationStatus.VIOLATION:
+            records = [ViolationRecord(rule_id="test", rule_name="test", reason="violation", engine="test")]
+        return EvaluationResult(status=st, violations=records, metadata=m)
 
     return TurnResult(
         turn_index=idx,
         request_data={"messages": [], "model": "test"},
         response_data={},
-        request_eval=_make_eval(request_status, request_meta),
-        response_eval=_make_eval(status, meta),
+        request_eval=_make_eval(request_status, request_meta, request_violations),
+        response_eval=_make_eval(status, meta, violations),
     )
 
 

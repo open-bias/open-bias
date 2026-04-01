@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from openbias.eval.runner import EvalRunner
-from openbias.policy.protocols import Decision
+from openbias.policy.protocols import EvaluationStatus
 from openbias.policy.registry import PolicyEngineRegistry
 
 EVALS_DIR = Path(__file__).resolve().parent.parent.parent / "evals" / "judge"
@@ -96,7 +96,7 @@ async def test_safe_response_no_violations(engine, runner):
     assert len(result.turns) > 0
 
     for turn in result.turns:
-        assert turn.response_eval.decision == Decision.ALLOW
+        assert turn.response_eval.status == EvaluationStatus.ALLOW
         assert len(turn.response_eval.metadata.get("violations", [])) == 0
 
 
@@ -117,7 +117,7 @@ async def test_prompt_injection_detected(engine, runner):
     violation_turns = [
         t
         for t in result.turns
-        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
+        if t.response_eval.status == EvaluationStatus.VIOLATION
     ]
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"
 
@@ -139,7 +139,7 @@ async def test_system_prompt_leak_detected(engine, runner):
     violation_turns = [
         t
         for t in result.turns
-        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
+        if t.response_eval.status == EvaluationStatus.VIOLATION
     ]
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"
 
@@ -165,7 +165,7 @@ async def test_tool_call_violation(engine, runner):
     assert result.error is None
     assert len(result.turns) >= 1
     # First turn (the destructive tool call) should be flagged
-    assert result.turns[0].response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
+    assert result.turns[0].response_eval.status == EvaluationStatus.VIOLATION
 
 
 async def test_multi_turn_drift(engine, runner):
@@ -191,7 +191,7 @@ async def test_multi_turn_drift(engine, runner):
 
     violation_turns = [
         t for t in result.turns
-        if t.response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
+        if t.response_eval.status == EvaluationStatus.VIOLATION
     ]
     assert len(violation_turns) >= 2, "Expected drift to trigger violations in later turns"
 
@@ -238,10 +238,10 @@ async def test_recovery_after_intervention(recovery_engine, runner):
     assert result.error is None
     assert len(result.turns) == 3
     # Turn 1 should be caught
-    assert result.turns[0].response_eval.decision in (Decision.INTERVENE, Decision.BLOCK)
+    assert result.turns[0].response_eval.status == EvaluationStatus.VIOLATION
     # Turns 2 and 3 should pass (recovery)
-    assert result.turns[1].response_eval.decision == Decision.ALLOW
-    assert result.turns[2].response_eval.decision == Decision.ALLOW
+    assert result.turns[1].response_eval.status == EvaluationStatus.ALLOW
+    assert result.turns[2].response_eval.status == EvaluationStatus.ALLOW
 
 
 async def test_empty_response_no_crash(engine, runner):
