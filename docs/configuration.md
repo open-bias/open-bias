@@ -38,7 +38,6 @@ This uses a single judge evaluator with inline rules, auto-detected model, defau
 | `mode` | string | `async` | Evaluation mode: `sync` (blocking) or `async` (non-blocking, default) |
 | `fail_action` | string | `intervene` | What happens on policy violation: `intervene` (modify next request), `block` (reject request), or `shadow` (log only). **Note:** `block` is automatically normalized to `intervene` when `mode: async`, since async evaluation cannot block a response that has already been sent. |
 | `strategy` | string | `user_message_inject` | Intervention strategy: `system_prompt_append` or `user_message_inject` |
-| `max_intervention_attempts` | int | `3` | Maximum intervention attempts before giving up |
 | `session_ttl` | int | -- | Session time-to-live in seconds |
 | `max_sessions` | int | -- | Maximum concurrent sessions |
 | `model` | string | auto-detected | Default LLM model for the proxy target. Auto-detected from whichever API key is present. Evaluators can override with their own `model` key. |
@@ -286,7 +285,6 @@ If validation fails, the server prints the error and exits with code 1. Use `--d
 mode: async
 fail_action: intervene
 strategy: user_message_inject
-max_intervention_attempts: 3
 
 model: gemini/gemini-2.5-flash
 port: 4000
