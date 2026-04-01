@@ -232,6 +232,10 @@ def trigger(config: Path, message: str, debug: bool) -> None:
                 debug=debug,
             )
             settings.validate()
+
+        with spinner("Compiling rules for runtime engines..."):
+            _compile_rules_for_serve(settings, config)
+
     except SystemExit:
         raise
     except Exception as e:
