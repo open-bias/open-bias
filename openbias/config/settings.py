@@ -219,7 +219,6 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             "hook_timeout_seconds",
             "mode",
             "evaluators",
-            "max_intervention_attempts",
             "strategy",
             "session_ttl",
             "max_sessions",
@@ -270,7 +269,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
 
         # Direct top-level pipeline fields
         _FLAT_KEYS = (
-            "mode", "fail_action", "max_intervention_attempts", "strategy",
+            "mode", "fail_action", "strategy",
             "session_ttl", "max_sessions", "fail_open", "hook_timeout_seconds",
         )
         for key in _FLAT_KEYS:
@@ -371,7 +370,6 @@ class Settings(BaseSettings):
     # --- Evaluator pipeline (flattened from former PolicyConfig) ---
     mode: Literal["sync", "async"] = "async"
     fail_action: Literal["intervene", "block", "shadow"] = "intervene"
-    max_intervention_attempts: int = 3
     strategy: Literal["system_prompt_append", "user_message_inject"] = "user_message_inject"
     session_ttl: int = 3600
     max_sessions: int = 10000

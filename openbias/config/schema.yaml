@@ -29,9 +29,6 @@ mode: async
 # since async evaluation cannot block a response that has already been sent.
 fail_action: intervene
 
-# Maximum number of intervention attempts before giving up (default: 3)
-max_intervention_attempts: 3
-
 # Intervention strategy: system_prompt_append | user_message_inject
 # (default: user_message_inject)
 strategy: user_message_inject

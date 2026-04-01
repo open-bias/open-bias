@@ -354,7 +354,6 @@ class Callback(CustomLogger):
             mode=self.settings.mode,
             default_strategy=self.settings.strategy,
             fail_action=self.settings.fail_action,
-            max_intervention_attempts=self.settings.max_intervention_attempts,
             session_ttl=self.settings.session_ttl,
             max_sessions=self.settings.max_sessions,
         )
