@@ -414,6 +414,32 @@ class TestGetPolicyConfig:
         assert result["config_path"] == "/abs/workflow.yaml"
 
 
+# =========================================================================
+# async + block normalization tests
+# =========================================================================
+
+
+class TestAsyncBlockNormalization:
+    """Verify that async + block is normalized to intervene at config time."""
+
+    def test_async_block_normalized_to_intervene(self):
+        with pytest.warns(UserWarning, match="fail_action='block' has no effect in async mode"):
+            settings = Settings(mode="async", fail_action="block")
+        assert settings.fail_action == "intervene"
+
+    def test_sync_block_unchanged(self):
+        settings = Settings(mode="sync", fail_action="block")
+        assert settings.fail_action == "block"
+
+    def test_async_shadow_unchanged(self):
+        settings = Settings(mode="async", fail_action="shadow")
+        assert settings.fail_action == "shadow"
+
+    def test_async_intervene_unchanged(self):
+        settings = Settings(mode="async", fail_action="intervene")
+        assert settings.fail_action == "intervene"
+
+
 if __name__ == "__main__":
     import sys
     sys.exit(pytest.main([__file__]))
