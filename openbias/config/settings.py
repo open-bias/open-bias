@@ -28,10 +28,11 @@ For the complete YAML schema reference, see:
 import contextvars
 import logging
 import os
+import warnings
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from pydantic_settings import (
     BaseSettings,
     SettingsConfigDict,
@@ -387,6 +388,19 @@ class Settings(BaseSettings):
     groq_api_key: str | None = Field(None, validation_alias="GROQ_API_KEY")
     togetherai_api_key: str | None = Field(None, validation_alias="TOGETHERAI_API_KEY")
     openrouter_api_key: str | None = Field(None, validation_alias="OPENROUTER_API_KEY")
+
+    @model_validator(mode="after")
+    def _normalize_async_block(self) -> "Settings":
+        """Normalize async + block to intervene — block can't work in async mode."""
+        if self.mode == "async" and self.fail_action == "block":
+            warnings.warn(
+                "fail_action='block' has no effect in async mode (the response is "
+                "already sent). Normalizing to 'intervene'.",
+                UserWarning,
+                stacklevel=2,
+            )
+            self.fail_action = "intervene"
+        return self
 
     def __init__(self, _config_path: str | None = None, **kwargs: Any):
         _token = _config_path_var.set(_config_path)
