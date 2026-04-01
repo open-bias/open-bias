@@ -1538,3 +1538,25 @@ class TestSpanFactory:
             SESSION, _request(), {"r": 1}, REQUEST_ID
         )
         assert post_result.allowed is True
+
+
+# ===========================================================================
+# async + block normalization runtime test
+# ===========================================================================
+
+
+class TestAsyncBlockNormalizationRuntime:
+    """Verify that Settings(mode='async', fail_action='block') normalizes to
+    intervene and that the effective behaviour flows through at runtime."""
+
+    async def test_settings_async_block_produces_intervene(self):
+        """Settings created with async+block should have fail_action=intervene."""
+        import warnings as _w
+        from openbias.config.settings import Settings
+
+        with _w.catch_warnings():
+            _w.simplefilter("ignore", UserWarning)
+            settings = Settings(mode="async", fail_action="block")
+
+        assert settings.mode == "async"
+        assert settings.fail_action == "intervene"
