@@ -16,6 +16,9 @@ from openbias.policy.registry import register_engine
 from openbias.policy.protocols import (
     Decision,
     EngineResult,
+    EvaluationResult,
+    EvaluationStatus,
+    ViolationRecord,
     require_initialized,
 )
 from openbias.policy.engines.stateful import (
@@ -164,7 +167,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         context: dict[str, Any] | None = None,
     ) -> EngineResult:
         """Evaluate incoming request — pass-through, evaluation happens post-call."""
-        return EngineResult(decision=Decision.ALLOW)
+        return EvaluationResult(status=EvaluationStatus.ALLOW).to_engine_result()
 
     @require_initialized
     async def evaluate_response(
@@ -181,7 +184,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         message = extract_response_content(response_data)
         tool_calls = extract_tool_call_names(response_data)
 
-        violations: list[dict[str, Any]] = []
+        violation_records: list[ViolationRecord] = []
 
         try:
             # 1. Classify state (before add_turn so the current message
@@ -208,20 +211,24 @@ class LLMPolicyEngine(StatefulPolicyEngine):
 
             # Check for structural drift
             if session.is_structurally_drifting():
-                violations.append({
-                    "name": "structural_drift",
-                    "severity": "warning",
-                    "message": "Multiple consecutive uncertain classifications",
-                })
+                violation_records.append(ViolationRecord(
+                    rule_id="structural_drift",
+                    rule_name="structural_drift",
+                    reason="Multiple consecutive uncertain classifications",
+                    severity="warning",
+                    engine=self.name,
+                ))
 
             # Check for skip violations
             for skipped in classification.skip_violations:
-                violations.append({
-                    "name": "skip_violation",
-                    "severity": "error",
-                    "message": f"Skipped required state: {skipped}",
-                    "skipped_state": skipped,
-                })
+                violation_records.append(ViolationRecord(
+                    rule_id="skip_violation",
+                    rule_name="skip_violation",
+                    reason=f"Skipped required state: {skipped}",
+                    severity="error",
+                    engine=self.name,
+                    extra={"skipped_state": skipped},
+                ))
 
             # 2. Compute drift
             expected_tools = self._get_expected_tools(classification.best_state)
@@ -235,18 +242,22 @@ class LLMPolicyEngine(StatefulPolicyEngine):
 
             # Add anomaly violations
             if drift.anomaly_flags.get("unexpected_tool_call"):
-                violations.append({
-                    "name": "unexpected_tool_call",
-                    "severity": "warning",
-                    "message": "Unexpected tool call for current state",
-                })
+                violation_records.append(ViolationRecord(
+                    rule_id="unexpected_tool_call",
+                    rule_name="unexpected_tool_call",
+                    reason="Unexpected tool call for current state",
+                    severity="warning",
+                    engine=self.name,
+                ))
 
             if drift.anomaly_flags.get("missing_expected_tool_call"):
-                violations.append({
-                    "name": "missing_expected_tool_call",
-                    "severity": "warning",
-                    "message": "Expected tool call not made",
-                })
+                violation_records.append(ViolationRecord(
+                    rule_id="missing_expected_tool_call",
+                    rule_name="missing_expected_tool_call",
+                    reason="Expected tool call not made",
+                    severity="warning",
+                    engine=self.name,
+                ))
 
             # 3. Evaluate constraints
             constraint_evals = await self._constraint_evaluator.evaluate(
@@ -261,14 +272,16 @@ class LLMPolicyEngine(StatefulPolicyEngine):
 
             for cv in constraint_evals:
                 if cv.violated:
-                    violations.append({
-                        "name": cv.constraint_id,
-                        "severity": cv.severity,
-                        "message": cv.evidence,
-                        "confidence": cv.confidence,
-                    })
+                    violation_records.append(ViolationRecord(
+                        rule_id=cv.constraint_id,
+                        rule_name=cv.constraint_id,
+                        reason=cv.evidence,
+                        severity=cv.severity,
+                        engine=self.name,
+                        confidence=cv.confidence,
+                    ))
 
-            # 4. Decide intervention
+            # 4. Decide intervention message (still engine-owned for formatting)
             intervention_message = None
             if self._intervention_engine:
                 intervention_message = self._intervention_engine.decide(
@@ -289,32 +302,52 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                 },
             )
 
-            # 6. Determine decision and message
-            decision = Decision.ALLOW
-            result_message: str | None = None
-
-            if intervention_message:
+            # 6. Build result — if intervention engine decided to intervene,
+            #    add a top-level violation so the interceptor can act on it
+            if intervention_message and not violation_records:
                 from openbias.core.intervention.strategies import format_message
 
-                decision = Decision.INTERVENE
                 template_context = {
                     "state": classification.best_state,
                     "drift": drift.composite,
                     "drift_level": drift.level.value,
                 }
-                result_message = format_message(
-                    intervention_message, template_context
+                formatted = format_message(intervention_message, template_context)
+                violation_records.append(ViolationRecord(
+                    rule_id="llm_intervention",
+                    rule_name="llm_intervention",
+                    reason=formatted,
+                    severity="warning",
+                    engine=self.name,
+                ))
+            elif intervention_message and violation_records:
+                # Override the first violation's reason with the formatted message
+                from openbias.core.intervention.strategies import format_message
+
+                template_context = {
+                    "state": classification.best_state,
+                    "drift": drift.composite,
+                    "drift_level": drift.level.value,
+                }
+                violation_records[0] = ViolationRecord(
+                    rule_id=violation_records[0].rule_id,
+                    rule_name=violation_records[0].rule_name,
+                    reason=format_message(intervention_message, template_context),
+                    severity=violation_records[0].severity,
+                    engine=self.name,
                 )
 
             severity_order = ["critical", "error", "warning", "info"]
             max_severity = next(
-                (s for s in severity_order if any(v["severity"] == s for v in violations)),
+                (s for s in severity_order if any(v.severity == s for v in violation_records)),
                 None,
             )
 
-            return EngineResult(
-                decision=decision,
-                message=result_message,
+            status = EvaluationStatus.VIOLATION if violation_records else EvaluationStatus.ALLOW
+
+            return EvaluationResult(
+                status=status,
+                violations=violation_records,
                 metadata={
                     "state": classification.best_state,
                     "confidence": classification.best_confidence,
@@ -322,17 +355,16 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                     "drift": drift.composite,
                     "drift_level": drift.level.value,
                     "transition_legal": classification.transition_legal,
-                    "violations": violations,
                     "max_severity": max_severity,
                 },
-            )
+            ).to_engine_result()
 
         except Exception as e:
             logger.error(f"Response evaluation failed: {e}")
-            return EngineResult(
-                decision=Decision.ALLOW,
+            return EvaluationResult(
+                status=EvaluationStatus.ALLOW,
                 metadata={"error": str(e)},
-            )
+            ).to_engine_result()
 
     @require_initialized
     async def classify_response(
