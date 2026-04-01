@@ -23,9 +23,9 @@ logger = logging.getLogger(__name__)
 class InterventionHandler:
     """Decides whether to intervene based on violations and drift.
 
-    Handles cooldown to prevent intervention spam, self-correction detection,
-    and max attempt caps. Returns a message template string for the interceptor
-    to apply using its configured strategy.
+    Handles cooldown to prevent intervention spam and self-correction detection.
+    Returns a message template string for the interceptor to apply using its
+    configured strategy.
 
     Example:
         handler = InterventionHandler(workflow, cooldown_turns=2)
@@ -38,12 +38,10 @@ class InterventionHandler:
         workflow: WorkflowDefinition,
         cooldown_turns: int = 2,
         self_correction_margin: float = 0.1,
-        max_intervention_attempts: int = 3,
     ):
         self.workflow = workflow
         self.cooldown_turns = cooldown_turns
         self.self_correction_margin = self_correction_margin
-        self.max_intervention_attempts = max_intervention_attempts
 
     def decide(
         self,
@@ -61,19 +59,11 @@ class InterventionHandler:
         Returns:
             Message template string if intervention needed, None otherwise
         """
-        # Check for critical violations that bypass cooldown and max-attempts cap
+        # Check for critical violations that bypass cooldown
         has_critical = any(
             v.severity == "critical" and v.violated
             for v in violations
         )
-
-        # Check max intervention attempts (critical violations always pass through)
-        if not has_critical and session.intervention_count >= self.max_intervention_attempts:
-            logger.warning(
-                f"Session {session.session_id} exceeded max intervention attempts "
-                f"({session.intervention_count}/{self.max_intervention_attempts})"
-            )
-            return None
 
         # Cooldown check (skip if critical)
         if not has_critical:
@@ -109,8 +99,7 @@ class InterventionHandler:
 
         message = self._select_template(first_violation, drift, session)
 
-        # Track intervention count and update session
-        session.intervention_count += 1
+        # Update session
         session.last_intervention_turn = session.turn_count
         session.drift_at_last_intervention = drift.composite
 

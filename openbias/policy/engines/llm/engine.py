@@ -151,7 +151,6 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         self._intervention_engine = InterventionHandler(
             self._workflow,
             cooldown_turns=config.get("cooldown_turns", 2),
-            max_intervention_attempts=config.get("max_intervention_attempts", 3),
         )
 
         self._initialized = True
