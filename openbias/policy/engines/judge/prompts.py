@@ -184,7 +184,7 @@ CONVERSATION_SYSTEM = """\
 You are an expert conversation evaluator. Your task is to evaluate an AI agent's \
 behavior across an ENTIRE conversation, not just a single response.
 
-You will assess the full conversation trajectory against policy criteria. \
+You will assess the full conversation trajectory against evaluation criteria. \
 Look for patterns, consistency, cumulative issues, and overall quality.
 
 {criteria_block}
@@ -232,7 +232,7 @@ Evaluate the full trajectory against each criterion and return JSON."""
 
 
 def format_criteria_block(criteria: list) -> str:
-    """Format rubric criteria into a prompt block.
+    """Format evaluation criteria into a prompt block.
 
     Args:
         criteria: List of RubricCriterion objects.

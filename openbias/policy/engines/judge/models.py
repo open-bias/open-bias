@@ -2,7 +2,7 @@
 Type definitions for the LLM-as-a-Judge Policy Engine.
 
 Contains all enums and dataclasses used by the judge engine
-for rubric-based evaluation, scoring, and verdict generation.
+for rules-based evaluation, scoring, and verdict generation.
 """
 
 from dataclasses import dataclass, field
@@ -25,7 +25,7 @@ class EvaluationScope(Enum):
 
 
 class ScoreScale(Enum):
-    """Scoring scale for rubric criteria."""
+    """Scoring scale for evaluation criteria."""
     BINARY = "binary"              # 0 or 1
     LIKERT_3 = "likert_3"          # 1-3
     LIKERT_5 = "likert_5"          # 1-5
@@ -52,7 +52,7 @@ class VerdictAction(Enum):
 
 @dataclass
 class RubricCriterion:
-    """Single scoring dimension within a rubric."""
+    """Single scoring dimension within a ruleset."""
     name: str
     description: str
     scale: ScoreScale = ScoreScale.LIKERT_5

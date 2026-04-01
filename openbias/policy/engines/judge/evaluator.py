@@ -58,7 +58,7 @@ def _predominant_scale(criteria: list[RubricCriterion]) -> str:
 class JudgeEvaluator:
     """Core evaluation logic for a single judge model.
 
-    Builds prompts from rubrics, calls the judge via JudgeClient,
+    Builds prompts from rulesets, calls the judge via JudgeClient,
     parses JSON responses into JudgeScore/JudgeVerdict objects,
     and maps composite scores to verdict actions.
     """
@@ -92,7 +92,7 @@ class JudgeEvaluator:
 
         Args:
             model_name: Which judge model to use.
-            rubric: Rubric with criteria to evaluate against.
+            rubric: Ruleset with criteria to evaluate against.
             response_content: The assistant response to evaluate.
             conversation: Full conversation history for context.
             reference: Optional reference/ideal answer.
@@ -192,7 +192,7 @@ class JudgeEvaluator:
 
         Args:
             model_name: Which judge model to use.
-            rubric: Conversation-scope rubric.
+            rubric: Conversation-scope ruleset.
             full_conversation: Complete message history.
             metadata: Optional metadata.
             session_context: Optional session state for evaluation history.
@@ -280,7 +280,7 @@ class JudgeEvaluator:
 
         Args:
             model_name: Which judge model to use.
-            rubric: Pairwise rubric.
+            rubric: Pairwise ruleset.
             response_a: First candidate response.
             response_b: Second candidate response.
             conversation: Conversation context.

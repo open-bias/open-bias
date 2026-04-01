@@ -2,7 +2,7 @@
 LLM-as-a-Judge Policy Engine.
 
 Evaluates agent responses and conversation trajectories against
-configurable rubrics using LLM judges.
+configurable rules using LLM judges.
 
 Usage:
     The engine is auto-registered as "judge" when this package is imported.
