@@ -1,5 +1,5 @@
 """
-Integration test: async POST_CALL evaluator returns INTERVENE with a message
+Integration test: async POST_CALL evaluator returns VIOLATION with violations
 -> next PRE_CALL applies it -> verify the modifications appear in the result.
 
 Tests the full deferred intervention flow end-to-end through the Interceptor.
@@ -10,7 +10,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 from openbias.core.interceptor import Interceptor
-from openbias.policy.protocols import Decision, EngineResult
+from openbias.policy.protocols import EvaluationResult, EvaluationStatus, ViolationRecord
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -33,7 +33,7 @@ def _mock_async_engine(
     message: str,
     metadata: dict[str, Any] | None = None,
 ) -> Any:
-    """Mock PolicyEngine that returns INTERVENE on evaluate_response and ALLOW on evaluate_request."""
+    """Mock PolicyEngine that returns VIOLATION on evaluate_response and ALLOW on evaluate_request."""
     engine = MagicMock()
     type(engine).name = PropertyMock(return_value="fake_async_intervention")
 
@@ -41,18 +41,18 @@ def _mock_async_engine(
         session_id: str,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
-        return EngineResult(decision=Decision.ALLOW)
+    ) -> EvaluationResult:
+        return EvaluationResult(status=EvaluationStatus.ALLOW)
 
     async def _evaluate_response(
         session_id: str,
         response_data: Any,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
-        return EngineResult(
-            decision=Decision.INTERVENE,
-            message=message,
+    ) -> EvaluationResult:
+        return EvaluationResult(
+            status=EvaluationStatus.VIOLATION,
+            violations=[ViolationRecord(rule_id="test", rule_name="test", reason=message, engine="test")],
             metadata=metadata or {},
         )
 
@@ -69,7 +69,7 @@ def _mock_async_engine(
 class TestDeferredInterventionIntegration:
 
     async def test_system_prompt_append_applied(self):
-        """Async evaluator returns INTERVENE -> system prompt is appended on next PRE_CALL."""
+        """Async evaluator returns VIOLATION -> system prompt is appended on next PRE_CALL."""
         engine = _mock_async_engine(
             message="Always verify identity first.",
             metadata={"strategy": "system_prompt_append"},
@@ -88,7 +88,7 @@ class TestDeferredInterventionIntegration:
         assert "Always verify identity first." in system_msg["content"]
 
     async def test_user_message_inject_applied(self):
-        """Async evaluator returns INTERVENE with user_message_inject strategy."""
+        """Async evaluator returns VIOLATION with user_message_inject strategy."""
         engine = _mock_async_engine(
             message="Please verify identity.",
         )

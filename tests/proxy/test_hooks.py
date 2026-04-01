@@ -1035,7 +1035,7 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
     """
     from openbias.proxy.hooks import Callback
     from openbias.core.interceptor import Interceptor
-    from openbias.policy.protocols import Decision, EngineResult
+    from openbias.policy.protocols import EvaluationResult, EvaluationStatus, ViolationRecord
 
     # Build settings with fail_action="block"
     settings = MagicMock()
@@ -1055,13 +1055,17 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
     cb = Callback(settings=settings)
     cb._tracer = None
 
-    # Create a mock policy engine that returns INTERVENE
+    # Create a mock policy engine that returns VIOLATION
     mock_engine = AsyncMock()
     mock_engine.name = "test-engine"
     mock_engine.evaluate_request = AsyncMock(
-        return_value=EngineResult(
-            decision=Decision.INTERVENE,
-            message="please be more careful",
+        return_value=EvaluationResult(
+            status=EvaluationStatus.VIOLATION,
+            violations=[ViolationRecord(
+                rule_id="test", rule_name="test",
+                reason="please be more careful",
+                engine="test",
+            )],
         )
     )
 
@@ -1218,7 +1222,7 @@ async def test_pre_call_runs_only_pre_call_evaluators_end_to_end(
     """During pre_call, only pre_call evaluators run; post_call evaluators are not consulted."""
     from openbias.proxy.hooks import Callback
     from openbias.core.interceptor import Interceptor
-    from openbias.policy.protocols import Decision, EngineResult
+    from openbias.policy.protocols import EvaluationResult, EvaluationStatus, ViolationRecord
 
     mock_settings.hook_timeout_seconds = 5.0
     mock_settings.mode = "sync"
@@ -1226,29 +1230,41 @@ async def test_pre_call_runs_only_pre_call_evaluators_end_to_end(
     cb = Callback(settings=mock_settings)
     cb._tracer = None
 
-    # Pre-call evaluator that returns INTERVENE
+    # Pre-call evaluator that returns VIOLATION (interceptor maps to INTERVENE)
     pre_engine = AsyncMock()
     pre_engine.name = "pre-engine"
     pre_engine.evaluate_request = AsyncMock(
-        return_value=EngineResult(
-            decision=Decision.INTERVENE,
-            message="pre-call intervention",
+        return_value=EvaluationResult(
+            status=EvaluationStatus.VIOLATION,
+            violations=[ViolationRecord(
+                rule_id="test", rule_name="test",
+                reason="pre-call intervention",
+                engine="test",
+            )],
         )
     )
 
-    # Post-call evaluator that returns BLOCK (should NOT fire during pre_call)
+    # Post-call evaluator that returns VIOLATION (should NOT fire during pre_call)
     post_engine = AsyncMock()
     post_engine.name = "post-engine"
     post_engine.evaluate_request = AsyncMock(
-        return_value=EngineResult(
-            decision=Decision.BLOCK,
-            message="post-call block",
+        return_value=EvaluationResult(
+            status=EvaluationStatus.VIOLATION,
+            violations=[ViolationRecord(
+                rule_id="test", rule_name="test",
+                reason="post-call block",
+                engine="test",
+            )],
         )
     )
     post_engine.evaluate_response = AsyncMock(
-        return_value=EngineResult(
-            decision=Decision.BLOCK,
-            message="post-call block",
+        return_value=EvaluationResult(
+            status=EvaluationStatus.VIOLATION,
+            violations=[ViolationRecord(
+                rule_id="test", rule_name="test",
+                reason="post-call block",
+                engine="test",
+            )],
         )
     )
 

@@ -25,7 +25,9 @@ import pytest
 
 from openbias.core.interceptor import (
     Decision,
-    EngineResult,
+    EvaluationResult,
+    EvaluationStatus,
+    ViolationRecord,
     Interceptor,
 )
 
@@ -41,13 +43,40 @@ def _request(content: str = "hello") -> dict[str, Any]:
     return {"messages": [{"role": "user", "content": content}], "model": "gpt-4"}
 
 
+def _to_evaluation_result(
+    decision: Decision,
+    message: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> EvaluationResult:
+    """Convert a legacy Decision + message to an EvaluationResult."""
+    if decision == Decision.ALLOW:
+        return EvaluationResult(
+            status=EvaluationStatus.ALLOW,
+            metadata=metadata or {},
+        )
+    # BLOCK and INTERVENE both map to VIOLATION — interceptor handles enforcement
+    violations = []
+    if message:
+        violations.append(ViolationRecord(
+            rule_id="test_violation",
+            rule_name="test_violation",
+            reason=message,
+            severity="error",
+            engine="test",
+        ))
+    return EvaluationResult(
+        status=EvaluationStatus.VIOLATION,
+        violations=violations,
+        metadata=metadata or {},
+    )
+
+
 def _mock_engine(
     *,
     name: str = "fake",
     decision: Decision = Decision.ALLOW,
     message: str | None = None,
     metadata: dict[str, Any] | None = None,
-    modified_messages: list[dict[str, Any]] | None = None,
     delay: float = 0,
     raise_on_evaluate: Exception | None = None,
 ) -> MagicMock:
@@ -59,34 +88,24 @@ def _mock_engine(
         session_id: str,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
+    ) -> EvaluationResult:
         if delay > 0:
             await asyncio.sleep(delay)
         if raise_on_evaluate:
             raise raise_on_evaluate
-        return EngineResult(
-            decision=decision,
-            message=message,
-            metadata=metadata or {},
-            modified_messages=modified_messages,
-        )
+        return _to_evaluation_result(decision, message, metadata)
 
     async def _evaluate_response(
         session_id: str,
         response_data: Any,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
+    ) -> EvaluationResult:
         if delay > 0:
             await asyncio.sleep(delay)
         if raise_on_evaluate:
             raise raise_on_evaluate
-        return EngineResult(
-            decision=decision,
-            message=message,
-            metadata=metadata or {},
-            modified_messages=modified_messages,
-        )
+        return _to_evaluation_result(decision, message, metadata)
 
     engine.evaluate_request = AsyncMock(side_effect=_evaluate_request)
     engine.evaluate_response = AsyncMock(side_effect=_evaluate_response)
@@ -111,12 +130,15 @@ class TestSyncPreCall:
         assert result.modified_data is None
 
     async def test_block_blocks(self):
-        """BLOCK evaluator blocks the request."""
+        """VIOLATION with fail_action=block blocks the request."""
         evaluator = _mock_engine(
             decision=Decision.BLOCK,
             message="forbidden",
         )
-        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator], post_call_evaluators=[],
+            fail_action="block",
+        )
 
         result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
 
@@ -124,7 +146,7 @@ class TestSyncPreCall:
         assert result.message == "forbidden"
 
     async def test_block_short_circuits(self):
-        """First evaluator BLOCKs — second evaluator never runs."""
+        """First evaluator returns VIOLATION with fail_action=block — second evaluator never runs."""
         e1 = _mock_engine(
             name="blocker",
             decision=Decision.BLOCK,
@@ -135,14 +157,17 @@ class TestSyncPreCall:
             session_id: str,
             request_data: dict[str, Any],
             context: dict[str, Any] | None = None,
-        ) -> EngineResult:
+        ) -> EvaluationResult:
             nonlocal call_count
             call_count += 1
-            return EngineResult(decision=Decision.ALLOW)
+            return EvaluationResult(status=EvaluationStatus.ALLOW)
 
         e2 = _mock_engine(name="skipped")
         e2.evaluate_request = AsyncMock(side_effect=counting_evaluate_request)
-        interceptor = Interceptor(pre_call_evaluators=[e1, e2], post_call_evaluators=[])
+        interceptor = Interceptor(
+            pre_call_evaluators=[e1, e2], post_call_evaluators=[],
+            fail_action="block",
+        )
 
         result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
 
@@ -233,39 +258,6 @@ class TestSyncPreCall:
         assert result.allowed is True
         assert result.modified_data is None
 
-    async def test_intervene_modified_messages_replaces_messages(self):
-        """INTERVENE with modified_messages replaces request messages directly."""
-        sanitized = [{"role": "user", "content": "sanitized hello"}]
-        evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            modified_messages=sanitized,
-        )
-        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
-        req = _request()
-
-        result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
-
-        assert result.allowed is True
-        assert result.modified_data is not None
-        assert result.modified_data["messages"] == sanitized
-
-    async def test_intervene_modified_messages_takes_precedence_over_message(self):
-        """modified_messages takes precedence over message text."""
-        sanitized = [{"role": "user", "content": "sanitized"}]
-        evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            message="This should be ignored",
-            modified_messages=sanitized,
-        )
-        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
-        req = _request()
-
-        result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
-
-        assert result.allowed is True
-        assert result.modified_data is not None
-        assert result.modified_data["messages"] == sanitized
-
     async def test_intervene_response_modification_strategy_does_not_modify_request(self):
         """INTERVENE with response_modification strategy leaves request unmodified during PRE_CALL.
 
@@ -330,13 +322,14 @@ class TestSyncPostCall:
         assert result.modified_data is None
 
     async def test_block_blocks(self):
-        """BLOCK evaluator — response is blocked."""
+        """VIOLATION with fail_action=block — response is blocked."""
         evaluator = _mock_engine(
             decision=Decision.BLOCK,
             message="toxic content",
         )
         interceptor = Interceptor(
-            pre_call_evaluators=[], post_call_evaluators=[evaluator], mode="sync"
+            pre_call_evaluators=[], post_call_evaluators=[evaluator], mode="sync",
+            fail_action="block",
         )
 
         result = await interceptor.run_post_call(
@@ -365,27 +358,6 @@ class TestSyncPostCall:
         interventions = result.modified_data["_interventions"]
         assert len(interventions) == 1
         assert interventions[0]["message"] == "Dangerous tool call detected"
-
-    async def test_intervene_with_modified_messages(self):
-        """INTERVENE with modified_messages passes them through."""
-        sanitized = [{"role": "assistant", "content": "I cannot do that."}]
-        evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            message="Replaced dangerous response",
-            modified_messages=sanitized,
-        )
-        interceptor = Interceptor(
-            pre_call_evaluators=[], post_call_evaluators=[evaluator], mode="sync"
-        )
-
-        result = await interceptor.run_post_call(
-            SESSION, _request(), {"answer": "bad"}, REQUEST_ID
-        )
-
-        assert result.allowed is True
-        assert result.modified_data is not None
-        interventions = result.modified_data["_interventions"]
-        assert interventions[0]["modified_messages"] == sanitized
 
     async def test_multiple_intervene_evaluators_accumulate(self):
         """Multiple INTERVENE evaluators — all interventions are collected."""
@@ -495,7 +467,7 @@ class TestAsyncEvaluatorLifecycle:
         assert "Remember the workflow" in guidance_msg["content"]
 
     async def test_async_block_blocks_next_request(self):
-        """Async evaluator returns BLOCK — next PRE_CALL blocks."""
+        """Async evaluator returns VIOLATION with fail_action=block — next PRE_CALL blocks."""
         async_evaluator = _mock_engine(
             name="async_blocker",
             decision=Decision.BLOCK,
@@ -503,7 +475,8 @@ class TestAsyncEvaluatorLifecycle:
             delay=0.01,
         )
         interceptor = Interceptor(
-            pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
+            pre_call_evaluators=[], post_call_evaluators=[async_evaluator],
+            fail_action="block",
         )
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
@@ -539,9 +512,9 @@ class TestAsyncEvaluatorLifecycle:
             response_data: Any,
             request_data: dict[str, Any],
             context: dict[str, Any] | None = None,
-        ) -> EngineResult:
+        ) -> EvaluationResult:
             await asyncio.sleep(0.01)
-            return EngineResult(decision=Decision.BLOCK, message="blocked by B")
+            return _to_evaluation_result(Decision.BLOCK, "blocked by B")
 
         engine_b.evaluate_response = AsyncMock(side_effect=_b_response)
 
@@ -553,15 +526,16 @@ class TestAsyncEvaluatorLifecycle:
             response_data: Any,
             request_data: dict[str, Any],
             context: dict[str, Any] | None = None,
-        ) -> EngineResult:
+        ) -> EvaluationResult:
             await asyncio.sleep(0.01)
-            return EngineResult(decision=Decision.INTERVENE, message="intervention from C")
+            return _to_evaluation_result(Decision.INTERVENE, "intervention from C")
 
         engine_c.evaluate_response = AsyncMock(side_effect=_c_response)
 
         interceptor = Interceptor(
             pre_call_evaluators=[],
             post_call_evaluators=[engine_a, engine_b, engine_c],
+            fail_action="block",
         )
 
         # Request 1: fire all three async evaluators
@@ -569,18 +543,16 @@ class TestAsyncEvaluatorLifecycle:
         # Wait for all three to complete
         await asyncio.sleep(0.1)
 
-        # Request 2: A=ALLOW processed, B=BLOCK causes early return.
+        # Request 2: A=ALLOW processed, B=VIOLATION→BLOCK causes early return.
         # C's result must remain in session.
         result2 = await interceptor.run_pre_call(SESSION, _request(), "req-002")
         assert result2.allowed is False
         assert "blocked by B" in (result2.message or "")
 
-        # Request 3: C's INTERVENE result should be applied.
+        # Request 3: C's VIOLATION result should also block (fail_action=block).
         result3 = await interceptor.run_pre_call(SESSION, _request(), "req-003")
-        assert result3.allowed is True
-        assert result3.modified_data is not None
-        contents = [m["content"] for m in result3.modified_data["messages"]]
-        assert any("intervention from C" in c for c in contents)
+        assert result3.allowed is False
+        assert "intervention from C" in (result3.message or "")
 
 
 # ===========================================================================
@@ -854,9 +826,9 @@ class TestAsyncContextPassing:
             response_data: Any,
             request_data: dict[str, Any],
             context: dict[str, Any] | None = None,
-        ) -> EngineResult:
+        ) -> EvaluationResult:
             received_context.update(context or {})
-            return EngineResult(decision=Decision.ALLOW)
+            return EvaluationResult(status=EvaluationStatus.ALLOW)
 
         evaluator = _mock_engine(name="ctx_engine")
         evaluator.evaluate_response = AsyncMock(side_effect=_evaluate_response)
@@ -879,9 +851,9 @@ class TestAsyncContextPassing:
             response_data: Any,
             request_data: dict[str, Any],
             context: dict[str, Any] | None = None,
-        ) -> EngineResult:
+        ) -> EvaluationResult:
             received_context.update(context or {})
-            return EngineResult(decision=Decision.ALLOW)
+            return EvaluationResult(status=EvaluationStatus.ALLOW)
 
         evaluator = _mock_engine(name="ctx_suppress")
         evaluator.evaluate_response = AsyncMock(side_effect=_evaluate_response)
@@ -907,9 +879,9 @@ class TestAsyncContextPassing:
             session_id: str,
             request_data: dict[str, Any],
             context: dict[str, Any] | None = None,
-        ) -> EngineResult:
+        ) -> EvaluationResult:
             received_context.update(context or {})
-            return EngineResult(decision=Decision.ALLOW)
+            return EvaluationResult(status=EvaluationStatus.ALLOW)
 
         evaluator = _mock_engine(name="ctx_pre")
         evaluator.evaluate_request = AsyncMock(side_effect=_evaluate_request)
@@ -931,9 +903,9 @@ class TestAsyncContextPassing:
             response_data: Any,
             request_data: dict[str, Any],
             context: dict[str, Any] | None = None,
-        ) -> EngineResult:
+        ) -> EvaluationResult:
             received_context.update(context or {})
-            return EngineResult(decision=Decision.ALLOW)
+            return EvaluationResult(status=EvaluationStatus.ALLOW)
 
         evaluator = _mock_engine(name="ctx_exec_span")
         evaluator.evaluate_response = AsyncMock(side_effect=_evaluate_response)

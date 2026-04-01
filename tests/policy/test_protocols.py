@@ -9,8 +9,10 @@ import pytest
 
 from openbias.policy.protocols import (
     Decision,
-    EngineResult,
+    EvaluationResult,
+    EvaluationStatus,
     PolicyEngine,
+    ViolationRecord,
     require_initialized,
 )
 from openbias.policy.engines.stateful import (
@@ -39,32 +41,30 @@ class TestDecision:
 
 
 # ---------------------------------------------------------------------------
-# EngineResult
+# EvaluationResult
 # ---------------------------------------------------------------------------
 
-class TestEngineResult:
+class TestEvaluationResult:
     def test_defaults(self):
-        r = EngineResult(decision=Decision.ALLOW)
-        assert r.decision == Decision.ALLOW
-        assert r.message is None
+        r = EvaluationResult(status=EvaluationStatus.ALLOW)
+        assert r.status == EvaluationStatus.ALLOW
+        assert r.violations == []
         assert r.metadata == {}
-        assert r.modified_messages is None
 
     def test_with_all_fields(self):
-        r = EngineResult(
-            decision=Decision.BLOCK,
-            message="blocked",
+        r = EvaluationResult(
+            status=EvaluationStatus.VIOLATION,
+            violations=[ViolationRecord(rule_id="r1", rule_name="blocked", reason="policy", engine="test")],
             metadata={"reason": "policy"},
-            modified_messages=[{"role": "system", "content": "stop"}],
         )
-        assert r.decision == Decision.BLOCK
-        assert r.message == "blocked"
+        assert r.status == EvaluationStatus.VIOLATION
+        assert len(r.violations) == 1
+        assert r.violations[0].reason == "policy"
         assert r.metadata == {"reason": "policy"}
-        assert r.modified_messages == [{"role": "system", "content": "stop"}]
 
     def test_metadata_is_independent(self):
-        r1 = EngineResult(decision=Decision.ALLOW)
-        r2 = EngineResult(decision=Decision.ALLOW)
+        r1 = EvaluationResult(status=EvaluationStatus.ALLOW)
+        r2 = EvaluationResult(status=EvaluationStatus.ALLOW)
         r1.metadata["key"] = "val"
         assert "key" not in r2.metadata
 
@@ -195,10 +195,10 @@ class TestPolicyEngineInterface:
                 pass
 
             async def evaluate_request(self, session_id, request_data, context=None):
-                return EngineResult(decision=Decision.ALLOW)
+                return EvaluationResult(status=EvaluationStatus.ALLOW)
 
             async def evaluate_response(self, session_id, response_data, request_data, context=None):
-                return EngineResult(decision=Decision.ALLOW)
+                return EvaluationResult(status=EvaluationStatus.ALLOW)
 
             async def get_session_state(self, session_id):
                 return None
@@ -224,10 +224,10 @@ class TestPolicyEngineInterface:
                 pass
 
             async def evaluate_request(self, session_id, request_data, context=None):
-                return EngineResult(decision=Decision.ALLOW)
+                return EvaluationResult(status=EvaluationStatus.ALLOW)
 
             async def evaluate_response(self, session_id, response_data, request_data, context=None):
-                return EngineResult(decision=Decision.ALLOW)
+                return EvaluationResult(status=EvaluationStatus.ALLOW)
 
             async def get_session_state(self, session_id):
                 return None
@@ -253,10 +253,10 @@ class TestPolicyEngineInterface:
                 pass
 
             async def evaluate_request(self, session_id, request_data, context=None):
-                return EngineResult(decision=Decision.ALLOW)
+                return EvaluationResult(status=EvaluationStatus.ALLOW)
 
             async def evaluate_response(self, session_id, response_data, request_data, context=None):
-                return EngineResult(decision=Decision.ALLOW)
+                return EvaluationResult(status=EvaluationStatus.ALLOW)
 
             async def get_session_state(self, session_id):
                 return None

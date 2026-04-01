@@ -9,24 +9,24 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from openbias.eval.runner import EvalRunner, _split_turns
-from openbias.policy.protocols import Decision, EngineResult
+from openbias.policy.protocols import EvaluationResult, EvaluationStatus
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _allow() -> EngineResult:
-    return EngineResult(decision=Decision.ALLOW)
+def _allow() -> EvaluationResult:
+    return EvaluationResult(status=EvaluationStatus.ALLOW)
 
 
-def _block() -> EngineResult:
-    return EngineResult(decision=Decision.BLOCK)
+def _block() -> EvaluationResult:
+    return EvaluationResult(status=EvaluationStatus.VIOLATION)
 
 
 def _mock_engine(
-    request_result: EngineResult | None = None,
-    response_result: EngineResult | None = None,
+    request_result: EvaluationResult | None = None,
+    response_result: EvaluationResult | None = None,
     engine_type: str = "mock",
 ) -> MagicMock:
     engine = MagicMock()
@@ -149,8 +149,8 @@ class TestEvalRunnerRun:
         assert result.error is None
         assert len(result.turns) == 1
         assert result.turns[0].turn_index == 0
-        assert result.turns[0].request_eval.decision == Decision.ALLOW
-        assert result.turns[0].response_eval.decision == Decision.ALLOW
+        assert result.turns[0].request_eval.status == EvaluationStatus.ALLOW
+        assert result.turns[0].response_eval.status == EvaluationStatus.ALLOW
 
     async def test_uses_provided_session_id(self, runner):
         engine = _mock_engine()

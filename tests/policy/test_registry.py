@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from openbias.policy.protocols import Decision, EngineResult, PolicyEngine
+from openbias.policy.protocols import EvaluationResult, EvaluationStatus, PolicyEngine
 from openbias.policy.registry import PolicyEngineRegistry, register_engine
 
 
@@ -28,10 +28,10 @@ class _DummyEngine(PolicyEngine):
         pass
 
     async def evaluate_request(self, session_id, request_data, context=None):
-        return EngineResult(decision=Decision.ALLOW)
+        return EvaluationResult(status=EvaluationStatus.ALLOW)
 
     async def evaluate_response(self, session_id, response_data, request_data, context=None):
-        return EngineResult(decision=Decision.ALLOW)
+        return EvaluationResult(status=EvaluationStatus.ALLOW)
 
     async def get_session_state(self, session_id) -> Optional[Dict[str, Any]]:
         return None

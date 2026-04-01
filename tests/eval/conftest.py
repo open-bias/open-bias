@@ -3,24 +3,34 @@
 from __future__ import annotations
 
 from openbias.eval.runner import EvalResult, TurnResult
-from openbias.policy.protocols import Decision, EngineResult
+from openbias.policy.protocols import EvaluationResult, EvaluationStatus, ViolationRecord
 
 
 def make_turn(
     idx: int,
-    decision: Decision = Decision.ALLOW,
+    status: EvaluationStatus = EvaluationStatus.ALLOW,
     violations: list | None = None,
-    request_decision: Decision = Decision.ALLOW,
+    request_status: EvaluationStatus = EvaluationStatus.ALLOW,
     request_violations: list | None = None,
 ) -> TurnResult:
     meta = {"violations": violations or []}
     request_meta = {"violations": request_violations or []}
+
+    def _make_eval(st: EvaluationStatus, m: dict) -> EvaluationResult:
+        if st == EvaluationStatus.VIOLATION:
+            return EvaluationResult(
+                status=st,
+                violations=[ViolationRecord(rule_id="test", rule_name="test", reason="violation", engine="test")],
+                metadata=m,
+            )
+        return EvaluationResult(status=st, metadata=m)
+
     return TurnResult(
         turn_index=idx,
         request_data={"messages": [], "model": "test"},
         response_data={},
-        request_eval=EngineResult(decision=request_decision, metadata=request_meta),
-        response_eval=EngineResult(decision=decision, metadata=meta),
+        request_eval=_make_eval(request_status, request_meta),
+        response_eval=_make_eval(status, meta),
     )
 
 
