@@ -30,7 +30,7 @@ class InterventionHandler:
     Example:
         handler = InterventionHandler(workflow, cooldown_turns=2)
         message = handler.decide(session, violations, drift)
-        # message is returned via EngineResult for the interceptor to apply
+        # message is returned via EvaluationResult for the interceptor to apply
     """
 
     def __init__(
