@@ -9,9 +9,11 @@ These tests ensure:
 1. ALLOW results pass through correctly
 2. VIOLATION results are mapped to the correct enforcement action by the interceptor
 3. Violation metadata has the expected normalized shape (name, message, severity, engine)
+4. Real engines populate ViolationRecord with required fields
 """
 
 import pytest
+import sys
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -177,3 +179,229 @@ class TestFailActionWithEvaluationResult:
 
         assert result.allowed is True
         assert result.modified_data is not None
+
+
+# ---------------------------------------------------------------------------
+# Real engine conformance: ViolationRecord required fields
+# ---------------------------------------------------------------------------
+
+
+def _assert_violation_record_shape(violation: ViolationRecord, engine_name: str) -> None:
+    """Assert that a ViolationRecord has all required fields populated."""
+    assert isinstance(violation.rule_id, str) and violation.rule_id, (
+        f"{engine_name}: rule_id must be a non-empty string, got {violation.rule_id!r}"
+    )
+    assert isinstance(violation.rule_name, str) and violation.rule_name, (
+        f"{engine_name}: rule_name must be a non-empty string, got {violation.rule_name!r}"
+    )
+    assert isinstance(violation.reason, str) and violation.reason, (
+        f"{engine_name}: reason must be a non-empty string, got {violation.reason!r}"
+    )
+    assert isinstance(violation.engine, str) and violation.engine, (
+        f"{engine_name}: engine must be a non-empty string, got {violation.engine!r}"
+    )
+    assert isinstance(violation.severity, str) and violation.severity, (
+        f"{engine_name}: severity must be a non-empty string, got {violation.severity!r}"
+    )
+    assert isinstance(violation.scope, str) and violation.scope, (
+        f"{engine_name}: scope must be a non-empty string, got {violation.scope!r}"
+    )
+
+
+class TestFSMEngineConformance:
+    """FSM engine produces conformant ViolationRecord entries."""
+
+    @pytest.fixture
+    async def fsm_engine(self):
+        from pathlib import Path
+        from openbias.policy.registry import PolicyEngineRegistry
+
+        workflow_path = (
+            Path(__file__).resolve().parent.parent.parent
+            / "examples"
+            / "fsm_workflow"
+            / "customer_support.yaml"
+        )
+        engine = await PolicyEngineRegistry.create_and_initialize(
+            "fsm", {"config_path": str(workflow_path)}
+        )
+        yield engine
+        await engine.shutdown()
+
+    async def test_violation_record_shape(self, fsm_engine):
+        """FSM violations have all required fields populated."""
+        import json
+        from pathlib import Path
+        from openbias.eval.runner import EvalRunner
+
+        evals_dir = Path(__file__).resolve().parent.parent.parent / "evals" / "fsm"
+        messages = json.loads((evals_dir / "skip_verification.json").read_text())
+        result = await EvalRunner().run(fsm_engine, messages)
+
+        violations = [v for t in result.turns for v in t.response_eval.violations]
+        assert len(violations) > 0, "Expected at least one FSM violation"
+
+        for v in violations:
+            _assert_violation_record_shape(v, "fsm")
+
+
+class TestNeMoEngineConformance:
+    """NeMo engine produces conformant ViolationRecord entries."""
+
+    async def test_violation_record_shape(self):
+        """NeMo violations have all required fields populated."""
+        mock_nemo = MagicMock()
+        sys.modules["nemoguardrails"] = mock_nemo
+
+        from openbias.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
+
+        engine = NemoGuardrailsPolicyEngine()
+
+        mock_nemo.RailsConfig.from_path.return_value = MagicMock()
+        mock_rails = mock_nemo.LLMRails.return_value = MagicMock()
+
+        rail_result = MagicMock(spec=["log"])
+        rail_result.log = MagicMock(spec=["activated_rails"])
+        rail_result.log.activated_rails = [
+            {"type": "input", "name": "block jailbreak"},
+        ]
+        mock_rails.generate_async = AsyncMock(return_value=rail_result)
+
+        await engine.initialize({"config_path": "dummy"})
+
+        result = await engine.evaluate_request(
+            session_id="conformance",
+            request_data={"messages": [{"role": "user", "content": "test"}]},
+        )
+
+        assert result.status == EvaluationStatus.VIOLATION
+        assert len(result.violations) > 0
+
+        for v in result.violations:
+            _assert_violation_record_shape(v, "nemo")
+            assert "provider_decision" in v.extra, "NeMo violations must include provider_decision"
+
+    async def test_error_path_violation_record_shape(self):
+        """NeMo fail_closed error violations have all required fields."""
+        mock_nemo = MagicMock()
+        sys.modules["nemoguardrails"] = mock_nemo
+
+        from openbias.policy.engines.nemo.engine import NemoGuardrailsPolicyEngine
+
+        engine = NemoGuardrailsPolicyEngine()
+        mock_nemo.RailsConfig.from_path.return_value = MagicMock()
+        mock_rails = mock_nemo.LLMRails.return_value = MagicMock()
+        mock_rails.generate_async = AsyncMock(side_effect=RuntimeError("timeout"))
+
+        await engine.initialize({"config_path": "dummy", "fail_closed": True})
+
+        result = await engine.evaluate_request(
+            session_id="conformance-err",
+            request_data={"messages": [{"role": "user", "content": "test"}]},
+        )
+
+        assert result.status == EvaluationStatus.VIOLATION
+        for v in result.violations:
+            _assert_violation_record_shape(v, "nemo:error-path")
+            assert v.extra.get("provider_decision") == "block"
+
+
+class TestJudgeEngineConformance:
+    """Judge engine produces conformant ViolationRecord entries."""
+
+    async def test_violation_record_shape(self):
+        """Judge violations have all required fields populated."""
+        from openbias.policy.engines.judge.engine import JudgePolicyEngine
+
+        engine = JudgePolicyEngine()
+        await engine.initialize({
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "inline_policy": ["Be helpful", "Be safe"],
+        })
+
+        # Mock the judge call to return a failing verdict
+        engine._client.call_judge = AsyncMock(return_value={
+            "scores": [
+                {
+                    "criterion": c.name,
+                    "score": 0,
+                    "reasoning": "Violated policy",
+                    "evidence": ["bad content"],
+                    "confidence": 0.9,
+                }
+                for c in engine._registry.get("inline_policy").criteria[:1]
+            ] + [
+                {
+                    "criterion": c.name,
+                    "score": 1,
+                    "reasoning": "OK",
+                    "evidence": [],
+                    "confidence": 0.9,
+                }
+                for c in engine._registry.get("inline_policy").criteria[1:]
+            ],
+            "summary": "Policy violation detected.",
+        })
+
+        result = await engine.evaluate_response(
+            "conformance",
+            {"choices": [{"message": {"content": "bad response"}}]},
+            {"messages": [{"role": "user", "content": "test"}]},
+        )
+
+        assert result.status == EvaluationStatus.VIOLATION
+        assert len(result.violations) > 0
+
+        for v in result.violations:
+            _assert_violation_record_shape(v, "judge")
+            assert v.confidence is not None, "Judge violations must include confidence"
+
+
+class TestLLMEngineConformance:
+    """LLM engine produces conformant ViolationRecord entries."""
+
+    async def test_violation_record_shape(self):
+        """LLM engine violations have all required fields populated."""
+        from openbias.policy.engines.llm import LLMPolicyEngine
+
+        engine = LLMPolicyEngine()
+        await engine.initialize({
+            "workflow": {
+                "name": "conformance-test",
+                "states": [
+                    {"name": "start", "is_initial": True, "description": "Start"},
+                    {"name": "end", "is_terminal": True},
+                ],
+                "transitions": [{"from_state": "start", "to_state": "end"}],
+                "constraints": [
+                    {"name": "stay_on_topic", "type": "never", "target": "off_topic"},
+                ],
+            },
+        })
+
+        # Mock classifier to return a valid state
+        engine._llm_client.complete_json = AsyncMock(
+            return_value=[{"state_id": "start", "confidence": 0.9, "reasoning": "ok"}]
+        )
+
+        # Inject a constraint violation
+        cv = MagicMock()
+        cv.violated = True
+        cv.constraint_id = "stay_on_topic"
+        cv.severity = "warning"
+        cv.evidence = "Went off topic"
+        cv.confidence = 0.85
+        engine._constraint_evaluator.evaluate = AsyncMock(return_value=[cv])
+
+        result = await engine.evaluate_response(
+            "conformance",
+            {"choices": [{"message": {"content": "off topic response"}}]},
+            {"messages": [{"role": "user", "content": "test"}]},
+        )
+
+        assert result.status == EvaluationStatus.VIOLATION
+        assert len(result.violations) > 0
+
+        for v in result.violations:
+            _assert_violation_record_shape(v, "llm")
+            assert v.confidence is not None, "LLM violations must include confidence"
