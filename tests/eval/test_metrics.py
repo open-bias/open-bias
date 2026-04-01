@@ -82,7 +82,7 @@ class TestComputeMetrics:
             response_data={},
             request_eval=EvaluationResult(
                 status=EvaluationStatus.VIOLATION,
-                violations=[ViolationRecord(rule_id="test", rule_name="test", reason="blocked_input", engine="test")],
+                violations=[ViolationRecord(reason="blocked_input", engine="test")],
                 metadata={"violations": [{"name": "blocked_input"}]},
             ),
             response_eval=EvaluationResult(status=EvaluationStatus.ALLOW),

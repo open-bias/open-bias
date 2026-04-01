@@ -51,8 +51,6 @@ def _make_result(
     violations: list[ViolationRecord] = []
     if status == EvaluationStatus.VIOLATION and violation_message:
         violations.append(ViolationRecord(
-            rule_id="test_violation",
-            rule_name="test_violation",
             reason=violation_message,
             severity="error",
             engine="test",

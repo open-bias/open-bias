@@ -52,7 +52,7 @@ def _mock_async_engine(
     ) -> EvaluationResult:
         return EvaluationResult(
             status=EvaluationStatus.VIOLATION,
-            violations=[ViolationRecord(rule_id="test", rule_name="test", reason=message, engine="test")],
+            violations=[ViolationRecord(reason=message, engine="test")],
             metadata=metadata or {},
         )
 

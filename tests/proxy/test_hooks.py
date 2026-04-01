@@ -1062,7 +1062,6 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
         return_value=EvaluationResult(
             status=EvaluationStatus.VIOLATION,
             violations=[ViolationRecord(
-                rule_id="test", rule_name="test",
                 reason="please be more careful",
                 engine="test",
             )],
@@ -1237,7 +1236,6 @@ async def test_pre_call_runs_only_pre_call_evaluators_end_to_end(
         return_value=EvaluationResult(
             status=EvaluationStatus.VIOLATION,
             violations=[ViolationRecord(
-                rule_id="test", rule_name="test",
                 reason="pre-call intervention",
                 engine="test",
             )],
@@ -1251,7 +1249,6 @@ async def test_pre_call_runs_only_pre_call_evaluators_end_to_end(
         return_value=EvaluationResult(
             status=EvaluationStatus.VIOLATION,
             violations=[ViolationRecord(
-                rule_id="test", rule_name="test",
                 reason="post-call block",
                 engine="test",
             )],
@@ -1261,7 +1258,6 @@ async def test_pre_call_runs_only_pre_call_evaluators_end_to_end(
         return_value=EvaluationResult(
             status=EvaluationStatus.VIOLATION,
             violations=[ViolationRecord(
-                rule_id="test", rule_name="test",
                 reason="post-call block",
                 engine="test",
             )],

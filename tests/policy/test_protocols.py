@@ -54,7 +54,7 @@ class TestEvaluationResult:
     def test_with_all_fields(self):
         r = EvaluationResult(
             status=EvaluationStatus.VIOLATION,
-            violations=[ViolationRecord(rule_id="r1", rule_name="blocked", reason="policy", engine="test")],
+            violations=[ViolationRecord(reason="policy", engine="test")],
             metadata={"reason": "policy"},
         )
         assert r.status == EvaluationStatus.VIOLATION

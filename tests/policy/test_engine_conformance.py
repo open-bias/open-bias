@@ -64,7 +64,7 @@ class TestFailActionWithEvaluationResult:
         violation_result = EvaluationResult(
             status=EvaluationStatus.VIOLATION,
             violations=[ViolationRecord(
-                rule_id="test", rule_name="test", reason="Stay on topic",
+                reason="Stay on topic",
                 engine="test",
             )],
         )
@@ -90,7 +90,7 @@ class TestFailActionWithEvaluationResult:
         violation_result = EvaluationResult(
             status=EvaluationStatus.VIOLATION,
             violations=[ViolationRecord(
-                rule_id="test", rule_name="test", reason="Blocked",
+                reason="Blocked",
                 engine="test",
             )],
         )
@@ -115,7 +115,7 @@ class TestFailActionWithEvaluationResult:
         violation_result = EvaluationResult(
             status=EvaluationStatus.VIOLATION,
             violations=[ViolationRecord(
-                rule_id="test", rule_name="test", reason="Logged only",
+                reason="Logged only",
                 engine="test",
             )],
         )
@@ -159,7 +159,6 @@ class TestFailActionWithEvaluationResult:
         violation_result = EvaluationResult(
             status=EvaluationStatus.VIOLATION,
             violations=[ViolationRecord(
-                rule_id="nemo_error", rule_name="nemo_error",
                 reason="NeMo evaluation failed",
                 severity="critical", engine="nemo:guardrails",
                 extra={"provider_decision": "block", "provider_reason": "timeout"},
@@ -188,12 +187,6 @@ class TestFailActionWithEvaluationResult:
 
 def _assert_violation_record_shape(violation: ViolationRecord, engine_name: str) -> None:
     """Assert that a ViolationRecord has all required fields populated."""
-    assert isinstance(violation.rule_id, str) and violation.rule_id, (
-        f"{engine_name}: rule_id must be a non-empty string, got {violation.rule_id!r}"
-    )
-    assert isinstance(violation.rule_name, str) and violation.rule_name, (
-        f"{engine_name}: rule_name must be a non-empty string, got {violation.rule_name!r}"
-    )
     assert isinstance(violation.reason, str) and violation.reason, (
         f"{engine_name}: reason must be a non-empty string, got {violation.reason!r}"
     )
@@ -416,8 +409,6 @@ class TestLLMEngineConformance:
 _MULTI_ENGINE_VIOLATIONS = [
     pytest.param(
         ViolationRecord(
-            rule_id="nemo_input_violation",
-            rule_name="nemo_input_violation",
             reason="NeMo rail triggered",
             severity="error",
             engine="nemo:guardrails",
@@ -427,8 +418,6 @@ _MULTI_ENGINE_VIOLATIONS = [
     ),
     pytest.param(
         ViolationRecord(
-            rule_id="verify_identity_before_take_account_action",
-            rule_name="verify_identity_before_take_account_action",
             reason="Constraint violated: precedence",
             severity="error",
             engine="fsm:customer_support",
@@ -437,8 +426,6 @@ _MULTI_ENGINE_VIOLATIONS = [
     ),
     pytest.param(
         ViolationRecord(
-            rule_id="judge_turn_intervene",
-            rule_name="judge_turn_intervene",
             reason="Criterion not met: safety",
             severity="intervene",
             scope="turn",
@@ -450,8 +437,6 @@ _MULTI_ENGINE_VIOLATIONS = [
     ),
     pytest.param(
         ViolationRecord(
-            rule_id="stay_on_topic",
-            rule_name="stay_on_topic",
             reason="Went off topic",
             severity="warning",
             engine="llm:test-workflow",

@@ -197,7 +197,6 @@ class TestEvaluateResponse:
         assert result.status == EvaluationStatus.VIOLATION
         assert len(result.violations) > 0
         for v in result.violations:
-            assert v.rule_name
             assert v.reason
             assert v.severity
 

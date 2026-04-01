@@ -109,7 +109,6 @@ async def test_evaluate_request_violation_violations_metadata(engine, mock_rails
 
     assert result.status == EvaluationStatus.VIOLATION
     assert len(result.violations) == 1
-    assert result.violations[0].rule_name == "nemo_input_violation"
     assert result.violations[0].reason == "block jailbreak"
     assert result.violations[0].extra["provider_decision"] == "flagged"
     assert result.violations[0].extra["rail_type"] == "input"
@@ -162,7 +161,6 @@ async def test_evaluate_response_violation_violations_metadata(engine, mock_rail
 
     assert result.status == EvaluationStatus.VIOLATION
     assert len(result.violations) == 1
-    assert result.violations[0].rule_name == "nemo_output_violation"
     assert result.violations[0].reason == "block unsafe content"
     assert result.violations[0].extra["provider_decision"] == "flagged"
     assert result.violations[0].extra["rail_type"] == "output"
@@ -273,7 +271,7 @@ async def test_violations_use_fallback_type_when_missing(engine, mock_rails):
     )
 
     assert result.status == EvaluationStatus.VIOLATION
-    assert result.violations[0].rule_name == "nemo_input_violation"
+    assert result.violations[0].engine == "nemo:guardrails"
 
 
 async def test_multiple_rail_activations_produce_multiple_violations(engine, mock_rails):
@@ -394,7 +392,6 @@ async def test_evaluate_request_varied_rail_types(
     )
 
     assert result.status == EvaluationStatus.VIOLATION
-    assert result.violations[0].rule_name == expected_violation_name
     assert result.violations[0].reason == rail_name
 
 
@@ -423,7 +420,6 @@ async def test_evaluate_response_varied_rail_types(
     )
 
     assert result.status == EvaluationStatus.VIOLATION
-    assert result.violations[0].rule_name == expected_violation_name
     assert result.violations[0].reason == rail_name
 
 

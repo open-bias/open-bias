@@ -21,15 +21,13 @@ def make_turn(
         if v_list:
             records = [
                 ViolationRecord(
-                    rule_id=v.get("name", "test"),
-                    rule_name=v.get("name", "test"),
                     reason="violation",
                     engine="test",
                 )
                 for v in v_list
             ]
         elif st == EvaluationStatus.VIOLATION:
-            records = [ViolationRecord(rule_id="test", rule_name="test", reason="violation", engine="test")]
+            records = [ViolationRecord(reason="violation", engine="test")]
         return EvaluationResult(status=st, violations=records, metadata=m)
 
     return TurnResult(

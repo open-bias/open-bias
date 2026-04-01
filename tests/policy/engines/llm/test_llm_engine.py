@@ -231,7 +231,6 @@ class TestCriticalViolationDecision:
 
         assert result.status == EvaluationStatus.VIOLATION
         assert len(result.violations) == 1
-        assert result.violations[0].rule_id == "critical_rule"
         assert result.violations[0].severity == "critical"
         assert result.violations[0].reason == "critical violation occurred"
 

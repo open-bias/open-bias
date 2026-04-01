@@ -56,7 +56,7 @@ class TestExportJson:
         data = export_json([make_result(turns=[turn])])
         t = data["scenarios"][0]["turns"][0]
         assert len(t["violations"]) == 1
-        assert t["violations"][0]["name"] == "v1"
+        assert t["violations"][0]["message"] == "violation"
 
     def test_error_scenario_included(self):
         result = make_result(error="something broke")
@@ -85,7 +85,7 @@ class TestExportJson:
         data = export_json([make_result(turns=[turn])])
         t = data["scenarios"][0]["turns"][0]
         assert len(t["violations"]) == 1
-        assert t["violations"][0]["name"] == "input_rail"
+        assert t["violations"][0]["message"] == "violation"
 
     def test_combined_violations_from_both_evals(self):
         """Violations from both request_eval and response_eval are merged."""
@@ -101,8 +101,8 @@ class TestExportJson:
         data = export_json([make_result(turns=[turn])])
         t = data["scenarios"][0]["turns"][0]
         assert len(t["violations"]) == 2
-        names = {v["name"] for v in t["violations"]}
-        assert names == {"input_rail", "output_policy"}
+        # All violations use the same "violation" reason from the conftest helper
+        assert all(v["message"] == "violation" for v in t["violations"])
 
 
 # ---------------------------------------------------------------------------

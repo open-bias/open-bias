@@ -73,13 +73,13 @@ async def test_skip_verification_detected(engine, runner):
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"
 
     # The specific constraint name should appear in violations
-    all_violation_names = [
-        v.rule_name
+    all_constraint_names = [
+        v.extra.get("constraint_name", "")
         for t in result.turns
         for v in t.response_eval.violations
     ]
-    assert "verify_identity_before_take_account_action" in all_violation_names, (
-        f"Expected 'verify_identity_before_take_account_action' in violations, got: {all_violation_names}"
+    assert "verify_identity_before_take_account_action" in all_constraint_names, (
+        f"Expected 'verify_identity_before_take_account_action' in violations, got: {all_constraint_names}"
     )
 
 
@@ -138,11 +138,11 @@ async def test_direct_account_action_detected(engine, runner):
     assert len(violation_turns) > 0, "Expected at least one turn with a violation decision"
 
     # The specific constraint name should appear in violations
-    all_violation_names = [
-        v.rule_name
+    all_constraint_names = [
+        v.extra.get("constraint_name", "")
         for t in result.turns
         for v in t.response_eval.violations
     ]
-    assert "verify_identity_before_take_account_action" in all_violation_names, (
-        f"Expected 'verify_identity_before_take_account_action' in violations, got: {all_violation_names}"
+    assert "verify_identity_before_take_account_action" in all_constraint_names, (
+        f"Expected 'verify_identity_before_take_account_action' in violations, got: {all_constraint_names}"
     )
