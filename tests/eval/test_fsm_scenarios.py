@@ -74,9 +74,9 @@ async def test_skip_verification_detected(engine, runner):
 
     # The specific constraint name should appear in violations
     all_violation_names = [
-        v.get("name", v.get("constraint_id", ""))
+        v.rule_name
         for t in result.turns
-        for v in t.response_eval.metadata.get("violations", [])
+        for v in t.response_eval.violations
     ]
     assert "verify_identity_before_take_account_action" in all_violation_names, (
         f"Expected 'verify_identity_before_take_account_action' in violations, got: {all_violation_names}"
@@ -139,9 +139,9 @@ async def test_direct_account_action_detected(engine, runner):
 
     # The specific constraint name should appear in violations
     all_violation_names = [
-        v.get("name", v.get("constraint_id", ""))
+        v.rule_name
         for t in result.turns
-        for v in t.response_eval.metadata.get("violations", [])
+        for v in t.response_eval.violations
     ]
     assert "verify_identity_before_take_account_action" in all_violation_names, (
         f"Expected 'verify_identity_before_take_account_action' in violations, got: {all_violation_names}"

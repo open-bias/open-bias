@@ -103,9 +103,9 @@ def extract_tool_call_names(response_data: Any) -> list[str]:
         choices = response_data.get("choices", [])
         if choices:
             message = choices[0].get("message", {})
-            raw_calls = message.get("tool_calls", [])
+            raw_calls = message.get("tool_calls") or []
         elif "tool_calls" in response_data:
-            raw_calls = response_data.get("tool_calls", [])
+            raw_calls = response_data.get("tool_calls") or []
         else:
             raw_calls = []
 
