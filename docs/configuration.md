@@ -24,7 +24,7 @@ If none are found, all settings use defaults.
 ```yaml
 evaluators:
   - type: judge
-    policies:
+    rules:
       - "No financial advice"
       - "Be professional"
 ```
@@ -62,18 +62,16 @@ Every evaluator entry supports these three fields:
 | `type` | string | `judge` | Engine type: `judge`, `fsm`, `llm`, or `nemo` |
 | `phase` | string | `post_call` | When to run: `pre_call` (before the LLM responds) or `post_call` (after) |
 
-### Shorthand Mappings
+### Canonical Rule Inputs
 
-To keep config concise, several top-level keys within an evaluator entry are automatically expanded before being passed to the engine:
+Rule sources are standardized across engines:
 
-| Shorthand | Expands to | Applicable engines |
-|-----------|------------|--------------------|
-| `model: "x"` | `config.models: [{name: "primary", model: "x"}]` | `judge`, `llm` |
-| `policies: [...]` | `config.inline_policy: [...]` | `judge` |
-| `rubric: "x"` | `config.default_rubric: "x"` | `judge` |
-| `policy: "./x"` | `config.config_path: "./x"` (resolved to absolute path) | `fsm`, `nemo` |
+| Key | Type | Description |
+|-----|------|-------------|
+| `rules` | string or list[string] | Inline rules text |
+| `rules_file` | string | Path to a `.md` or `.txt` rules file |
 
-All other keys pass through to the evaluator's `config` dict unchanged.
+Legacy user-facing keys like `policy`, `policies`, and `rubric` are no longer supported.
 
 ## Judge Engine
 
@@ -85,10 +83,10 @@ evaluators:
     type: judge
     phase: post_call
     model: anthropic/claude-sonnet-4-5
-    policies:
+    rules:
       - "No financial advice"
       - "Be professional"
-    # rubric: agent_behavior
+    # default_rubric: agent_behavior
     # custom_rubrics_path: ./rubrics/
     # verbose: true
 ```
@@ -96,8 +94,9 @@ evaluators:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `model` | string | global `model` | LLM model for evaluation (shorthand for `config.models`). Overrides the global model setting. |
-| `policies` | list | -- | Inline policy rules (shorthand for `config.inline_policy`). Judge-only. |
-| `rubric` | string | `agent_behavior` | Default rubric for per-turn evaluation (shorthand for `config.default_rubric`). |
+| `rules` | string or list | -- | Inline rule text for judge compilation. |
+| `rules_file` | string | -- | Path to markdown/plaintext rules file. |
+| `default_rubric` | string | `agent_behavior` | Default rubric for per-turn evaluation. |
 | `custom_rubrics_path` | string | -- | Path to directory containing custom rubric YAML files |
 | `verbose` | bool | `false` | Log the raw judge prompt and response |
 
@@ -146,7 +145,7 @@ evaluators:
   - name: workflow-guard
     type: fsm
     phase: post_call
-    policy: ./workflow.yaml
+    rules_file: ./rules.md
     # classifier:
     #   model_name: all-MiniLM-L6-v2
     #   backend: pytorch
@@ -157,7 +156,7 @@ evaluators:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `policy` | string | -- | Path to workflow YAML file (shorthand for `config.config_path`, resolved to absolute path) |
+| `rules` / `rules_file` | string/list | -- | Rule source used to compile runtime FSM workflow config during `serve`. |
 | `classifier.model_name` | string | `all-MiniLM-L6-v2` | Sentence-transformers model for embedding-based state classification |
 | `classifier.backend` | string | `pytorch` | Inference backend: `pytorch` or `onnx` |
 | `classifier.similarity_threshold` | float | `0.7` | Minimum cosine similarity for a state match |
@@ -173,7 +172,7 @@ evaluators:
   - name: nemo-rails
     type: nemo
     phase: post_call
-    policy: ./nemo_config/
+    rules_file: ./rules.md
     # fail_closed: false
     # rails:
     #   - input
@@ -182,7 +181,7 @@ evaluators:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `policy` | string | -- | Path to NeMo Guardrails config directory (shorthand for `config.config_path`) |
+| `rules` / `rules_file` | string/list | -- | Rule source used to compile runtime NeMo rails config during `serve`. |
 | `fail_closed` | bool | `false` | If `true`, block on NeMo evaluation errors. If `false` (default), warn and allow. |
 | `rails` | list | all configured | Which rails to enable. Omit to use all rails from the NeMo config. |
 
@@ -295,23 +294,22 @@ evaluators:
     type: judge
     phase: pre_call
     model: anthropic/claude-sonnet-4-5
-    policies:
+    rules:
       - "No harmful content"
       - "No PII leaks"
 
   - name: behavior-eval
     type: judge
     phase: post_call
-    rubric: agent_behavior
+    rules_file: ./rules.md
     custom_rubrics_path: ./rubrics/
 
   - name: workflow-guard
     type: fsm
     phase: post_call
-    policy: ./workflow.yaml
-    classifier:
-      model_name: all-MiniLM-L6-v2
-      similarity_threshold: 0.7
+    rules:
+      - "Verify identity before account changes"
+      - "Never disclose internal pricing policy"
 
 tracing:
   type: otlp

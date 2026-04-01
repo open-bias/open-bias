@@ -80,19 +80,14 @@ evaluators:
   - name: content-policy
     type: judge
     model: anthropic/claude-sonnet-4-5
-    policies:
+    rules:
       - "No financial advice"
       - "Be professional"
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#judge-engine)
 
-### Policy Generation
-
-You can generate judge rubrics from natural language using the CLI:
-```bash
-openbias compile "be professional, never leak PII" --engine judge -o policy.yaml
-```
+`openbias serve` compiles these rules into judge runtime config automatically at startup.
 
 Deep dive: [openbias/policy/engines/judge/README.md](../openbias/policy/engines/judge/README.md)
 
@@ -153,17 +148,12 @@ Intervention templates in the workflow YAML support strategy prefixes:
 evaluators:
   - name: workflow-guard
     type: fsm
-    policy: ./workflow.yaml
+    rules_file: ./rules.md
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#fsm-engine)
 
-### Policy Generation
-
-You can generate FSM workflows from sequence descriptions:
-```bash
-openbias compile "verify identity before refunds" --engine fsm -o workflow.yaml
-```
+`openbias serve` compiles these rules into FSM runtime workflow config automatically at startup.
 
 Deep dive: [openbias/policy/engines/fsm/README.md](../openbias/policy/engines/fsm/README.md)
 
@@ -259,17 +249,12 @@ The engine registers two custom NeMo actions for use in Colang flows:
 evaluators:
   - name: nemo-rails
     type: nemo
-    policy: ./nemo_config/
+    rules_file: ./rules.md
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#nemo-guardrails-engine)
 
-### Policy Generation
-
-You can generate NeMo configurations (Colang flows + config.yml):
-```bash
-openbias compile "block hacking requests" --engine nemo -o ./nemo_config
-```
+`openbias serve` compiles these rules into NeMo runtime rails config automatically at startup.
 
 Deep dive: [openbias/policy/engines/nemo/README.md](../openbias/policy/engines/nemo/README.md)
 
