@@ -235,8 +235,6 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             if activations:
                 violations = [
                     ViolationRecord(
-                        rule_id=f"nemo_{a.get('type', 'input')}_violation",
-                        rule_name=f"nemo_{a.get('type', 'input')}_violation",
                         reason=a.get("name", "NeMo input rail triggered"),
                         severity="error",
                         engine=self.name,
@@ -262,8 +260,6 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
                 return EvaluationResult(
                     status=EvaluationStatus.VIOLATION,
                     violations=[ViolationRecord(
-                        rule_id="nemo_evaluation_error",
-                        rule_name="nemo_evaluation_error",
                         reason=f"NeMo evaluation failed: {e}",
                         severity="critical",
                         engine=self.name,
@@ -322,8 +318,6 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             if activations:
                 violations = [
                     ViolationRecord(
-                        rule_id=f"nemo_{a.get('type', 'output')}_violation",
-                        rule_name=f"nemo_{a.get('type', 'output')}_violation",
                         reason=a.get("name", "NeMo output rail triggered"),
                         severity="error",
                         engine=self.name,
@@ -347,8 +341,6 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
                 return EvaluationResult(
                     status=EvaluationStatus.VIOLATION,
                     violations=[ViolationRecord(
-                        rule_id="nemo_output_evaluation_error",
-                        rule_name="nemo_output_evaluation_error",
                         reason=f"NeMo output evaluation failed: {e}",
                         severity="critical",
                         engine=self.name,
