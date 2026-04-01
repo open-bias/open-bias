@@ -58,13 +58,21 @@ class _AsyncTraceContext:
 
 class Interceptor:
     """
-    Orchestrator for running policy evaluators during LLM request lifecycle.
+    Sole enforcement gateway for policy evaluation results.
+
+    Engines are pure evaluators that return ALLOW or VIOLATION outcomes.
+    The Interceptor is the only layer that maps evaluation outcomes to
+    enforcement actions based on the ``fail_action`` policy:
+
+    - ``fail_action="intervene"``: VIOLATION → modify request/response
+    - ``fail_action="block"``: VIOLATION → reject request/response
+    - ``fail_action="shadow"``: VIOLATION → log only, allow through
 
     Manages:
-    - Sync evaluators that block and must complete (ALLOW or BLOCK only)
+    - Sync evaluators that gate and must complete before proceeding
     - Async evaluators that run in background with results applied next request
     - Pending async results per session
-    - Modification merging for deferred INTERVENE decisions
+    - Modification merging for deferred intervention decisions
     """
 
     # Defaults for session memory management
@@ -406,7 +414,12 @@ class Interceptor:
         )
 
     def _effective_decision(self, decision: Decision, session_id: str) -> Decision:
-        """Map evaluator decision based on fail_action policy."""
+        """Map evaluator decision to enforcement action based on fail_action policy.
+
+        This is the sole enforcement gateway: engines report pure evaluation
+        outcomes (ALLOW or INTERVENE via the VIOLATION→INTERVENE bridge),
+        and this method converts them to the actual runtime action.
+        """
         if self._fail_action == "shadow":
             if decision != Decision.ALLOW:
                 logger.info("Shadow mode: downgrading %s to allow", decision.value)
