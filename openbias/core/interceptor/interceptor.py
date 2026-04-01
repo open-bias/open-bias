@@ -423,13 +423,10 @@ class Interceptor:
         meta = dict(eval_result.metadata)
         meta["violations"] = [
             {
-                "rule_id": v.rule_id,
-                "name": v.rule_name,
                 "message": v.reason,
                 "severity": v.severity,
                 "scope": v.scope,
                 "engine": v.engine,
-                **({"evidence": v.evidence} if v.evidence else {}),
                 **({"confidence": v.confidence} if v.confidence is not None else {}),
                 **v.extra,
             }
