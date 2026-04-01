@@ -405,3 +405,135 @@ class TestLLMEngineConformance:
         for v in result.violations:
             _assert_violation_record_shape(v, "llm")
             assert v.confidence is not None, "LLM violations must include confidence"
+
+
+# ---------------------------------------------------------------------------
+# Multi-engine fail_action: interceptor treats all engines identically
+# ---------------------------------------------------------------------------
+
+
+# Violations from different engines, each with engine-specific metadata
+_MULTI_ENGINE_VIOLATIONS = [
+    pytest.param(
+        ViolationRecord(
+            rule_id="nemo_input_violation",
+            rule_name="nemo_input_violation",
+            reason="NeMo rail triggered",
+            severity="error",
+            engine="nemo:guardrails",
+            extra={"provider_decision": "flagged", "rail_type": "input"},
+        ),
+        id="nemo-with-provider-metadata",
+    ),
+    pytest.param(
+        ViolationRecord(
+            rule_id="verify_identity_before_take_account_action",
+            rule_name="verify_identity_before_take_account_action",
+            reason="Constraint violated: precedence",
+            severity="error",
+            engine="fsm:customer_support",
+        ),
+        id="fsm-precedence-constraint",
+    ),
+    pytest.param(
+        ViolationRecord(
+            rule_id="judge_turn_intervene",
+            rule_name="judge_turn_intervene",
+            reason="Criterion not met: safety",
+            severity="intervene",
+            scope="turn",
+            engine="judge:default",
+            confidence=0.85,
+            extra={"composite_score": 0.3, "judge_model": "gpt-4o-mini"},
+        ),
+        id="judge-with-composite-score",
+    ),
+    pytest.param(
+        ViolationRecord(
+            rule_id="stay_on_topic",
+            rule_name="stay_on_topic",
+            reason="Went off topic",
+            severity="warning",
+            engine="llm:test-workflow",
+            confidence=0.85,
+        ),
+        id="llm-constraint-violation",
+    ),
+]
+
+
+class TestMultiEngineFailAction:
+    """Verify that the interceptor maps violations from all engines identically."""
+
+    @pytest.fixture
+    def _mock_engine_with_violation(self):
+        def factory(violation: ViolationRecord) -> MagicMock:
+            engine = MagicMock()
+            engine.name = violation.engine
+            eval_result = EvaluationResult(
+                status=EvaluationStatus.VIOLATION,
+                violations=[violation],
+            )
+            engine.evaluate_request = AsyncMock(return_value=eval_result)
+            engine.evaluate_response = AsyncMock(return_value=eval_result)
+            return engine
+        return factory
+
+    @pytest.mark.parametrize("violation", _MULTI_ENGINE_VIOLATIONS)
+    async def test_block_blocks_regardless_of_engine(self, violation, _mock_engine_with_violation):
+        """fail_action=block should block violations from any engine."""
+        from openbias.core.interceptor import Interceptor
+
+        engine = _mock_engine_with_violation(violation)
+        interceptor = Interceptor(
+            pre_call_evaluators=[engine],
+            post_call_evaluators=[],
+            fail_action="block",
+        )
+
+        result = await interceptor.run_pre_call("s1", {
+            "messages": [{"role": "user", "content": "hi"}],
+            "model": "gpt-4",
+        }, "req-1")
+
+        assert result.allowed is False, f"Expected block for engine {violation.engine}"
+
+    @pytest.mark.parametrize("violation", _MULTI_ENGINE_VIOLATIONS)
+    async def test_shadow_allows_regardless_of_engine(self, violation, _mock_engine_with_violation):
+        """fail_action=shadow should allow violations from any engine."""
+        from openbias.core.interceptor import Interceptor
+
+        engine = _mock_engine_with_violation(violation)
+        interceptor = Interceptor(
+            pre_call_evaluators=[engine],
+            post_call_evaluators=[],
+            fail_action="shadow",
+        )
+
+        result = await interceptor.run_pre_call("s1", {
+            "messages": [{"role": "user", "content": "hi"}],
+            "model": "gpt-4",
+        }, "req-1")
+
+        assert result.allowed is True, f"Expected allow (shadow) for engine {violation.engine}"
+        assert result.modified_data is None, "Shadow mode must not modify the request"
+
+    @pytest.mark.parametrize("violation", _MULTI_ENGINE_VIOLATIONS)
+    async def test_intervene_modifies_regardless_of_engine(self, violation, _mock_engine_with_violation):
+        """fail_action=intervene should modify request for violations from any engine."""
+        from openbias.core.interceptor import Interceptor
+
+        engine = _mock_engine_with_violation(violation)
+        interceptor = Interceptor(
+            pre_call_evaluators=[engine],
+            post_call_evaluators=[],
+            fail_action="intervene",
+        )
+
+        result = await interceptor.run_pre_call("s1", {
+            "messages": [{"role": "user", "content": "hi"}],
+            "model": "gpt-4",
+        }, "req-1")
+
+        assert result.allowed is True, f"Expected allow (intervene) for engine {violation.engine}"
+        assert result.modified_data is not None, f"Expected modified data for engine {violation.engine}"
