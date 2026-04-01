@@ -1023,13 +1023,13 @@ async def test_post_call_generates_fallback_uuid_when_missing(callback, mock_api
 async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
     mock_api_key, mock_cache
 ):
-    """Full chain: settings.fail_action='block' → Interceptor upgrades INTERVENE → hook returns Exception.
+    """Full chain: settings.fail_action='block' → Interceptor blocks VIOLATION → hook returns Exception.
 
     Verifies the complete path:
     1. settings.fail_action = "block"
     2. Hook creates Interceptor with fail_action="block"
-    3. Sync PRE_CALL evaluator returns Decision.INTERVENE
-    4. Interceptor._effective_decision upgrades INTERVENE → BLOCK
+    3. Sync PRE_CALL evaluator returns EvaluationResult(status=VIOLATION)
+    4. Interceptor maps VIOLATION + fail_action=block → BLOCK
     5. Interceptor.run_pre_call returns InterceptionResult(allowed=False)
     6. _pre_call_impl returns an Exception object
     """

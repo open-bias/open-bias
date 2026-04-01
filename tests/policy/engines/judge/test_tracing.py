@@ -161,7 +161,7 @@ class TestTraceAlwaysOn:
     async def test_suppress_trace_flag_is_ignored_on_request(
         self, engine, judge_config, sample_request,
     ):
-        """evaluate_request still emits tracing even if legacy flag is passed."""
+        """evaluate_request still emits tracing even if _suppress_trace flag is passed."""
         await engine.initialize(judge_config)
 
         mock_verdict = MagicMock()
