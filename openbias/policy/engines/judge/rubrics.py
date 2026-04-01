@@ -1,7 +1,7 @@
 """
-Rubric registry and built-in rubrics for the Judge Policy Engine.
+Ruleset registry and built-in rulesets for the Judge Policy Engine.
 
-Provides a registry for rubric lookup and ships with sensible defaults
+Provides a registry for ruleset lookup and ships with sensible defaults
 for common evaluation scenarios.
 """
 
@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 
 
 class RubricRegistry:
-    """Registry for looking up rubrics by name.
+    """Registry for looking up rulesets by name.
 
-    Each instance holds its own copy of the built-in rubrics, preventing
+    Each instance holds its own copy of the built-in rulesets, preventing
     cross-contamination between engine instances in multi-tenant deployments.
     """
 
@@ -30,22 +30,22 @@ class RubricRegistry:
         self._rubrics: dict[str, Rubric] = dict(_BUILTIN_RUBRICS)
 
     def register(self, rubric: Rubric) -> None:
-        """Register a rubric."""
+        """Register a ruleset."""
         if rubric.name in self._rubrics:
-            logger.warning(f"Overwriting rubric: {rubric.name}")
+            logger.warning(f"Overwriting ruleset: {rubric.name}")
         self._rubrics[rubric.name] = rubric
-        logger.debug(f"Registered rubric: {rubric.name}")
+        logger.debug(f"Registered ruleset: {rubric.name}")
 
     def get(self, name: str) -> Rubric | None:
-        """Get a rubric by name."""
+        """Get a ruleset by name."""
         return self._rubrics.get(name)
 
     def list_rubrics(self) -> list[str]:
-        """List all registered rubric names."""
+        """List all registered ruleset names."""
         return list(self._rubrics.keys())
 
     def load_from_yaml(self, path: str) -> None:
-        """Load custom rubrics from a YAML file or directory.
+        """Load custom rulesets from a YAML file or directory.
 
         Args:
             path: Path to a YAML file or directory of YAML files.
@@ -70,14 +70,14 @@ class RubricRegistry:
                 for rubric_def in rubric_defs:
                     rubric = _parse_rubric_dict(rubric_def)
                     self.register(rubric)
-                    logger.info(f"Loaded custom rubric '{rubric.name}' from {file}")
+                    logger.info(f"Loaded custom ruleset '{rubric.name}' from {file}")
 
             except (OSError, yaml.YAMLError, KeyError, ValueError) as e:
-                logger.error(f"Failed to load rubric from {file}: {e}")
+                logger.error(f"Failed to load ruleset from {file}: {e}")
 
 
 def _parse_rubric_dict(data: dict) -> Rubric:
-    """Parse a rubric from a dictionary (YAML-loaded)."""
+    """Parse a ruleset from a dictionary (YAML-loaded)."""
     criteria = []
     for c in data.get("criteria", []):
         criteria.append(RubricCriterion(
@@ -110,20 +110,20 @@ def _slugify_rule(index: int, rule: str) -> str:
 
 
 def create_rules_rubric(rules: list[str], name: str = "inline_rules") -> Rubric:
-    """Convert a list of plain-text policy rules into a Rubric.
+    """Convert a list of plain-text rules into a Rubric.
 
     Creates one binary criterion per rule so that the judge evaluates
     each rule independently and violations cite the specific rule.
 
     Args:
-        rules: Plain-text policy rules, e.g. ``["Never provide financial advice"]``.
-        name: Rubric name for registry lookup.
+        rules: Plain-text rules, e.g. ``["Never provide financial advice"]``.
+        name: Ruleset name for registry lookup.
 
     Returns:
         A Rubric ready for registration.
     """
     criteria = []
-    instructions = "Evaluate the response against each policy rule independently.\n"
+    instructions = "Evaluate the response against each rule independently.\n"
     instructions += "For each rule, score 1 if the rule is followed, 0 if violated.\n\n"
 
     for i, rule in enumerate(rules, 1):
@@ -138,7 +138,7 @@ def create_rules_rubric(rules: list[str], name: str = "inline_rules") -> Rubric:
 
     return Rubric(
         name=name,
-        description="Auto-generated rubric from inline rules.",
+        description="Auto-generated ruleset from inline rules.",
         criteria=criteria,
         evaluation_type=EvaluationType.POINTWISE,
         scope=EvaluationScope.TURN,
@@ -147,7 +147,7 @@ def create_rules_rubric(rules: list[str], name: str = "inline_rules") -> Rubric:
 
 
 # =============================================================================
-# BUILT-IN RUBRICS
+# BUILT-IN RULESETS
 # =============================================================================
 
 # Module-level dict populated once at import time. Each RubricRegistry instance
@@ -237,9 +237,9 @@ def _register_builtins() -> None:
         pass_threshold=0.6,
     ))
 
-    # --- conversation_policy ---
+    # --- conversation_rules ---
     _add(Rubric(
-        name="conversation_policy",
+        name="conversation_rules",
         description="Evaluates agent behavior across the entire conversation trajectory.",
         criteria=[
             RubricCriterion(
@@ -264,8 +264,8 @@ def _register_builtins() -> None:
                 score_descriptions={1: "Major drift", 3: "Minor drift", 5: "Stays on track"},
             ),
             RubricCriterion(
-                name="policy_adherence",
-                description="Does the agent adhere to its operational policies throughout the conversation?",
+                name="rules_adherence",
+                description="Does the agent adhere to its operational rules throughout the conversation?",
                 scale=ScoreScale.LIKERT_5,
                 weight=1.2,
                 score_descriptions={1: "Multiple violations", 3: "Minor lapses", 5: "Full adherence"},
