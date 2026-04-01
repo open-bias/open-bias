@@ -109,7 +109,7 @@ def _slugify_rule(index: int, rule: str) -> str:
     return f"rule_{index}_{'_'.join(words)}"
 
 
-def create_rules_rubric(rules: list[str], name: str = "inline_policy") -> Rubric:
+def create_rules_rubric(rules: list[str], name: str = "inline_rules") -> Rubric:
     """Convert a list of plain-text policy rules into a Rubric.
 
     Creates one binary criterion per rule so that the judge evaluates
@@ -138,7 +138,7 @@ def create_rules_rubric(rules: list[str], name: str = "inline_policy") -> Rubric
 
     return Rubric(
         name=name,
-        description="Auto-generated rubric from inline policy rules.",
+        description="Auto-generated rubric from inline rules.",
         criteria=criteria,
         evaluation_type=EvaluationType.POINTWISE,
         scope=EvaluationScope.TURN,

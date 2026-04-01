@@ -88,9 +88,8 @@ class JudgePolicyEngine(PolicyEngine):
             config: Configuration dict with:
                 - models: List of judge model configs [{name, model, temperature, ...}]
                 - default_rubric: Name of default rubric for this evaluator instance
-                - rubric: Shorthand for default_rubric
-                - policies: List of rule strings (shorthand for inline_policy)
-                - inline_policy: Inline policy rules or rubric definitions
+                - rules: Inline rules payload (string/list)
+                - inline_policy: Compiled rubric definitions or inline rules
                 - custom_rubrics_path: Path to custom rubric YAML files
                 - session_ttl: Session TTL in seconds
                 - max_sessions: Maximum concurrent sessions
@@ -120,13 +119,9 @@ class JudgePolicyEngine(PolicyEngine):
             verbose=config.get("verbose", False),
         )
 
-        # Config shorthands
-        # `rubric: "name"` → sets default_rubric
-        # `policies: [list of strings]` → treated as inline_policy
-        if "rubric" in config and "default_rubric" not in config:
-            config = {**config, "default_rubric": config["rubric"]}
-        if "policies" in config and "inline_policy" not in config:
-            config = {**config, "inline_policy": config["policies"]}
+        # Canonical shorthand: `rules` maps to inline policy input.
+        if "rules" in config and "inline_policy" not in config:
+            config = {**config, "inline_policy": config["rules"]}
 
         self._default_rubric = config.get("default_rubric", "agent_behavior")
 
@@ -330,11 +325,9 @@ class JudgePolicyEngine(PolicyEngine):
                 if not isinstance(m, dict) or not m.get("model"):
                     errors.append(f"models[{i}]: missing 'model' field.")
 
-        # Apply config shorthands (same as initialize)
-        if "rubric" in config and "default_rubric" not in config:
-            config = {**config, "default_rubric": config["rubric"]}
-        if "policies" in config and "inline_policy" not in config:
-            config = {**config, "inline_policy": config["policies"]}
+        # Apply canonical shorthand (same as initialize)
+        if "rules" in config and "inline_policy" not in config:
+            config = {**config, "inline_policy": config["rules"]}
 
         # Build a temporary registry and load inline policy to check rubrics
         registry = RubricRegistry()
@@ -381,7 +374,7 @@ class JudgePolicyEngine(PolicyEngine):
     # =========================================================================
 
     def _load_inline_policy(self, policy_data: Any) -> None:
-        """Load inline policy definitions from config.
+        """Load inline rules/rubric definitions from config.
 
         Supported shapes:
         - str: multiline string split into rules
@@ -397,7 +390,7 @@ class JudgePolicyEngine(PolicyEngine):
                 rubric = create_rules_rubric(rules)
                 self._registry.register(rubric)
                 self._default_rubric = rubric.name
-                logger.info(f"Loaded {len(rules)} inline policy rules as '{rubric.name}'")
+                logger.info(f"Loaded {len(rules)} inline rules as '{rubric.name}'")
             return
 
         if isinstance(policy_data, list):
@@ -408,7 +401,7 @@ class JudgePolicyEngine(PolicyEngine):
                 rubric = create_rules_rubric(policy_data)
                 self._registry.register(rubric)
                 self._default_rubric = rubric.name
-                logger.info(f"Loaded {len(policy_data)} inline policy rules as '{rubric.name}'")
+                logger.info(f"Loaded {len(policy_data)} inline rules as '{rubric.name}'")
                 return
             # List of dicts → formal rubric definitions
             for idx, item in enumerate(policy_data):

@@ -209,10 +209,10 @@ class TestFSMCompilerInterface:
         )
         assert result.success is True
 
-    async def test_compile_without_config_fails(self, compiler: FSMCompiler):
-        result = await compiler.compile("natural language only")
-        assert result.success is False
-        assert any("simple_config" in e for e in result.errors)
+    async def test_compile_without_config_uses_rules_text(self, compiler: FSMCompiler):
+        result = await compiler.compile("greet user\nresolve request")
+        assert result.success is True
+        assert isinstance(result.config, WorkflowDefinition)
 
     async def test_compile_with_invalid_config_fails(self, compiler: FSMCompiler):
         result = await compiler.compile(

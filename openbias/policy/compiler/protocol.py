@@ -1,7 +1,7 @@
 """
-Protocol definitions for policy compilers.
+Protocol definitions for rules compilers.
 
-Policy compilers convert natural language policy descriptions into
+Compilers convert normalized rules text into
 engine-specific configurations (e.g., FSM workflow YAML, NeMo Colang).
 
 This mirrors the PolicyEngine pattern, enabling pluggable compilers
@@ -16,7 +16,7 @@ from typing import Any
 @dataclass
 class CompilationResult:
     """
-    Result of compiling natural language to engine config.
+    Result of compiling normalized rules text to engine config.
 
     Attributes:
         success: Whether compilation succeeded
@@ -44,10 +44,10 @@ class CompilationResult:
 
 class PolicyCompiler(ABC):
     """
-    Base class for policy compilers.
+    Base class for rules compilers.
 
-    Each policy engine can have its own compiler that converts natural language
-    policies to engine-specific configuration.
+    Each engine can have its own compiler that converts normalized rules text
+    to engine-specific configuration.
 
     Mirrors PolicyEngine pattern - register with @register_compiler decorator.
 
@@ -87,14 +87,14 @@ class PolicyCompiler(ABC):
     @abstractmethod
     async def compile(
         self,
-        natural_language: str,
+        rules_text: str,
         context: dict[str, Any] | None = None,
     ) -> CompilationResult:
         """
-        Compile natural language policy to engine-specific config.
+        Compile normalized rules text to engine-specific config.
 
         Args:
-            natural_language: Policy description in plain English
+            rules_text: Normalized rules payload for this evaluator
             context: Optional hints for compilation:
                 - domain: Application domain (e.g., "customer support")
                 - existing_states: List of known state names

@@ -1,7 +1,7 @@
 """
 Base compiler class with shared LLM interaction logic.
 
-Provides common functionality for policy compilers:
+Provides common functionality for rules compilers:
 - LLM client management
 - Prompt construction
 - Response parsing utilities
@@ -17,7 +17,7 @@ from openbias.policy.compiler.protocol import PolicyCompiler, CompilationResult
 logger = logging.getLogger(__name__)
 
 # Default system prompt for policy compilation
-DEFAULT_COMPILER_SYSTEM_PROMPT = """You are a policy compiler that converts natural language policy descriptions into structured configuration.
+DEFAULT_COMPILER_SYSTEM_PROMPT = """You are a rules compiler that converts normalized rules text into structured configuration.
 
 Your task is to:
 1. Extract states/phases mentioned in the policy
@@ -141,17 +141,17 @@ class LLMPolicyCompiler(PolicyCompiler):
     @abstractmethod
     def _build_compilation_prompt(
         self,
-        natural_language: str,
+        rules_text: str,
         context: dict[str, Any] | None = None,
     ) -> str:
         """
-        Build the prompt for policy compilation.
+        Build the prompt for rules compilation.
 
         Subclasses implement this to create engine-specific prompts
         with appropriate schema examples.
 
         Args:
-            natural_language: User's policy description
+            rules_text: User's normalized rules text
             context: Optional compilation context
 
         Returns:
@@ -163,7 +163,7 @@ class LLMPolicyCompiler(PolicyCompiler):
     def _parse_compilation_response(
         self,
         response: dict[str, Any],
-        natural_language: str,
+        rules_text: str,
     ) -> CompilationResult:
         """
         Parse LLM response into CompilationResult.
@@ -173,7 +173,7 @@ class LLMPolicyCompiler(PolicyCompiler):
 
         Args:
             response: Parsed JSON from LLM
-            natural_language: Original policy description (for metadata)
+            rules_text: Original normalized rules text (for metadata)
 
         Returns:
             CompilationResult with engine config
@@ -182,17 +182,17 @@ class LLMPolicyCompiler(PolicyCompiler):
 
     async def compile(
         self,
-        natural_language: str,
+        rules_text: str,
         context: dict[str, Any] | None = None,
     ) -> CompilationResult:
         """
-        Compile natural language policy to engine config.
+        Compile normalized rules text to engine config.
 
         Uses LLM to parse the policy and convert to engine-specific
         configuration.
 
         Args:
-            natural_language: Policy description in plain English
+            rules_text: Normalized rules text
             context: Optional compilation hints
 
         Returns:
@@ -200,7 +200,7 @@ class LLMPolicyCompiler(PolicyCompiler):
         """
         try:
             # Build prompt
-            prompt = self._build_compilation_prompt(natural_language, context)
+            prompt = self._build_compilation_prompt(rules_text, context)
 
             # Call LLM
             response = await self._call_llm(
@@ -217,7 +217,7 @@ class LLMPolicyCompiler(PolicyCompiler):
                 )
 
             # Convert to engine config
-            result = self._parse_compilation_response(parsed, natural_language)
+            result = self._parse_compilation_response(parsed, rules_text)
 
             # Validate
             validation_errors = self.validate_result(result)

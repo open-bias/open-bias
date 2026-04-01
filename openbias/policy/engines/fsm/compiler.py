@@ -455,20 +455,22 @@ class FSMCompiler(PolicyCompiler):
 
         If *context* contains a ``"simple_config"`` key whose value is a
         :class:`SimpleWorkflowConfig` (or a raw dict), the deterministic
-        pipeline is used directly.  Otherwise the *natural_language* string
-        is ignored and an error is returned — the new compiler does not call
-        an LLM.
+        pipeline is used directly. Otherwise, the input text is segmented into
+        line-based rules and used as both steps and rules.
         """
         context = context or {}
         raw = context.get("simple_config")
         if raw is None:
-            return CompilationResult.failure(
-                errors=[
-                    "FSMCompiler requires context['simple_config'] "
-                    "(a SimpleWorkflowConfig or dict). LLM-based compilation "
-                    "has been replaced by the deterministic pipeline."
-                ]
-            )
+            derived_rules = [line.strip() for line in natural_language.splitlines() if line.strip()]
+            if not derived_rules:
+                return CompilationResult.failure(
+                    errors=["FSMCompiler received empty rules text."]
+                )
+            raw = {
+                "name": context.get("name", "fsm-rules"),
+                "steps": derived_rules,
+                "rules": derived_rules,
+            }
 
         try:
             if isinstance(raw, SimpleWorkflowConfig):

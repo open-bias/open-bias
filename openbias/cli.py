@@ -4,7 +4,6 @@ Open Bias CLI entry point.
 Commands:
 - openbias init: Initialize a new Open Bias project
 - openbias serve: Start the proxy server
-- openbias compile: Compile natural language policy to engine config
 - openbias eval: Run evaluation scenarios against a policy engine
 - openbias validate: Validate a workflow file
 - openbias info: Show workflow information
@@ -119,6 +118,9 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
                 settings.proxy.port = port
             settings.validate()
 
+        with spinner("Compiling rules for runtime engines..."):
+            _compile_rules_for_serve(settings, config)
+
         # Show config summary
         engine_type = settings.evaluators[0].type if settings.evaluators else "judge"
         display_model = settings.proxy.default_model or "(none)"
@@ -157,6 +159,28 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
     except Exception as e:
         error(str(e))
         raise SystemExit(1)
+
+
+def _compile_rules_for_serve(settings: "Settings", config_path: Path | None) -> None:
+    """Compile canonical rules input into engine-native evaluator configs."""
+    import asyncio
+
+    from openbias.policy.compiler.runtime import compile_runtime_config_for_evaluator
+
+    base_dir = (config_path.parent if config_path else Path.cwd()).resolve()
+
+    async def _compile_all() -> None:
+        for evaluator in settings.evaluators:
+            compiled = await compile_runtime_config_for_evaluator(
+                evaluator_name=evaluator.name,
+                evaluator_type=evaluator.type,
+                evaluator_config=dict(evaluator.config),
+                default_model=settings.proxy.default_model,
+                base_dir=base_dir,
+            )
+            evaluator.config = compiled
+
+    asyncio.run(_compile_all())
 
 
 @main.command()
@@ -694,215 +718,5 @@ def _detect_engine_type(policy_text: str) -> str:
     if fsm_score > judge_score:
         return "fsm"
     return "judge"
-
-
-
-
-
-@main.command()
-@click.argument("policy", type=str)
-@click.option(
-    "--engine",
-    "-e",
-    type=click.Choice(["fsm", "judge", "nemo", "auto"]),
-    default="auto",
-    help="Target engine type (default: auto)",
-)
-@click.option(
-    "--output",
-    "-o",
-    type=click.Path(path_type=Path),
-    help="Output file path (default: auto-selected based on engine)",
-)
-
-@click.option(
-    "--domain",
-    "-d",
-    type=str,
-    help="Application domain hint (e.g., 'customer support')",
-)
-@click.option(
-    "--validate/--no-validate",
-    default=True,
-    help="Validate generated output (default: True)",
-)
-@click.option(
-    "--base-url",
-    "-b",
-    type=str,
-    help="Base URL for LLM API",
-)
-@click.option(
-    "--api-key",
-    "-k",
-    type=str,
-    help="API key for LLM provider",
-)
-@click.option(
-    "--debug/--no-debug",
-    default=False,
-    help="Enable debug logging",
-)
-def compile(
-    policy: str,
-    engine: str,
-    output: Path,
-    domain: str,
-    validate: bool,
-    base_url: str,
-    api_key: str,
-    debug: bool,
-) -> None:
-    """Compile natural language policy to engine configuration.
-
-    POLICY is the natural language policy description.
-
-    Examples:
-
-        # Auto-detect engine type
-        openbias compile "be professional, never leak PII"
-
-        # Explicit judge engine
-        openbias compile "never share internal info" --engine judge
-
-        # FSM workflow
-        openbias compile "verify identity before refunds" --engine fsm
-    """
-    import asyncio
-
-    configure_logging(debug=debug)
-
-    # Handle 'auto' engine selection
-    if engine == "auto":
-        engine = _detect_engine_type(policy)
-        dim(f"Auto-detected engine: {engine}")
-
-    # Determine output path based on engine type
-    if output is None:
-        output = Path("policy.yaml") if engine == "judge" else Path("workflow.yaml")
-
-    # Build context
-    context = {}
-    if domain:
-        context["domain"] = domain
-
-    async def run_compile() -> None:
-        from openbias.config.settings import Settings
-        from openbias.policy.compiler import PolicyCompilerRegistry
-        from openbias.policy.registry import PolicyEngineRegistry
-
-        try:
-            # --- Resolve model from Settings (YAML + env auto-detection) ---
-            _settings = Settings()
-            if not api_key:
-                _settings.validate()
-            resolved_model = _settings.proxy.default_model
-            resolved_api_key = api_key  # explicit --api-key flag, or None
-
-            # --- Get compiler via engine (preferred) or registry (fallback) ---
-            compiler = None
-            engine_cls = PolicyEngineRegistry.get(engine)
-            if engine_cls is not None:
-                eng_instance = engine_cls()
-                compiler = eng_instance.get_compiler(
-                    model=resolved_model,
-                    api_key=resolved_api_key,
-                    base_url=base_url,
-                )
-
-            if compiler is None:
-                compiler_class = PolicyCompilerRegistry.get(engine)
-                if not compiler_class:
-                    available = PolicyCompilerRegistry.list_compilers()
-                    raise click.ClickException(
-                        f"No compiler registered for engine type: '{engine}'. "
-                        f"Available compilers: {', '.join(available) or 'none'}"
-                    )
-                compiler = compiler_class()
-                if hasattr(compiler, "model"):
-                    compiler.model = resolved_model
-                if resolved_api_key and hasattr(compiler, "_api_key"):
-                    compiler._api_key = resolved_api_key
-                if base_url and hasattr(compiler, "_base_url"):
-                    compiler._base_url = base_url
-
-            key_value("Engine", engine)
-            key_value("Model", resolved_model)
-            if base_url:
-                key_value("Base URL", base_url)
-
-            with spinner("Compiling policy..."):
-                result = await compiler.compile(policy, context if context else None)
-
-            if not result.success:
-                error("Compilation failed")
-                for err in result.errors:
-                    console.print(f"    [dim]{err}[/]")
-                raise SystemExit(1)
-
-            for w in result.warnings:
-                warning(w)
-
-            if validate:
-                validation_errors = compiler.validate_result(result)
-                if validation_errors:
-                    error("Validation errors:")
-                    for err in validation_errors:
-                        console.print(f"    [dim]{err}[/]")
-                    raise SystemExit(1)
-
-            compiler.export(result, output)
-            success("Compiled successfully")
-
-            # Show summary panel
-            summary: dict[str, str] = {"Output": str(output)}
-            if result.metadata:
-                if "state_count" in result.metadata:
-                    summary["States"] = str(result.metadata["state_count"])
-                if "constraint_count" in result.metadata:
-                    summary["Constraints"] = str(result.metadata["constraint_count"])
-                if "rubric_count" in result.metadata:
-                    summary["Rubrics"] = str(result.metadata["rubric_count"])
-                if "criteria_count" in result.metadata:
-                    summary["Criteria"] = str(result.metadata["criteria_count"])
-            config_panel("Compilation Result", summary)
-
-            # Show yaml preview
-            try:
-                generated = output.read_text()
-                yaml_preview(generated, title=str(output))
-            except OSError:
-                pass
-
-            # Next steps
-            if engine == "judge":
-                next_steps(
-                    [
-                        f"Review the generated rubric: {output}",
-                        f"Update openbias.yaml:  policy: {output}",
-                        "Start the proxy: openbias serve",
-                    ]
-                )
-            else:
-                next_steps(
-                    [
-                        f"Validate: openbias validate {output}",
-                        f"Update openbias.yaml:  engine: fsm / policy: {output}",
-                        "Start the proxy: openbias serve",
-                    ]
-                )
-
-        except click.ClickException:
-            raise
-        except ValueError as e:
-            error(str(e))
-            raise SystemExit(1)
-        except ImportError as e:
-            error(f"Missing dependency: {e}", hint="Install with: pip install openai")
-            raise SystemExit(1)
-
-    asyncio.run(run_compile())
-
-
 if __name__ == "__main__":
     main()

@@ -2,7 +2,7 @@
 
 from io import StringIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from click.testing import CliRunner
 
@@ -88,7 +88,7 @@ class TestValidateCommand:
                 "    type: judge\n"
                 "    phase: post_call\n"
                 "    model: gpt-4o-mini\n"
-                '    policies:\n'
+                '    rules:\n'
                 '      - "Be professional"\n'
                 '      - "No PII"\n'
                 ""
@@ -118,7 +118,7 @@ class TestValidateCommand:
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                '    policies:\n'
+                '    rules:\n'
                 '      - "Be professional"\n'
                 ""
             )
@@ -148,7 +148,7 @@ class TestValidateCommand:
                 "    type: judge\n"
                 "    phase: post_call\n"
                 "    model: gpt-4o-mini\n"
-                "    rubric: nonexistent_rubric\n"
+                "    default_rubric: nonexistent_rubric\n"
                 ""
             )
 
@@ -219,8 +219,13 @@ class TestServeCommand:
         with runner.isolated_filesystem():
             # Write a minimal valid yaml
             Path("openbias.yaml").write_text(
-                "engine: judge\nmodel: gpt-4o-mini\nport: 4000\n"
-                "policy:\n  fail_open: true\n"
+                "model: gpt-4o-mini\nport: 4000\n"
+                "evaluators:\n"
+                "  - name: safety\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+                "    rules:\n"
+                "      - 'Be professional'\n"
             )
             # Mock start_proxy so we don't actually start a server
             with patch("openbias.proxy.server.start_proxy"):
@@ -230,149 +235,29 @@ class TestServeCommand:
             combined = result.output
             assert "openbias init" not in combined or result.exit_code == 0
 
-
-class TestCompileCommand:
-    def test_compile_help(self):
-        result, _ = _invoke(["compile", "--help"])
-        assert result.exit_code == 0
-        assert "POLICY" in result.output
-
-
-    def test_compile_reads_model_from_yaml(self):
-        """compile should use model from openbias.yaml when --model is not given."""
-        runner = CliRunner()
-        with runner.isolated_filesystem():
-            Path("openbias.yaml").write_text("engine: judge\nmodel: gpt-4o\n")
-
-            mock_result = MagicMock()
-            mock_result.success = True
-            mock_result.errors = []
-            mock_result.warnings = []
-            mock_result.metadata = {}
-
-            mock_compiler = MagicMock()
-            mock_compiler.model = None
-            mock_compiler.compile = MagicMock(return_value=mock_result)
-            mock_compiler.validate_result = MagicMock(return_value=[])
-            mock_compiler.export = MagicMock()
-
-            mock_compiler_class = MagicMock(return_value=mock_compiler)
-
-            with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
-                with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=None):
-                    with patch("openbias.policy.compiler.PolicyCompilerRegistry.get", return_value=mock_compiler_class):
-                        runner.invoke(main, ["compile", "be professional"])
-
-            # Model should have been set from yaml (gpt-4o), not gpt-4o-mini
-            assert mock_compiler.model == "gpt-4o"
-
-    def test_compile_no_yaml_uses_settings_autodetect(self):
-        """compile with no yaml should use Settings auto-detection for model."""
-        runner = CliRunner()
-        with runner.isolated_filesystem():
-            mock_result = MagicMock()
-            mock_result.success = True
-            mock_result.errors = []
-            mock_result.warnings = []
-            mock_result.metadata = {}
-
-            mock_compiler = MagicMock()
-            mock_compiler.model = None
-            mock_compiler.compile = MagicMock(return_value=mock_result)
-            mock_compiler.validate_result = MagicMock(return_value=[])
-            mock_compiler.export = MagicMock()
-
-            mock_compiler_class = MagicMock(return_value=mock_compiler)
-
-            mock_settings = MagicMock()
-            mock_settings.proxy.default_model = "claude-3-haiku"
-
-            with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=None):
-                with patch("openbias.policy.compiler.PolicyCompilerRegistry.get", return_value=mock_compiler_class):
-                    with patch("openbias.config.settings.Settings", return_value=mock_settings):
-                        runner.invoke(main, ["compile", "be professional"])
-
-            assert mock_compiler.model == "claude-3-haiku"
-
-    def test_compile_fails_without_api_key(self):
-        """compile should fail with clear error when model requires a key that's missing."""
-        runner = CliRunner()
-        with runner.isolated_filesystem():
-            Path("openbias.yaml").write_text("engine: judge\nmodel: gpt-4o\n")
-
-            # Ensure OPENAI_API_KEY is NOT set
-            with patch.dict("os.environ", {}, clear=True):
-                # Patch out HOME/PATH etc that Settings might need
-                with patch.dict("os.environ", {"HOME": "/tmp"}, clear=False):
-                    result = runner.invoke(main, ["compile", "be professional"])
-
-            assert result.exit_code != 0
-
-    def test_compile_explicit_api_key_flag(self):
-        """--api-key should be forwarded to the compiler regardless of provider."""
-        runner = CliRunner()
-        with runner.isolated_filesystem():
-            Path("openbias.yaml").write_text("engine: judge\nmodel: gpt-4o\n")
-
-            mock_result = MagicMock()
-            mock_result.success = True
-            mock_result.errors = []
-            mock_result.warnings = []
-            mock_result.metadata = {}
-
-            mock_engine_cls = MagicMock()
-            mock_engine_instance = MagicMock()
-            mock_compiler = MagicMock()
-            mock_compiler.compile = MagicMock(return_value=mock_result)
-            mock_compiler.validate_result = MagicMock(return_value=[])
-            mock_compiler.export = MagicMock()
-            mock_engine_instance.get_compiler = MagicMock(return_value=mock_compiler)
-            mock_engine_cls.return_value = mock_engine_instance
-
-            with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=mock_engine_cls):
-                runner.invoke(
-                    main, ["compile", "be professional", "--api-key", "sk-test-key"]
-                )
-
-            # get_compiler should have received the api_key
-            mock_engine_instance.get_compiler.assert_called_once_with(
-                model="gpt-4o", api_key="sk-test-key", base_url=None
-            )
-
-    def test_compile_gemini_uses_env_key(self):
-        """compile with gemini model should work when GOOGLE_API_KEY is set (key resolved by provider)."""
+    def test_serve_compiles_rules_before_start(self):
         runner = CliRunner()
         with runner.isolated_filesystem():
             Path("openbias.yaml").write_text(
-                "engine: judge\nmodel: gemini/gemini-2.5-flash\n"
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: safety\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+                "    rules:\n"
+                "      - 'Be professional'\n"
             )
+            with patch("openbias.proxy.server.start_proxy"):
+                with patch("openbias.config.settings.Settings.validate"):
+                    with patch(
+                        "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
+                        new_callable=AsyncMock,
+                    ) as mock_compile:
+                        mock_compile.return_value = {"inline_policy": ["Be professional"]}
+                        result = runner.invoke(main, ["serve"])
 
-            mock_result = MagicMock()
-            mock_result.success = True
-            mock_result.errors = []
-            mock_result.warnings = []
-            mock_result.metadata = {}
-
-            mock_engine_cls = MagicMock()
-            mock_engine_instance = MagicMock()
-            mock_compiler = MagicMock()
-            mock_compiler.compile = MagicMock(return_value=mock_result)
-            mock_compiler.validate_result = MagicMock(return_value=[])
-            mock_compiler.export = MagicMock()
-            mock_engine_instance.get_compiler = MagicMock(return_value=mock_compiler)
-            mock_engine_cls.return_value = mock_engine_instance
-
-            with patch.dict("os.environ", {"GOOGLE_API_KEY": "test-gemini-key"}):
-                with patch("openbias.policy.registry.PolicyEngineRegistry.get", return_value=mock_engine_cls):
-                    result = runner.invoke(main, ["compile", "be professional"])
-
-            # Compile should succeed; provider picks up GOOGLE_API_KEY from env
-            mock_engine_instance.get_compiler.assert_called_once_with(
-                model="gemini/gemini-2.5-flash",
-                api_key=None,
-                base_url=None,
-            )
-
+            assert result.exit_code == 0
+            assert mock_compile.called
 
 class TestTriggerCommand:
     def test_trigger_help(self):
@@ -401,8 +286,13 @@ class TestTriggerCommand:
         runner = CliRunner()
         with runner.isolated_filesystem():
             Path("openbias.yaml").write_text(
-                "engine: judge\nmodel: gpt-4o-mini\n"
-                "policy:\n  - 'Be professional'\n"
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: safety\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+                "    rules:\n"
+                "      - 'Be professional'\n"
                 ""
             )
 
@@ -449,8 +339,13 @@ class TestTriggerCommand:
         runner = CliRunner()
         with runner.isolated_filesystem():
             Path("openbias.yaml").write_text(
-                "engine: judge\nmodel: gpt-4o-mini\n"
-                "policy:\n  - 'Be professional'\n"
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: safety\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+                "    rules:\n"
+                "      - 'Be professional'\n"
                 ""
             )
 
@@ -496,8 +391,13 @@ class TestTriggerCommand:
         runner = CliRunner()
         with runner.isolated_filesystem():
             Path("openbias.yaml").write_text(
-                "engine: judge\nmodel: gpt-4o-mini\n"
-                "policy:\n  - 'Be professional'\n"
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: safety\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+                "    rules:\n"
+                "      - 'Be professional'\n"
                 ""
             )
 
@@ -558,7 +458,6 @@ class TestHelpOutput:
         assert "Open Bias" in result.output
         assert "init" in result.output
         assert "serve" in result.output
-        assert "compile" in result.output
         assert "validate" in result.output
         assert "info" in result.output
         assert "version" in result.output
