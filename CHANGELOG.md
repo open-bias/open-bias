@@ -54,7 +54,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Config validation at startup**: `openbias serve` checks that referenced policy files exist and that the required API key is present; exits with a clear error if not.
 - **API-key syncing**: Keys loaded from `.env` are synced into `os.environ` so downstream libraries (LiteLLM, LangChain) work without explicit `load_dotenv()`.
 - **Langfuse env-var aliases**: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` are read directly from the environment alongside YAML config.
-- **Engine-specific `openbias compile`**: The policy compiler now accepts `--engine` to target a specific engine format (judge, fsm, llm, nemo).
+- **Automatic rules compilation**: `openbias serve`, `trigger`, and `eval` automatically compile rules into engine-native config at startup. No separate compile step needed.
 - **`docs/configuration.md`**: Full configuration reference for `openbias.yaml`.
 
 ### Changed
@@ -84,8 +84,8 @@ Initial release.
 - **LLM engine**: classifies conversation state and detects drift using LLM-based reasoning.
 - **NeMo engine**: integrates NVIDIA NeMo Guardrails for content safety and dialog rails.
 - **Composite engine**: runs multiple engines in parallel, merges results (most restrictive wins).
-- **Policy compiler**: translates natural language policies to engine-specific YAML via `openbias compile`.
-- **CLI**: `openbias init`, `openbias serve`, `openbias compile`, `openbias validate`, `openbias info`.
+- **Policy compiler**: translates natural language rules to engine-specific config automatically during serve startup.
+- **CLI**: `openbias init`, `openbias serve`, `openbias trigger`, `openbias eval`, `openbias validate`, `openbias info`.
 - **OpenTelemetry tracing**: spans for every proxy call, policy evaluation, and intervention. Console, OTLP, and Langfuse backends.
 - Fail-open design: hook failures pass the request through unmodified. Only intentional blocks propagate.
 - Deferred intervention: violations detected async are applied as prompt injections on the next turn.
