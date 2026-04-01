@@ -178,37 +178,39 @@ class TestEvaluatorYamlMapping:
         assert ev["phase"] == "post_call"
         assert ev["config"] == {}
 
-    def test_judge_policies_shorthand(self):
-        """Judge evaluator with policies shorthand maps to inline_policy."""
+    def test_judge_rules_key_passes_through(self):
+        """Judge evaluator with canonical rules key is preserved in config."""
         source = self._build_source({
             "evaluators": [
                 {
                     "name": "safety",
                     "type": "judge",
                     "phase": "pre_call",
-                    "policies": ["No harmful content", "No PII leaks"],
+                    "rules": ["No harmful content", "No PII leaks"],
                 },
             ],
         })
         result = source._map_evaluators(source._yaml_data)
         ev = result["evaluators"][0]
-        assert ev["config"]["inline_policy"] == ["No harmful content", "No PII leaks"]
+        assert ev["config"]["rules"] == ["No harmful content", "No PII leaks"]
 
-    def test_judge_rubric_shorthand(self):
-        """Judge evaluator with rubric shorthand maps to default_rubric."""
+    def test_judge_rules_file_resolved(self):
+        """rules_file is resolved relative to the config file."""
+        from pathlib import Path
+        config_file = Path("/etc/openbias/openbias.yaml")
         source = self._build_source({
             "evaluators": [
                 {
                     "name": "behavior",
                     "type": "judge",
                     "phase": "post_call",
-                    "rubric": "agent_behavior",
+                    "rules_file": "./rules.md",
                 },
             ],
-        })
+        }, config_file=config_file)
         result = source._map_evaluators(source._yaml_data)
         ev = result["evaluators"][0]
-        assert ev["config"]["default_rubric"] == "agent_behavior"
+        assert ev["config"]["rules_file"] == "/etc/openbias/rules.md"
 
     def test_judge_extra_keys_in_config(self):
         """Extra keys on a judge evaluator go into config dict."""
@@ -228,8 +230,8 @@ class TestEvaluatorYamlMapping:
         assert ev["config"]["pass_threshold"] == 0.6
         assert ev["config"]["temperature"] == 0.0
 
-    def test_fsm_evaluator_policy_resolved(self):
-        """FSM evaluator with policy path gets resolved relative to config file."""
+    def test_fsm_evaluator_rules_file_resolved(self):
+        """FSM evaluator with rules_file gets resolved relative to config file."""
         from pathlib import Path
         config_file = Path("/etc/openbias/openbias.yaml")
         source = self._build_source(
@@ -239,7 +241,7 @@ class TestEvaluatorYamlMapping:
                         "name": "workflow",
                         "type": "fsm",
                         "phase": "post_call",
-                        "policy": "./workflow.yaml",
+                        "rules_file": "./workflow-rules.md",
                     },
                 ],
             },
@@ -247,10 +249,10 @@ class TestEvaluatorYamlMapping:
         )
         result = source._map_evaluators(source._yaml_data)
         ev = result["evaluators"][0]
-        assert ev["config"]["config_path"] == "/etc/openbias/workflow.yaml"
+        assert ev["config"]["rules_file"] == "/etc/openbias/workflow-rules.md"
 
-    def test_nemo_evaluator_policy_resolved(self):
-        """NeMo evaluator with policy path gets resolved relative to config file."""
+    def test_nemo_evaluator_rules_file_resolved(self):
+        """NeMo evaluator with rules_file gets resolved relative to config file."""
         from pathlib import Path
         config_file = Path("/etc/openbias/openbias.yaml")
         source = self._build_source(
@@ -260,7 +262,7 @@ class TestEvaluatorYamlMapping:
                         "name": "nemo-rails",
                         "type": "nemo",
                         "phase": "post_call",
-                        "policy": "./nemo_config/",
+                        "rules_file": "./nemo-rules.md",
                     },
                 ],
             },
@@ -268,7 +270,7 @@ class TestEvaluatorYamlMapping:
         )
         result = source._map_evaluators(source._yaml_data)
         ev = result["evaluators"][0]
-        assert ev["config"]["config_path"] == "/etc/openbias/nemo_config"
+        assert ev["config"]["rules_file"] == "/etc/openbias/nemo-rules.md"
 
     def test_fsm_evaluator_extra_keys(self):
         """FSM evaluator extra keys go into config."""
@@ -278,14 +280,14 @@ class TestEvaluatorYamlMapping:
                     "name": "workflow",
                     "type": "fsm",
                     "phase": "post_call",
-                    "policy": "/abs/workflow.yaml",
+                    "rules_file": "/abs/workflow-rules.md",
                     "max_steps": 10,
                 },
             ],
         })
         result = source._map_evaluators(source._yaml_data)
         ev = result["evaluators"][0]
-        assert ev["config"]["config_path"] == "/abs/workflow.yaml"
+        assert ev["config"]["rules_file"] == "/abs/workflow-rules.md"
         assert ev["config"]["max_steps"] == 10
 
     def test_multiple_evaluators(self):
@@ -296,19 +298,19 @@ class TestEvaluatorYamlMapping:
                     "name": "pre-screen",
                     "type": "judge",
                     "phase": "pre_call",
-                    "policies": ["No harmful content"],
+                    "rules": ["No harmful content"],
                 },
                 {
                     "name": "post-eval",
                     "type": "judge",
                     "phase": "post_call",
-                    "rubric": "quality",
+                    "rules_file": "/path/to/post-rules.md",
                 },
                 {
                     "name": "workflow",
                     "type": "fsm",
                     "phase": "post_call",
-                    "policy": "/path/to/workflow.yaml",
+                    "rules_file": "/path/to/workflow-rules.md",
                 },
             ],
         })
@@ -318,15 +320,31 @@ class TestEvaluatorYamlMapping:
         pre = result["evaluators"][0]
         assert pre["name"] == "pre-screen"
         assert pre["phase"] == "pre_call"
-        assert pre["config"]["inline_policy"] == ["No harmful content"]
+        assert pre["config"]["rules"] == ["No harmful content"]
 
         post = result["evaluators"][1]
         assert post["name"] == "post-eval"
-        assert post["config"]["default_rubric"] == "quality"
+        assert post["config"]["rules_file"] == "/path/to/post-rules.md"
 
         fsm = result["evaluators"][2]
         assert fsm["type"] == "fsm"
-        assert fsm["config"]["config_path"] == "/path/to/workflow.yaml"
+        assert fsm["config"]["rules_file"] == "/path/to/workflow-rules.md"
+
+    @pytest.mark.parametrize("legacy_key", ["policy", "policies", "rubric", "workflow"])
+    def test_legacy_top_level_keys_fail_fast(self, legacy_key):
+        source = self._build_source({"evaluators": [], legacy_key: "legacy"})
+        with pytest.raises(ValueError, match=f"Legacy key `{legacy_key}` is no longer supported"):
+            source._map_evaluators(source._yaml_data)
+
+    @pytest.mark.parametrize("legacy_key", ["policy", "policies", "rubric", "workflow"])
+    def test_legacy_evaluator_keys_fail_fast(self, legacy_key):
+        source = self._build_source({
+            "evaluators": [
+                {"name": "safety", "type": "judge", "phase": "post_call", legacy_key: "legacy"}
+            ]
+        })
+        with pytest.raises(ValueError, match=f"Legacy key `{legacy_key}` is no longer supported"):
+            source._map_evaluators(source._yaml_data)
 
     def test_no_policy_key_in_result(self):
         """New format path should NOT populate result['policy']."""
@@ -400,7 +418,7 @@ class TestGetPolicyConfig:
                     "name": "workflow",
                     "type": "fsm",
                     "phase": "post_call",
-                    "config": {"config_path": "/abs/workflow.yaml"},
+                    "config": {"rules_file": "/abs/workflow-rules.md"},
                 },
             ],
             proxy={"default_model": "gpt-4o-mini"},
@@ -408,7 +426,7 @@ class TestGetPolicyConfig:
         result = settings.get_policy_config()
         assert result["type"] == "fsm"
         assert "models" not in result["config"]
-        assert result["config_path"] == "/abs/workflow.yaml"
+        assert result["config_path"] is None
 
 
 # =========================================================================

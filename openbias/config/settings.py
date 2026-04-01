@@ -15,7 +15,7 @@ The simplified openbias.yaml format:
     evaluators:
       - name: safety
         type: judge
-        policies:
+        rules:
           - "Must NOT provide financial advice"
           - "Be professional and helpful"
     tracing:
@@ -228,6 +228,14 @@ class YamlConfigSource(PydanticBaseSettingsSource):
     # Keys extracted from each evaluator entry as EvaluatorConfig fields
     # (everything else goes into the config dict).
     _EVALUATOR_FIELD_KEYS = frozenset({"name", "type", "phase"})
+    _DEPRECATED_TOPLEVEL_KEYS = frozenset({"policy", "policies", "rubric", "workflow"})
+    _DEPRECATED_EVALUATOR_KEYS = frozenset({"policy", "policies", "rubric", "workflow"})
+
+    @staticmethod
+    def _legacy_key_error(key: str) -> ValueError:
+        return ValueError(
+            f"Legacy key `{key}` is no longer supported. Use `rules` or `rules_file`."
+        )
 
     def _map_common_fields(self, data: dict[str, Any], result: dict[str, Any]) -> None:
         """Map proxy, debug/log_level, and tracing fields shared by both mapping paths."""
@@ -267,6 +275,10 @@ class YamlConfigSource(PydanticBaseSettingsSource):
         """
         result: dict[str, Any] = {}
 
+        for key in self._DEPRECATED_TOPLEVEL_KEYS:
+            if key in data:
+                raise self._legacy_key_error(key)
+
         # Direct top-level pipeline fields
         _FLAT_KEYS = (
             "mode", "fail_action", "strategy",
@@ -299,16 +311,11 @@ class YamlConfigSource(PydanticBaseSettingsSource):
                 if k in self._EVALUATOR_FIELD_KEYS:
                     continue
 
-                if ev_type == "judge":
-                    if k == "policies":
-                        config["inline_policy"] = v
-                        continue
-                    if k == "rubric":
-                        config["default_rubric"] = v
-                        continue
+                if k in self._DEPRECATED_EVALUATOR_KEYS:
+                    raise self._legacy_key_error(k)
 
-                if ev_type in ("fsm", "nemo") and k == "policy":
-                    config["config_path"] = self._resolve_path(v)
+                if k == "rules_file":
+                    config["rules_file"] = self._resolve_path(v)
                     continue
 
                 config[k] = v

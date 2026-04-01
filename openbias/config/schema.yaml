@@ -69,52 +69,46 @@ log_level: INFO            # default: INFO
 #   type  — engine type: judge | fsm | llm | nemo (default: "judge")
 #   phase — when to run: pre_call | post_call (default: "post_call")
 #
-# All other keys are collected into the evaluator's `config` dict, with
-# certain shorthands automatically mapped by the YAML parser:
-#
-#   Judge shorthands:
-#     policies: [...]  → config.inline_policy: [...]
-#     rubric: "x"      → config.default_rubric: "x"
-#
-#   FSM / NeMo shorthand:
-#     policy: "./x"    → config.config_path: "./x" (resolved to absolute path)
-#
-#   All other keys pass through to config unchanged.
+# All other keys are collected into the evaluator's `config` dict.
+# Canonical rule source keys are:
+#   rules: [...] | "single rule"   → inline rules content
+#   rules_file: ./rules.md         → external markdown/plaintext rules source
 #
 
 evaluators:
 
   # --- Judge evaluator (type: judge) ---
   #
-  # Evaluates responses against policy rules using a separate LLM as judge.
+  # Evaluates responses against rules using a separate LLM as judge.
   #
   - name: safety-screen
     type: judge
     phase: pre_call
-    # Shorthand: inline policy rules (mapped to config.inline_policy)
-    policies:
+    # Canonical: inline rules
+    rules:
       - "No harmful content"
       - "No PII leaks"
     # Additional judge config keys (passed through to config dict):
-    # rubric: agent_behavior       # shorthand for config.default_rubric
+    # rules_file: ./rules.md       # optional markdown/plaintext rules source
     # custom_rubrics_path: ./rubrics/  # path to custom rubric YAML files
     # verbose: true                # log raw judge prompt + response
 
   - name: behavior-eval
     type: judge
     phase: post_call
-    # Shorthand: sets the default rubric for evaluation
-    rubric: agent_behavior
+    # Optional free-form external rules
+    rules_file: ./rules.md
 
   # --- FSM evaluator (type: fsm) ---
   #
-  # Deterministic workflow enforcement using finite state machines.
+  # Deterministic rules enforcement using finite state machines.
   #
   - name: workflow-guard
     type: fsm
     phase: post_call
-    # Shorthand: path to workflow YAML file (mapped to config.config_path)
-    policy: ./workflow.yaml
+    rules:
+      - "Collect required account verification fields before payout."
+      - "Require manager approval before overriding sanctions checks."
     # Optional classifier config (passed through to config dict):
     # classifier:
     #   model_name: all-MiniLM-L6-v2   # sentence-transformers model
@@ -148,7 +142,7 @@ evaluators:
   # - name: nemo-rails
   #   type: nemo
   #   phase: post_call
-  #   policy: ./nemo_config/         # path to NeMo config directory
+  #   rules_file: ./rules.md         # markdown/plaintext rules source
   #   fail_closed: false             # report error as violation (default: false = allow)
   #   rails:                         # which rails to enable (omit for all)
   #     - input
