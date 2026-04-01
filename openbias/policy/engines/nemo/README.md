@@ -19,8 +19,8 @@ Request ──► evaluate_request() ──► NeMo Input Rails ──► ALLOW 
 Response ──► evaluate_response() ──► NeMo Output Rails ──► ALLOW / DENY
                                        │
                                   Blocked response?
-                                  ├── Yes → Decision.BLOCK + message
-                                  └── No  → Decision.ALLOW
+                                  ├── Yes → EvaluationStatus.VIOLATION + violations
+                                  └── No  → EvaluationStatus.ALLOW
 ```
 
 ## Architecture
