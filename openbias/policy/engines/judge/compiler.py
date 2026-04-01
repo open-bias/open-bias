@@ -1,7 +1,7 @@
 """
-Judge Policy Compiler - Natural Language to Rubric YAML.
+Judge Rules Compiler - Rules Text to Rubric YAML.
 
-Converts natural language policy descriptions into judge rubric YAML
+Converts normalized rules text into judge rubric YAML
 that can be used with the JudgePolicyEngine.
 
 Example:
@@ -13,7 +13,7 @@ Example:
     )
 
     if result.success:
-        compiler.export(result, Path("policy.yaml"))
+        compiler.export(result, Path("rubric.yaml"))
     ```
 """
 
@@ -148,14 +148,14 @@ Example 2 - Agent behavior rubric (for quality requirements):
 @register_compiler("judge")
 class JudgeCompiler(LLMPolicyCompiler):
     """
-    Compiler that converts natural language to judge rubric YAML.
+    Compiler that converts normalized rules text to judge rubric YAML.
 
-    Uses an LLM to parse policy descriptions and generate rubric
+    Uses an LLM to parse rules and generate rubric
     configurations with criteria, scales, thresholds, and actions.
     """
 
     SYSTEM_PROMPT = (
-        "You are a policy compiler that converts natural language policy descriptions "
+        "You are a rules compiler that converts normalized rules text "
         "into structured judge rubric configurations.\n\n"
         "Your task is to:\n"
         "1. Identify prohibitions, quality requirements, and mandatory behaviors\n"
@@ -177,21 +177,21 @@ class JudgeCompiler(LLMPolicyCompiler):
 
     def _build_compilation_prompt(
         self,
-        natural_language: str,
+        rules_text: str,
         context: dict[str, Any] | None = None,
     ) -> str:
         """
         Build the prompt for judge rubric compilation.
 
         Args:
-            natural_language: User's policy description
+            rules_text: Normalized rules text for this evaluator
             context: Optional hints (domain, etc.)
 
         Returns:
             Complete prompt for LLM
         """
         prompt_parts = [
-            "Convert the following natural language policy into judge rubric configuration.",
+            "Convert the following rules into judge rubric configuration.",
             "",
             JUDGE_RUBRIC_SCHEMA,
             "",
@@ -207,9 +207,9 @@ class JudgeCompiler(LLMPolicyCompiler):
 
         prompt_parts.extend(
             [
-                "Natural language policy:",
+                "Rules:",
                 "---",
-                natural_language,
+                rules_text,
                 "---",
                 "",
                 "Generate the JSON rubric configuration:",
@@ -221,14 +221,14 @@ class JudgeCompiler(LLMPolicyCompiler):
     def _parse_compilation_response(
         self,
         response: dict[str, Any],
-        natural_language: str,
+        rules_text: str,
     ) -> CompilationResult:
         """
         Parse LLM JSON response into rubric configuration.
 
         Args:
             response: Parsed JSON from LLM
-            natural_language: Original policy for metadata
+            rules_text: Original rules text for metadata
 
         Returns:
             CompilationResult with rubric config
@@ -331,7 +331,7 @@ class JudgeCompiler(LLMPolicyCompiler):
                 config=config,
                 warnings=warnings,
                 metadata={
-                    "source": natural_language[:200],
+                    "source": rules_text[:200],
                     "rubric_count": len(validated_rubrics),
                     "criteria_count": total_criteria,
                 },
