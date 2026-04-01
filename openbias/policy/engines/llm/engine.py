@@ -33,7 +33,6 @@ from openbias.policy.engines.llm.llm_client import LLMClient
 from openbias.policy.engines.llm.state_classifier import LLMStateClassifier
 from openbias.policy.engines.llm.drift_detector import DriftDetector
 from openbias.policy.engines.llm.constraint_evaluator import LLMConstraintEvaluator
-from openbias.policy.engines.llm.intervention import InterventionHandler
 from openbias.policy.engines.fsm.workflow.parser import WorkflowParser
 from openbias.policy.engines.fsm.workflow.schema import WorkflowDefinition
 from openbias.core.utils import extract_response_content, extract_tool_call_names
@@ -77,7 +76,6 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         self._state_classifier: LLMStateClassifier | None = None
         self._drift_detector: DriftDetector | None = None
         self._constraint_evaluator: LLMConstraintEvaluator | None = None
-        self._intervention_engine: InterventionHandler | None = None
         self._sessions: SessionStore[SessionContext] = SessionStore(
             ttl=self.DEFAULT_SESSION_TTL,
             max_sessions=self.DEFAULT_MAX_SESSIONS,
@@ -149,11 +147,6 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             max_constraints_per_batch=config.get("max_constraints_per_batch", 5),
         )
         
-        self._intervention_engine = InterventionHandler(
-            self._workflow,
-            cooldown_turns=config.get("cooldown_turns", 2),
-        )
-
         self._initialized = True
         logger.info(f"LLMPolicyEngine initialized: {self.name}")
 
@@ -279,14 +272,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                         confidence=cv.confidence,
                     ))
 
-            # 4. Decide intervention message (still engine-owned for formatting)
-            intervention_message = None
-            if self._intervention_engine:
-                intervention_message = self._intervention_engine.decide(
-                    session, constraint_evals, drift
-                )
-
-            # 5. Record transition
+            # 4. Record transition
             prev_state = session.current_state
             session.record_transition(
                 from_state=prev_state,
@@ -300,41 +286,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                 },
             )
 
-            # 6. Build result — if intervention engine decided to intervene,
-            #    add a top-level violation so the interceptor can act on it
-            if intervention_message and not violation_records:
-                from openbias.core.intervention.strategies import format_message
-
-                template_context = {
-                    "state": classification.best_state,
-                    "drift": drift.composite,
-                    "drift_level": drift.level.value,
-                }
-                formatted = format_message(intervention_message, template_context)
-                violation_records.append(ViolationRecord(
-                    rule_id="llm_intervention",
-                    rule_name="llm_intervention",
-                    reason=formatted,
-                    severity="warning",
-                    engine=self.name,
-                ))
-            elif intervention_message and violation_records:
-                # Override the first violation's reason with the formatted message
-                from openbias.core.intervention.strategies import format_message
-
-                template_context = {
-                    "state": classification.best_state,
-                    "drift": drift.composite,
-                    "drift_level": drift.level.value,
-                }
-                violation_records[0] = ViolationRecord(
-                    rule_id=violation_records[0].rule_id,
-                    rule_name=violation_records[0].rule_name,
-                    reason=format_message(intervention_message, template_context),
-                    severity=violation_records[0].severity,
-                    engine=self.name,
-                )
-
+            # 5. Build result — pure evaluation, no intervention logic
             severity_order = ["critical", "error", "warning", "info"]
             max_severity = next(
                 (s for s in severity_order if any(v.severity == s for v in violation_records)),

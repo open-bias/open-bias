@@ -201,8 +201,12 @@ class TestSessionManagement:
 class TestCriticalViolationDecision:
     """Tests that critical violations no longer produce BLOCK directly."""
 
-    async def test_critical_violation_returns_intervene_not_block(self, engine, sample_workflow):
-        """Critical constraint violation should produce INTERVENE, not BLOCK."""
+    async def test_critical_violation_returns_violation_status(self, engine, sample_workflow):
+        """Critical constraint violation should produce VIOLATION status.
+
+        The engine is a pure evaluator — it reports violations with diagnostic
+        reasons and lets the interceptor decide enforcement (block/intervene).
+        """
         await engine.initialize({"workflow": sample_workflow})
 
         # Mock the LLM client
@@ -219,11 +223,6 @@ class TestCriticalViolationDecision:
         critical_cv.confidence = 1.0
         engine._constraint_evaluator.evaluate = AsyncMock(return_value=[critical_cv])
 
-        # Inject an intervention engine that triggers on the violation
-        mock_intervention = MagicMock()
-        mock_intervention.decide = MagicMock(return_value="Policy violation detected.")
-        engine._intervention_engine = mock_intervention
-
         result = await engine.evaluate_response(
             "session_crit",
             {"choices": [{"message": {"content": "Hello!"}}]},
@@ -231,6 +230,10 @@ class TestCriticalViolationDecision:
         )
 
         assert result.status == EvaluationStatus.VIOLATION
+        assert len(result.violations) == 1
+        assert result.violations[0].rule_id == "critical_rule"
+        assert result.violations[0].severity == "critical"
+        assert result.violations[0].reason == "critical violation occurred"
 
     async def test_max_severity_metadata_critical(self, engine, sample_workflow):
         """max_severity metadata should reflect the highest severity violation."""
