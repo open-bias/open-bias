@@ -67,7 +67,7 @@ async def compile_runtime_config_for_evaluator(
         compiled_rubrics = []
         if isinstance(result.config, dict):
             compiled_rubrics = result.config.get("rubrics", [])
-        cleaned["inline_policy"] = compiled_rubrics or normalized_rules
+        cleaned["inline_rules"] = compiled_rubrics or normalized_rules
         return cleaned
 
     if evaluator_type == "fsm":

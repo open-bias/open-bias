@@ -383,11 +383,11 @@ def _validate_openbias_config(config_path: Path, raw: dict) -> None:
         from openbias.policy.engines.judge.rubrics import RubricRegistry
 
         registry = RubricRegistry()
-        inline_policy = first_ev_config.get("inline_policy")
-        if inline_policy is not None:
+        inline_rules = first_ev_config.get("inline_rules")
+        if inline_rules is not None:
             temp = JudgePolicyEngine()
             temp._registry = registry
-            temp._load_inline_policy(inline_policy)
+            temp._load_inline_rules(inline_rules)
             registry = temp._registry
 
         rubric_names = registry.list_rubrics()
