@@ -38,7 +38,7 @@ python quickstart.py         # terminal 2
 
 A coding assistant that gets hit with a prompt injection attack. The judge engine evaluates the response asynchronously (zero latency on your call), catches the violation, and injects a system prompt amendment on the next turn. Watch the agent reassert its boundaries.
 
-**What's happening under the hood**: The judge LLM scores responses on built-in rubrics (safety, instruction_following, tone) and maps the verdict to an action (pass/intervene/block).
+**What's happening under the hood**: The judge LLM scores responses on built-in rubrics (safety, instruction_following, tone) and maps the verdict to an action (pass/intervene/block/shadow).
 
 ```bash
 cd examples/judge

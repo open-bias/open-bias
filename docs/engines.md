@@ -45,7 +45,7 @@ Uses an LLM to evaluate every agent response against configurable rubrics. The j
 
 1. After the agent responds, the judge LLM receives the conversation history and the response
 2. It scores the response on each criterion in the active rubric (binary pass/fail or 5-point Likert)
-3. Binary rubrics: any criterion failure triggers the configured `fail_action` (block or intervene)
+3. Binary rubrics: any criterion failure triggers the configured `fail_action` (block, intervene, or shadow)
 4. Likert rubrics: scores are normalized and aggregated; the aggregate maps to an action based on thresholds
 5. Optionally, a conversation-level rubric runs every N turns to catch gradual drift
 
