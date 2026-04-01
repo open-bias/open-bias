@@ -60,7 +60,7 @@ Uses an LLM to evaluate every agent response against configurable rubrics. The j
 |--------|-------|-------|----------------|
 | `agent_behavior` | turn | 5-point | Instruction following, tool use, hallucinations (default) |
 | `safety` | turn | binary | Harm, PII, unauthorized actions |
-| `conversation_policy` | conversation | 5-point | Goal progression, consistency, drift |
+| `conversation_rules` | conversation | 5-point | Goal progression, consistency, drift |
 
 Custom rubrics are defined as YAML files. See the [judge engine README](../openbias/policy/engines/judge/README.md) for the rubric schema.
 

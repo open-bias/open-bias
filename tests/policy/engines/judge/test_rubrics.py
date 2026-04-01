@@ -18,7 +18,7 @@ class TestRubricRegistry:
         names = registry.list_rubrics()
         assert "safety" in names
         assert "agent_behavior" in names
-        assert "conversation_policy" in names
+        assert "conversation_rules" in names
 
     def test_get_existing_rubric(self):
         registry = RubricRegistry()
@@ -63,9 +63,9 @@ class TestRubricRegistry:
         for criterion in rubric.criteria:
             assert criterion.scale == ScoreScale.BINARY
 
-    def test_conversation_policy_rubric(self):
+    def test_conversation_rules_rubric(self):
         registry = RubricRegistry()
-        rubric = registry.get("conversation_policy")
+        rubric = registry.get("conversation_rules")
         assert rubric.scope == EvaluationScope.CONVERSATION
 
 class TestCreateRulesRubric:

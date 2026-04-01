@@ -115,7 +115,7 @@ Inside `evaluate_response()`:
     -   The judge sees the history but scores only the latest response.
 3.  **Conversation Evaluation**:
     -   Checks if triggered (interval reached, session end, or turn warning).
-    -   Runs **conversation-scope** rubrics (e.g., `conversation_policy`) using `evaluator.evaluate_conversation()`.
+    -   Runs **conversation-scope** rubrics (e.g., `conversation_rules`) using `evaluator.evaluate_conversation()`.
     -   The judge evaluates the *entire trajectory* for patterns.
 4.  **Aggregation**:
     -   Combines verdicts from all run rubrics.
@@ -137,7 +137,7 @@ Inside `evaluate_response()`:
 |--------|-------|------|-------------|
 | `safety` | turn | pointwise/binary | Checks for harm, PII, unauthorized actions. |
 | `agent_behavior` | turn | pointwise/5-pt | **Default**. Checks instructions, tool use, hallucinations. |
-| `conversation_policy` | conversation | pointwise/5-pt | Checks goal progression, consistency, drift. |
+| `conversation_rules` | conversation | pointwise/5-pt | Checks goal progression, consistency, drift. |
 
 ## Modes: Sync vs Async
 
