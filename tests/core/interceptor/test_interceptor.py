@@ -24,7 +24,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from openbias.core.interceptor import (
-    Decision,
     EvaluationResult,
     EvaluationStatus,
     ViolationRecord,
@@ -126,8 +125,8 @@ class TestSyncPreCall:
     async def test_block_blocks(self):
         """VIOLATION with fail_action=block blocks the request."""
         evaluator = _mock_engine(
-            decision=Decision.BLOCK,
-            message="forbidden",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="forbidden",
         )
         interceptor = Interceptor(
             pre_call_evaluators=[evaluator], post_call_evaluators=[],
@@ -143,7 +142,7 @@ class TestSyncPreCall:
         """First evaluator returns VIOLATION with fail_action=block — second evaluator never runs."""
         e1 = _mock_engine(
             name="blocker",
-            decision=Decision.BLOCK,
+            status=EvaluationStatus.VIOLATION,
         )
         call_count = 0
 
@@ -181,10 +180,10 @@ class TestSyncPreCall:
         assert result.allowed is True
 
     async def test_intervene_injects_user_message_by_default(self):
-        """INTERVENE evaluator injects a user message by default."""
+        """VIOLATION evaluator with fail_action=intervene injects a user message by default."""
         evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            message="Stay on topic",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="Stay on topic",
         )
         interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
         req = _request()
@@ -197,10 +196,10 @@ class TestSyncPreCall:
         assert any("Stay on topic" in c for c in contents)
 
     async def test_intervene_system_prompt_append_strategy(self):
-        """INTERVENE with system_prompt_append strategy appends to system prompt."""
+        """VIOLATION with system_prompt_append strategy appends to system prompt."""
         evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            message="Verify identity first",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="Verify identity first",
         )
         interceptor = Interceptor(
             pre_call_evaluators=[evaluator],
@@ -218,10 +217,10 @@ class TestSyncPreCall:
         assert "Verify identity first" in system_msg["content"]
 
     async def test_intervene_user_message_inject_strategy(self):
-        """INTERVENE with user_message_inject strategy injects a user message."""
+        """VIOLATION with user_message_inject strategy injects a user message."""
         evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            message="Verify identity first",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="Verify identity first",
         )
         interceptor = Interceptor(
             pre_call_evaluators=[evaluator],
@@ -239,10 +238,10 @@ class TestSyncPreCall:
         assert any("Verify identity first" in c for c in contents)
 
     async def test_intervene_without_message_no_modification(self):
-        """INTERVENE with no message — no modification applied."""
+        """VIOLATION with no message — no modification applied."""
         evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            message=None,
+            status=EvaluationStatus.VIOLATION,
+            violation_message=None,
         )
         interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
         req = _request()
@@ -259,8 +258,8 @@ class TestSyncPreCall:
         at request-modification time.
         """
         evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            message="Some guidance",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="Some guidance",
         )
         interceptor = Interceptor(
             pre_call_evaluators=[evaluator],
@@ -278,8 +277,8 @@ class TestSyncPreCall:
     async def test_intervene_does_not_mutate_original_request_data(self):
         """Intervention must not mutate the caller's original request_data dict."""
         evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            message="Stay on topic",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="Stay on topic",
         )
         interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
         original_messages = [{"role": "user", "content": "hello"}]
@@ -318,8 +317,8 @@ class TestSyncPostCall:
     async def test_block_blocks(self):
         """VIOLATION with fail_action=block — response is blocked."""
         evaluator = _mock_engine(
-            decision=Decision.BLOCK,
-            message="toxic content",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="toxic content",
         )
         interceptor = Interceptor(
             pre_call_evaluators=[], post_call_evaluators=[evaluator], mode="sync",
@@ -334,10 +333,10 @@ class TestSyncPostCall:
         assert result.message == "toxic content"
 
     async def test_intervene_returns_intervention_data(self):
-        """INTERVENE evaluator — modified_data contains intervention info."""
+        """VIOLATION evaluator — modified_data contains intervention info."""
         evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            message="Dangerous tool call detected",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="Dangerous tool call detected",
         )
         interceptor = Interceptor(
             pre_call_evaluators=[], post_call_evaluators=[evaluator], mode="sync"
@@ -357,13 +356,13 @@ class TestSyncPostCall:
         """Multiple INTERVENE evaluators — all interventions are collected."""
         e1 = _mock_engine(
             name="evaluator1",
-            decision=Decision.INTERVENE,
-            message="Issue 1",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="Issue 1",
         )
         e2 = _mock_engine(
             name="evaluator2",
-            decision=Decision.INTERVENE,
-            message="Issue 2",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="Issue 2",
         )
         interceptor = Interceptor(
             pre_call_evaluators=[], post_call_evaluators=[e1, e2], mode="sync"
@@ -423,7 +422,7 @@ class TestAsyncEvaluatorLifecycle:
         """
         async_evaluator = _mock_engine(
             name="async_monitor",
-            decision=Decision.ALLOW,
+            status=EvaluationStatus.ALLOW,
             delay=0.01,
         )
         interceptor = Interceptor(
@@ -441,8 +440,8 @@ class TestAsyncEvaluatorLifecycle:
         """Async evaluator returns INTERVENE — next PRE_CALL applies intervention."""
         async_evaluator = _mock_engine(
             name="async_guide",
-            decision=Decision.INTERVENE,
-            message="Remember the workflow",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="Remember the workflow",
             delay=0.01,
         )
         interceptor = Interceptor(
@@ -464,8 +463,8 @@ class TestAsyncEvaluatorLifecycle:
         """Async evaluator returns VIOLATION with fail_action=block — next PRE_CALL blocks."""
         async_evaluator = _mock_engine(
             name="async_blocker",
-            decision=Decision.BLOCK,
-            message="violation detected async",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="violation detected async",
             delay=0.01,
         )
         interceptor = Interceptor(
@@ -496,10 +495,10 @@ class TestAsyncEvaluatorLifecycle:
         This isolates the async result-preservation logic from sync pre-call gating.
         """
         # Engine A: ALLOW in both phases
-        engine_a = _mock_engine(name="engine_a", decision=Decision.ALLOW, delay=0.01)
+        engine_a = _mock_engine(name="engine_a", status=EvaluationStatus.ALLOW, delay=0.01)
 
-        # Engine B: ALLOW at sync pre-call, BLOCK at async post-call
-        engine_b = _mock_engine(name="engine_b", decision=Decision.ALLOW, delay=0.01)
+        # Engine B: ALLOW at sync pre-call, VIOLATION at async post-call
+        engine_b = _mock_engine(name="engine_b", status=EvaluationStatus.ALLOW, delay=0.01)
 
         async def _b_response(
             session_id: str,
@@ -508,12 +507,12 @@ class TestAsyncEvaluatorLifecycle:
             context: dict[str, Any] | None = None,
         ) -> EvaluationResult:
             await asyncio.sleep(0.01)
-            return _to_evaluation_result(Decision.BLOCK, "blocked by B")
+            return _make_result(EvaluationStatus.VIOLATION, "blocked by B")
 
         engine_b.evaluate_response = AsyncMock(side_effect=_b_response)
 
-        # Engine C: ALLOW at sync pre-call, INTERVENE at async post-call
-        engine_c = _mock_engine(name="engine_c", decision=Decision.ALLOW, delay=0.01)
+        # Engine C: ALLOW at sync pre-call, VIOLATION at async post-call
+        engine_c = _mock_engine(name="engine_c", status=EvaluationStatus.ALLOW, delay=0.01)
 
         async def _c_response(
             session_id: str,
@@ -522,7 +521,7 @@ class TestAsyncEvaluatorLifecycle:
             context: dict[str, Any] | None = None,
         ) -> EvaluationResult:
             await asyncio.sleep(0.01)
-            return _to_evaluation_result(Decision.INTERVENE, "intervention from C")
+            return _make_result(EvaluationStatus.VIOLATION, "intervention from C")
 
         engine_c.evaluate_response = AsyncMock(side_effect=_c_response)
 
@@ -926,10 +925,10 @@ class TestAsyncContextPassing:
 class TestFailAction:
 
     async def test_default_fail_action_is_intervene(self):
-        """Default fail_action is 'intervene' — INTERVENE stays INTERVENE."""
+        """Default fail_action is 'intervene' — VIOLATION maps to intervention."""
         evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            message="Stay on topic",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="Stay on topic",
         )
         interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
 
@@ -938,11 +937,11 @@ class TestFailAction:
         assert result.allowed is True
         assert result.modified_data is not None
 
-    async def test_fail_action_block_upgrades_intervene_pre_call(self):
-        """fail_action='block' upgrades INTERVENE to BLOCK on PRE_CALL."""
+    async def test_fail_action_block_upgrades_violation_pre_call(self):
+        """fail_action='block' blocks VIOLATION on PRE_CALL."""
         evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            message="violation",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="violation",
         )
         interceptor = Interceptor(
             pre_call_evaluators=[evaluator], post_call_evaluators=[], fail_action="block"
@@ -953,11 +952,11 @@ class TestFailAction:
         assert result.allowed is False
         assert result.message == "violation"
 
-    async def test_fail_action_block_upgrades_intervene_post_call(self):
-        """fail_action='block' upgrades INTERVENE to BLOCK on POST_CALL."""
+    async def test_fail_action_block_upgrades_violation_post_call(self):
+        """fail_action='block' blocks VIOLATION on POST_CALL."""
         evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            message="violation",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="violation",
         )
         interceptor = Interceptor(
             pre_call_evaluators=[],
@@ -974,9 +973,9 @@ class TestFailAction:
         assert result.message == "violation"
 
     async def test_fail_action_block_does_not_affect_allow(self):
-        """fail_action='block' does not upgrade ALLOW decisions."""
+        """fail_action='block' does not affect ALLOW evaluations."""
         evaluator = _mock_engine(
-            decision=Decision.ALLOW,
+            status=EvaluationStatus.ALLOW,
         )
         interceptor = Interceptor(
             pre_call_evaluators=[evaluator], post_call_evaluators=[], fail_action="block"
@@ -986,12 +985,12 @@ class TestFailAction:
 
         assert result.allowed is True
 
-    async def test_fail_action_block_upgrades_async_intervene(self):
-        """fail_action='block' upgrades async INTERVENE to BLOCK on next request."""
+    async def test_fail_action_block_upgrades_async_violation(self):
+        """fail_action='block' blocks async VIOLATION on next request."""
         async_evaluator = _mock_engine(
             name="async_guide",
-            decision=Decision.INTERVENE,
-            message="async violation",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="async violation",
             delay=0.01,
         )
         interceptor = Interceptor(
@@ -1008,11 +1007,11 @@ class TestFailAction:
         assert result.allowed is False
         assert "async violation" in (result.message or "")
 
-    async def test_fail_action_shadow_downgrades_block_pre_call(self):
-        """fail_action='shadow' downgrades BLOCK to ALLOW on PRE_CALL."""
+    async def test_fail_action_shadow_downgrades_violation_pre_call(self):
+        """fail_action='shadow' downgrades VIOLATION to ALLOW on PRE_CALL."""
         evaluator = _mock_engine(
-            decision=Decision.BLOCK,
-            message="blocked",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="blocked",
         )
         interceptor = Interceptor(
             pre_call_evaluators=[evaluator], post_call_evaluators=[], fail_action="shadow"
@@ -1023,11 +1022,11 @@ class TestFailAction:
         assert result.allowed is True
         assert result.message is None
 
-    async def test_fail_action_shadow_downgrades_intervene_pre_call(self):
-        """fail_action='shadow' downgrades INTERVENE to ALLOW — no modifications."""
+    async def test_fail_action_shadow_downgrades_violation_no_modification(self):
+        """fail_action='shadow' downgrades VIOLATION to ALLOW — no modifications."""
         evaluator = _mock_engine(
-            decision=Decision.INTERVENE,
-            message="Stay on topic",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="Stay on topic",
         )
         interceptor = Interceptor(
             pre_call_evaluators=[evaluator], post_call_evaluators=[], fail_action="shadow"
@@ -1038,11 +1037,11 @@ class TestFailAction:
         assert result.allowed is True
         assert result.modified_data is None
 
-    async def test_fail_action_shadow_downgrades_block_post_call(self):
-        """fail_action='shadow' downgrades BLOCK to ALLOW on POST_CALL."""
+    async def test_fail_action_shadow_downgrades_violation_post_call(self):
+        """fail_action='shadow' downgrades VIOLATION to ALLOW on POST_CALL."""
         evaluator = _mock_engine(
-            decision=Decision.BLOCK,
-            message="blocked",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="blocked",
         )
         interceptor = Interceptor(
             pre_call_evaluators=[],
@@ -1058,12 +1057,12 @@ class TestFailAction:
         assert result.allowed is True
         assert result.message is None
 
-    async def test_fail_action_shadow_downgrades_async_intervene(self):
-        """fail_action='shadow' downgrades async INTERVENE — no modification on next request."""
+    async def test_fail_action_shadow_downgrades_async_violation(self):
+        """fail_action='shadow' downgrades async VIOLATION — no modification on next request."""
         async_evaluator = _mock_engine(
             name="async_guide",
-            decision=Decision.INTERVENE,
-            message="async violation",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="async violation",
             delay=0.01,
         )
         interceptor = Interceptor(
@@ -1090,7 +1089,7 @@ class TestSeparateEvaluatorLists:
 
     async def test_empty_pre_call_with_populated_post_call(self):
         """Empty pre_call list with populated post_call works correctly."""
-        post_eval = _mock_engine(name="post_only", decision=Decision.ALLOW)
+        post_eval = _mock_engine(name="post_only", status=EvaluationStatus.ALLOW)
         interceptor = Interceptor(
             pre_call_evaluators=[],
             post_call_evaluators=[post_eval],
@@ -1112,7 +1111,7 @@ class TestSeparateEvaluatorLists:
 
     async def test_populated_pre_call_with_empty_post_call(self):
         """Populated pre_call with empty post_call works correctly."""
-        pre_eval = _mock_engine(name="pre_only", decision=Decision.ALLOW)
+        pre_eval = _mock_engine(name="pre_only", status=EvaluationStatus.ALLOW)
         interceptor = Interceptor(
             pre_call_evaluators=[pre_eval],
             post_call_evaluators=[],
@@ -1134,11 +1133,11 @@ class TestSeparateEvaluatorLists:
 
     async def test_different_evaluators_for_each_phase(self):
         """Different evaluators can be assigned to pre_call and post_call."""
-        pre_eval = _mock_engine(name="pre_evaluator", decision=Decision.ALLOW)
+        pre_eval = _mock_engine(name="pre_evaluator", status=EvaluationStatus.ALLOW)
         post_eval = _mock_engine(
             name="post_evaluator",
-            decision=Decision.INTERVENE,
-            message="post-call issue",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="post-call issue",
         )
         interceptor = Interceptor(
             pre_call_evaluators=[pre_eval],
@@ -1164,7 +1163,7 @@ class TestSeparateEvaluatorLists:
 
     async def test_pre_call_evaluator_not_used_in_post_call(self):
         """Pre-call evaluator's evaluate_response is never called during post_call."""
-        pre_eval = _mock_engine(name="pre_only", decision=Decision.BLOCK, message="should not fire")
+        pre_eval = _mock_engine(name="pre_only", status=EvaluationStatus.VIOLATION, violation_message="should not fire")
         interceptor = Interceptor(
             pre_call_evaluators=[pre_eval],
             post_call_evaluators=[],
@@ -1232,7 +1231,7 @@ class TestSpanFactory:
 
     async def test_span_factory_sets_decision_attribute(self):
         """The yielded span gets an openbias.evaluator.decision attribute."""
-        evaluator = _mock_engine(name="decider", decision=Decision.ALLOW)
+        evaluator = _mock_engine(name="decider", status=EvaluationStatus.ALLOW)
         interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
 
         factory = _mock_span_factory()
@@ -1260,7 +1259,7 @@ class TestSpanFactory:
         """span_factory is called with async_applied phase for pending async results."""
         async_evaluator = _mock_engine(
             name="async_eval",
-            decision=Decision.ALLOW,
+            status=EvaluationStatus.ALLOW,
             delay=0.01,
         )
         interceptor = Interceptor(
@@ -1288,7 +1287,7 @@ class TestSpanFactory:
         """Apply-time async evaluator spans include explicit async phase metadata."""
         async_evaluator = _mock_engine(
             name="async_applied_attrs",
-            decision=Decision.ALLOW,
+            status=EvaluationStatus.ALLOW,
             delay=0.01,
         )
         interceptor = Interceptor(
@@ -1328,8 +1327,8 @@ class TestSpanFactory:
 
     async def test_no_span_factory_preserves_behavior(self):
         """Calling run_pre_call and run_post_call without span_factory works normally."""
-        pre_eval = _mock_engine(name="pre", decision=Decision.ALLOW)
-        post_eval = _mock_engine(name="post", decision=Decision.ALLOW)
+        pre_eval = _mock_engine(name="pre", status=EvaluationStatus.ALLOW)
+        post_eval = _mock_engine(name="post", status=EvaluationStatus.ALLOW)
         interceptor = Interceptor(
             pre_call_evaluators=[pre_eval],
             post_call_evaluators=[post_eval],
