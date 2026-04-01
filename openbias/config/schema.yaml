@@ -25,6 +25,8 @@ mode: async
 
 # Action when a policy violation is detected: block | intervene | shadow
 # (default: intervene)
+# Note: block is automatically normalized to intervene when mode is async,
+# since async evaluation cannot block a response that has already been sent.
 fail_action: intervene
 
 # Maximum number of intervention attempts before giving up (default: 3)
