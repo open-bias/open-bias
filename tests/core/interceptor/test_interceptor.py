@@ -43,29 +43,23 @@ def _request(content: str = "hello") -> dict[str, Any]:
     return {"messages": [{"role": "user", "content": content}], "model": "gpt-4"}
 
 
-def _to_evaluation_result(
-    decision: Decision,
-    message: str | None = None,
+def _make_result(
+    status: EvaluationStatus = EvaluationStatus.ALLOW,
+    violation_message: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> EvaluationResult:
-    """Convert a legacy Decision + message to an EvaluationResult."""
-    if decision == Decision.ALLOW:
-        return EvaluationResult(
-            status=EvaluationStatus.ALLOW,
-            metadata=metadata or {},
-        )
-    # BLOCK and INTERVENE both map to VIOLATION — interceptor handles enforcement
-    violations = []
-    if message:
+    """Build an EvaluationResult for test assertions."""
+    violations: list[ViolationRecord] = []
+    if status == EvaluationStatus.VIOLATION and violation_message:
         violations.append(ViolationRecord(
             rule_id="test_violation",
             rule_name="test_violation",
-            reason=message,
+            reason=violation_message,
             severity="error",
             engine="test",
         ))
     return EvaluationResult(
-        status=EvaluationStatus.VIOLATION,
+        status=status,
         violations=violations,
         metadata=metadata or {},
     )
@@ -74,8 +68,8 @@ def _to_evaluation_result(
 def _mock_engine(
     *,
     name: str = "fake",
-    decision: Decision = Decision.ALLOW,
-    message: str | None = None,
+    status: EvaluationStatus = EvaluationStatus.ALLOW,
+    violation_message: str | None = None,
     metadata: dict[str, Any] | None = None,
     delay: float = 0,
     raise_on_evaluate: Exception | None = None,
@@ -93,7 +87,7 @@ def _mock_engine(
             await asyncio.sleep(delay)
         if raise_on_evaluate:
             raise raise_on_evaluate
-        return _to_evaluation_result(decision, message, metadata)
+        return _make_result(status, violation_message, metadata)
 
     async def _evaluate_response(
         session_id: str,
@@ -105,7 +99,7 @@ def _mock_engine(
             await asyncio.sleep(delay)
         if raise_on_evaluate:
             raise raise_on_evaluate
-        return _to_evaluation_result(decision, message, metadata)
+        return _make_result(status, violation_message, metadata)
 
     engine.evaluate_request = AsyncMock(side_effect=_evaluate_request)
     engine.evaluate_response = AsyncMock(side_effect=_evaluate_response)
