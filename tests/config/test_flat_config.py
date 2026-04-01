@@ -72,7 +72,6 @@ class TestFlatFields:
         settings = Settings()
         assert settings.mode == "async"
         assert settings.fail_action == "intervene"
-        assert settings.max_intervention_attempts == 3
         assert settings.strategy == "user_message_inject"
         assert settings.session_ttl == 3600
         assert settings.max_sessions == 10000
@@ -112,7 +111,6 @@ class TestEvaluatorYamlMapping:
         source = self._build_source({
             "mode": "sync",
             "fail_action": "block",
-            "max_intervention_attempts": 5,
             "strategy": "system_prompt_append",
             "session_ttl": 7200,
             "max_sessions": 5000,
@@ -123,7 +121,6 @@ class TestEvaluatorYamlMapping:
         result = source._map_evaluators(source._yaml_data)
         assert result["mode"] == "sync"
         assert result["fail_action"] == "block"
-        assert result["max_intervention_attempts"] == 5
         assert result["strategy"] == "system_prompt_append"
         assert result["session_ttl"] == 7200
         assert result["max_sessions"] == 5000

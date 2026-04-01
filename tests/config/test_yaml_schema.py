@@ -99,18 +99,15 @@ class TestInterventionMapping:
         data = {
             "evaluators": [],
             "strategy": "user_message_inject",
-            "max_intervention_attempts": 5,
         }
         result = _build_source(data)._map_evaluators(data)
         assert result["strategy"] == "user_message_inject"
-        assert result["max_intervention_attempts"] == 5
 
     def test_intervention_defaults_not_present_when_omitted(self):
         """Omitted intervention fields are not forced into result."""
         data = {"evaluators": []}
         result = _build_source(data)._map_evaluators(data)
         assert "strategy" not in result
-        assert "max_intervention_attempts" not in result
 
 
 # =========================================================================
