@@ -36,7 +36,7 @@ This uses a single judge evaluator with inline rules, auto-detected model, defau
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `mode` | string | `async` | Evaluation mode: `sync` (blocking) or `async` (non-blocking, default) |
-| `fail_action` | string | `intervene` | What happens on policy violation: `intervene` (modify next request), `block` (reject request), or `shadow` (log only) |
+| `fail_action` | string | `intervene` | What happens on policy violation: `intervene` (modify next request), `block` (reject request), or `shadow` (log only). **Note:** `block` is automatically normalized to `intervene` when `mode: async`, since async evaluation cannot block a response that has already been sent. |
 | `strategy` | string | `user_message_inject` | Intervention strategy: `system_prompt_append` or `user_message_inject` |
 | `max_intervention_attempts` | int | `3` | Maximum intervention attempts before giving up |
 | `session_ttl` | int | -- | Session time-to-live in seconds |
