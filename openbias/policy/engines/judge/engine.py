@@ -505,8 +505,6 @@ class JudgePolicyEngine(PolicyEngine):
             if v.action == VerdictAction.PASS:
                 continue
             violation_records.append(ViolationRecord(
-                rule_id=f"judge_{v.scope.value}_{v.action.value}",
-                rule_name=f"judge_{v.scope.value}_{v.action.value}",
                 reason=self._build_violation_message(v),
                 severity=v.action.value,
                 scope=v.scope.value,
