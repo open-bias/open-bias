@@ -36,7 +36,7 @@ Quick Start:
 
 Using Policy Engines Directly:
     ```python
-    from openbias.policy import PolicyEngineRegistry, Decision
+    from openbias.policy import PolicyEngineRegistry, EvaluationStatus
 
     # Create and initialize an FSM engine
     engine = PolicyEngineRegistry.create("fsm")
@@ -48,8 +48,8 @@ Using Policy Engines Directly:
         request_data={"messages": [...]},
     )
 
-    if result.decision == Decision.BLOCK:
-        print("Request blocked:", result.message)
+    if result.status == EvaluationStatus.VIOLATION:
+        print("Violation detected:", [v.reason for v in result.violations])
     ```
 """
 
@@ -65,8 +65,9 @@ from openbias.proxy.server import Proxy, start_proxy
 from openbias.policy import (
     PolicyEngine,
     PolicyEngineRegistry,
-    Decision,
-    EngineResult,
+    EvaluationResult,
+    EvaluationStatus,
+    ViolationRecord,
 )
 
 __all__ = [
@@ -80,6 +81,7 @@ __all__ = [
     # Policy engines
     "PolicyEngine",
     "PolicyEngineRegistry",
-    "Decision",
-    "EngineResult",
+    "EvaluationResult",
+    "EvaluationStatus",
+    "ViolationRecord",
 ]
