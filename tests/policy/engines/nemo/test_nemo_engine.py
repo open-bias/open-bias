@@ -92,7 +92,7 @@ async def test_evaluate_request_blocked(engine, mock_rails):
     )
 
     assert result.decision == Decision.INTERVENE
-    assert "intercepted" in result.message.lower()
+    assert result.message is not None
 
 
 async def test_evaluate_request_blocked_violations_metadata(engine, mock_rails):
@@ -248,8 +248,13 @@ async def test_evaluate_request_error_fail_closed(engine, mock_rails):
         request_data={"messages": [{"role": "user", "content": "hi"}]}
     )
 
-    assert result.decision == Decision.BLOCK
+    # Engine is a pure evaluator: reports VIOLATION, not BLOCK.
+    # The interceptor maps violations to block/intervene via fail_action.
+    assert result.decision == Decision.INTERVENE
     assert result.message is not None
+    # Provider decision metadata is preserved for interceptor to inspect
+    violations = result.metadata.get("violations", [])
+    assert any(v.get("provider_decision") == "block" for v in violations)
 
 
 async def test_violations_use_fallback_type_when_missing(engine, mock_rails):

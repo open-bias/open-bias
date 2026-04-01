@@ -25,6 +25,9 @@ from openbias.policy.protocols import (
     PolicyEngine,
     Decision,
     EngineResult,
+    EvaluationResult,
+    EvaluationStatus,
+    ViolationRecord,
     require_initialized,
 )
 from openbias.policy.registry import register_engine
@@ -212,14 +215,14 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         """
 
         if "input" not in self._enabled_rails:
-            return EngineResult(
-                decision=Decision.ALLOW,
+            return EvaluationResult(
+                status=EvaluationStatus.ALLOW,
                 metadata={"rails_skipped": "input not enabled"},
-            )
+            ).to_engine_result()
 
         messages = request_data.get("messages", [])
         if not messages:
-            return EngineResult(decision=Decision.ALLOW)
+            return EvaluationResult(status=EvaluationStatus.ALLOW).to_engine_result()
 
         try:
             # Process through NeMo input rails
@@ -234,40 +237,50 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             # Check if any input rails were activated
             activations = self._check_rail_activations(result)
             if activations:
-                return EngineResult(
-                    decision=Decision.INTERVENE,
-                    message="Request intercepted by NeMo input guardrails",
-                    metadata={
-                        "session_id": session_id,
-                        "violations": [
-                            {
-                                "name": f"nemo_{a.get('type', 'input')}_blocked",
-                                "message": a.get("name", "NeMo input rail triggered"),
-                            }
-                            for a in activations
-                        ],
-                    },
-                )
+                violations = [
+                    ViolationRecord(
+                        rule_id=f"nemo_{a.get('type', 'input')}_blocked",
+                        rule_name=f"nemo_{a.get('type', 'input')}_blocked",
+                        reason=a.get("name", "NeMo input rail triggered"),
+                        severity="error",
+                        engine=self.name,
+                    )
+                    for a in activations
+                ]
+                return EvaluationResult(
+                    status=EvaluationStatus.VIOLATION,
+                    violations=violations,
+                    metadata={"session_id": session_id},
+                ).to_engine_result()
 
-            return EngineResult(
-                decision=Decision.ALLOW,
+            return EvaluationResult(
+                status=EvaluationStatus.ALLOW,
                 metadata={"nemo_processed": True},
-            )
+            ).to_engine_result()
 
         except Exception as e:
             logger.error(f"NeMo input rail evaluation failed: {e}", exc_info=True)
 
             if self._fail_closed:
-                return EngineResult(
-                    decision=Decision.BLOCK,
-                    message=f"NeMo evaluation failed: {str(e)}",
-                )
+                # External engine error with fail_closed — report as violation
+                # with provider metadata; interceptor decides actual enforcement
+                return EvaluationResult(
+                    status=EvaluationStatus.VIOLATION,
+                    violations=[ViolationRecord(
+                        rule_id="nemo_evaluation_error",
+                        rule_name="nemo_evaluation_error",
+                        reason=f"NeMo evaluation failed: {e}",
+                        severity="critical",
+                        engine=self.name,
+                        extra={"provider_decision": "block", "provider_reason": str(e)},
+                    )],
+                ).to_engine_result()
 
             # Fail open
-            return EngineResult(
-                decision=Decision.ALLOW,
+            return EvaluationResult(
+                status=EvaluationStatus.ALLOW,
                 metadata={"error": str(e)},
-            )
+            ).to_engine_result()
 
     @require_initialized
     async def evaluate_response(
@@ -288,15 +301,15 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         """
 
         if "output" not in self._enabled_rails:
-            return EngineResult(
-                decision=Decision.ALLOW,
+            return EvaluationResult(
+                status=EvaluationStatus.ALLOW,
                 metadata={"rails_skipped": "output not enabled"},
-            )
+            ).to_engine_result()
 
         # Extract response content
         content = extract_response_content(response_data)
         if not content:
-            return EngineResult(decision=Decision.ALLOW)
+            return EvaluationResult(status=EvaluationStatus.ALLOW).to_engine_result()
 
         messages = request_data.get("messages", [])
         messages_with_response = messages + [
@@ -316,39 +329,47 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             # Check if any output rails were activated
             activations = self._check_rail_activations(result)
             if activations:
-                return EngineResult(
-                    decision=Decision.INTERVENE,
-                    message="Response intercepted by NeMo output guardrails",
-                    metadata={
-                        "original_response": content[:200],
-                        "violations": [
-                            {
-                                "name": f"nemo_{a.get('type', 'output')}_blocked",
-                                "message": a.get("name", "NeMo output rail triggered"),
-                            }
-                            for a in activations
-                        ],
-                    },
-                )
+                violations = [
+                    ViolationRecord(
+                        rule_id=f"nemo_{a.get('type', 'output')}_blocked",
+                        rule_name=f"nemo_{a.get('type', 'output')}_blocked",
+                        reason=a.get("name", "NeMo output rail triggered"),
+                        severity="error",
+                        engine=self.name,
+                    )
+                    for a in activations
+                ]
+                return EvaluationResult(
+                    status=EvaluationStatus.VIOLATION,
+                    violations=violations,
+                    metadata={"original_response": content[:200]},
+                ).to_engine_result()
 
-            return EngineResult(
-                decision=Decision.ALLOW,
+            return EvaluationResult(
+                status=EvaluationStatus.ALLOW,
                 metadata={"nemo_output_verified": True},
-            )
+            ).to_engine_result()
 
         except Exception as e:
             logger.error(f"NeMo output rail evaluation failed: {e}", exc_info=True)
 
             if self._fail_closed:
-                return EngineResult(
-                    decision=Decision.BLOCK,
-                    message=f"NeMo output evaluation failed: {str(e)}",
-                )
+                return EvaluationResult(
+                    status=EvaluationStatus.VIOLATION,
+                    violations=[ViolationRecord(
+                        rule_id="nemo_output_evaluation_error",
+                        rule_name="nemo_output_evaluation_error",
+                        reason=f"NeMo output evaluation failed: {e}",
+                        severity="critical",
+                        engine=self.name,
+                        extra={"provider_decision": "block", "provider_reason": str(e)},
+                    )],
+                ).to_engine_result()
 
-            return EngineResult(
-                decision=Decision.ALLOW,
+            return EvaluationResult(
+                status=EvaluationStatus.ALLOW,
                 metadata={"error": str(e)},
-            )
+            ).to_engine_result()
 
     def _check_rail_activations(self, result: Any) -> list[dict[str, Any]]:
         """
