@@ -29,8 +29,9 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
    from typing import Any, Dict, Optional
 
    from openbias.policy.protocols import (
-       Decision,
-       EngineResult,
+       EvaluationResult,
+       EvaluationStatus,
+       ViolationRecord,
        PolicyEngine,
        require_initialized,
    )
@@ -62,8 +63,8 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
            session_id: str,
            request_data: Dict[str, Any],
            context: Optional[Dict[str, Any]] = None,
-       ) -> EngineResult:
-           # Return EngineResult(decision=Decision.ALLOW, message="...")
+       ) -> EvaluationResult:
+           # Return EvaluationResult(status=EvaluationStatus.ALLOW)
            ...
 
        @require_initialized
@@ -73,7 +74,7 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
            response_data: Any,
            request_data: Dict[str, Any],
            context: Optional[Dict[str, Any]] = None,
-       ) -> EngineResult:
+       ) -> EvaluationResult:
            # This is where most evaluation logic lives
            ...
 
@@ -123,13 +124,13 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
 - **Blocking in evaluate methods** — All evaluate methods are `async`. Use `await` for I/O. Never block the event loop.
 - **Not cleaning up sessions** — Implement `reset_session` properly. The interceptor calls this for TTL-expired sessions.
 - **Mutating `request_data`** — Always work on copies. The interceptor may retry with the original.
-- **Returning bare strings instead of `EngineResult`** — Always return `EngineResult(decision=..., message=...)`.
+- **Returning bare strings instead of `EvaluationResult`** — Always return `EvaluationResult(status=..., violations=[...])`.
 
 ## Reference Files
 
 | File | What to look at |
 |------|----------------|
-| `openbias/policy/protocols.py` | `PolicyEngine` ABC, `Decision` enum, `EngineResult` dataclass |
+| `openbias/policy/protocols.py` | `PolicyEngine` ABC, `EvaluationResult`, `EvaluationStatus`, `ViolationRecord` |
 | `openbias/policy/engines/stateful.py` | `StatefulPolicyEngine` ABC, `StateClassificationResult` dataclass |
 | `openbias/policy/registry.py` | `@register_engine` decorator, `PolicyEngineRegistry` |
 | `openbias/policy/engines/__init__.py` | Where to add your import |
