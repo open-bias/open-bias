@@ -11,10 +11,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Removed `PolicyEngineConfig`, `PolicyConfig`, and `_map_to_settings()`
 - Interceptor constructor now takes `pre_call_evaluators` and `post_call_evaluators` instead of a single `engines` list
 
+### Removed
+- Removed `max_intervention_attempts` setting and the repeated-intervention→block escalation mechanism — interventions now remain interventions regardless of how many times they occur
+
 ### Added
 - Multi-evaluator pipeline with phase-based execution (pre_call / post_call)
 - YAML shorthand mappings for evaluator config (`model`, `policies`, `rubric`, `policy`)
-- Top-level `mode`, `strategy`, `max_intervention_attempts`, `session_ttl`, `max_sessions` settings
+- Top-level `mode`, `strategy`, `session_ttl`, `max_sessions` settings
 
 ## 0.3.0
 
