@@ -11,7 +11,7 @@ supporting multiple policy mechanisms including:
 
 Usage:
     ```python
-    from openbias.policy import PolicyEngineRegistry, Decision
+    from openbias.policy import PolicyEngineRegistry, EvaluationStatus
 
     # Create and initialize an FSM engine
     engine = PolicyEngineRegistry.create("fsm")
@@ -23,8 +23,8 @@ Usage:
         request_data={"messages": [...]},
     )
 
-    if result.decision == Decision.BLOCK:
-        print("Request blocked:", result.message)
+    if result.status == EvaluationStatus.VIOLATION:
+        print("Violation detected:", [v.reason for v in result.violations])
     ```
 """
 
@@ -47,7 +47,6 @@ from openbias.policy.engines.stateful import (
 )
 from openbias.policy.protocols import (
     Decision,
-    EngineResult,
     EvaluationResult,
     EvaluationStatus,
     PolicyEngine,
@@ -64,7 +63,6 @@ __all__ = [
 
     # Result types
     "Decision",
-    "EngineResult",
     "EvaluationResult",
     "EvaluationStatus",
     "ViolationRecord",
