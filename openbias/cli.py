@@ -618,6 +618,11 @@ def eval_cmd(config: Path | None, json_output: Path | None, verbose: bool, debug
         try:
             with spinner("Loading engine..."):
                 settings = Settings(_config_path=str(config_path), debug=debug)
+
+            with spinner("Compiling rules for runtime engines..."):
+                _compile_rules_for_serve(settings, config_path)
+
+            with spinner("Initializing engine..."):
                 policy_config = settings.get_policy_config()
 
                 engine = await PolicyEngineRegistry.create_and_initialize(
