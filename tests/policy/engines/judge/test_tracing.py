@@ -81,6 +81,7 @@ class TestTracerIntegration:
         assert call_kwargs["scope"] == "turn"
         assert call_kwargs["action"] == "pass"
         assert call_kwargs["judge_model"] == "gpt-4o-mini"
+        assert call_kwargs["evaluator_name"] == "judge:agent_behavior"
         assert isinstance(call_kwargs["scores"], list)
         assert len(call_kwargs["scores"]) == 4
 

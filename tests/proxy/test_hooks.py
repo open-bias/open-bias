@@ -487,22 +487,6 @@ async def test_pre_call_logs_intervention_span_when_results_nonempty(
     mock_tracer.log_intervention.assert_called_once()
 
 
-def test_trace_callback_logs_async_apply_event(callback):
-    """Apply-time trace callback emits async_result_applied instead of verdict replay."""
-    mock_tracer = MagicMock()
-    callback._tracer = mock_tracer
-    parent_span = MagicMock()
-
-    callback_fn = callback._make_trace_callback("sess-1")
-    callback_fn({"judge": {"verdicts": [{"rubric_name": "safety"}]}}, parent_span)
-
-    mock_tracer.log_event.assert_called_once()
-    call_kwargs = mock_tracer.log_event.call_args.kwargs
-    assert call_kwargs["session_id"] == "sess-1"
-    assert call_kwargs["name"] == "async_result_applied"
-    assert call_kwargs["parent_span"] is parent_span
-
-
 async def test_post_call_failure_hook_exception_is_swallowed(
     callback, mock_api_key
 ):

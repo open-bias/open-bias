@@ -481,6 +481,7 @@ class JudgePolicyEngine(PolicyEngine):
                 token_usage=verdict.token_usage,
                 metadata=verdict.metadata,
                 parent_span=parent_span,
+                evaluator_name=self.name,
             )
         except Exception as e:
             logger.debug(f"Failed to trace verdict: {e}")

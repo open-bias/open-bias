@@ -513,6 +513,64 @@ class Tracer:
             span.end(end_time=end_time_ns)
             logger.info(f"Logged LLM call for session {session_id} (model={model})")
 
+    def _annotate_judge_details(
+        self,
+        span: Any,
+        rubric_name: str,
+        scope: str,
+        composite_score: float,
+        action: str,
+        judge_model: str,
+        scores: list[dict[str, Any]] | None = None,
+        latency_ms: float | None = None,
+        token_usage: int | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Attach judge verdict details to an existing span."""
+        span.set_attribute("openbias.judge.rubric", rubric_name)
+        span.set_attribute("openbias.judge.scope", scope)
+        span.set_attribute("openbias.judge.composite_score", composite_score)
+        span.set_attribute("openbias.judge.action", action)
+        span.set_attribute("openbias.judge.model", judge_model)
+
+        if latency_ms is not None:
+            span.set_attribute("openbias.judge.latency_ms", latency_ms)
+        if token_usage is not None:
+            span.set_attribute("openbias.judge.token_usage", token_usage)
+
+        # Add per-criterion scores as events
+        if scores:
+            span.set_attribute("openbias.judge.criteria_count", len(scores))
+            for score_data in scores:
+                criterion = score_data.get("criterion", "unknown")
+                span.add_event(
+                    f"judge.score:{criterion}",
+                    attributes={
+                        "score": score_data.get("score", 0),
+                        "max_score": score_data.get("max_score", 5),
+                        "normalized": score_data.get("normalized", 0.0),
+                        "confidence": score_data.get("confidence", 1.0),
+                        "reasoning": score_data.get("reasoning", ""),
+                    },
+                )
+
+        # Structured output for Langfuse
+        output = {
+            "composite_score": composite_score,
+            "action": action,
+            "rubric": rubric_name,
+            "scope": scope,
+        }
+        if scores:
+            output["scores"] = scores
+        span.set_attribute("output.value", self._safe_json(output))
+        span.set_attribute("langfuse.span.output", self._safe_json(output))
+
+        if metadata:
+            span.set_attribute("langfuse.span.metadata", self._safe_json(metadata))
+            for key, value in metadata.items():
+                span.set_attribute(f"openbias.metadata.{key}", str(value))
+
     def log_judge_evaluation(
         self,
         session_id: str,
@@ -526,9 +584,10 @@ class Tracer:
         token_usage: int | None = None,
         metadata: dict[str, Any] | None = None,
         parent_span: Any | None = None,
+        evaluator_name: str | None = None,
     ) -> None:
         """
-        Log a judge evaluation as an OTEL span with judge-specific attributes.
+        Log judge evaluation details on the active evaluator span.
 
         Args:
             session_id: Session identifier.
@@ -541,74 +600,63 @@ class Tracer:
             latency_ms: Evaluation latency in milliseconds.
             token_usage: Total tokens consumed.
             metadata: Additional metadata.
-            parent_span: Optional explicit parent span for nesting.
-                When provided, the judge span is a child of this span
-                instead of resolving the parent from the session.
+            parent_span: Optional explicit span to annotate.
+            evaluator_name: Evaluator name used for fallback span naming.
         """
         if not self._enabled or not self._tracer:
             return
 
+        target_span = None
         if parent_span is not None:
-            parent_ctx = trace.set_span_in_context(parent_span)
+            target_span = parent_span
         else:
-            parent_ctx = self._resolve_parent_context(session_id)
+            current = trace.get_current_span()
+            if current and current.is_recording():
+                target_span = current
 
-        span_attrs = {
-            "openbias.session_id": session_id,
-            "openbias.judge.rubric": rubric_name,
-            "openbias.judge.scope": scope,
-            "openbias.judge.composite_score": composite_score,
-            "openbias.judge.action": action,
-            "openbias.judge.model": judge_model,
-        }
-
-        if latency_ms is not None:
-            span_attrs["openbias.judge.latency_ms"] = latency_ms
-        if token_usage is not None:
-            span_attrs["openbias.judge.token_usage"] = token_usage
-
-        with self._tracer.start_as_current_span(
-            f"judge_evaluation_{scope}",
-            context=parent_ctx,
-            attributes=span_attrs,
-        ) as span:
-            # Add per-criterion scores as events
-            if scores:
-                span.set_attribute("openbias.judge.criteria_count", len(scores))
-                for score_data in scores:
-                    criterion = score_data.get("criterion", "unknown")
-                    span.add_event(
-                        f"score:{criterion}",
-                        attributes={
-                            "score": score_data.get("score", 0),
-                            "max_score": score_data.get("max_score", 5),
-                            "normalized": score_data.get("normalized", 0.0),
-                            "confidence": score_data.get("confidence", 1.0),
-                            "reasoning": score_data.get("reasoning", ""),
-                        },
+        if target_span is not None:
+            if evaluator_name:
+                target_span.set_attribute("openbias.evaluator.name", evaluator_name)
+            self._annotate_judge_details(
+                target_span,
+                rubric_name=rubric_name,
+                scope=scope,
+                composite_score=composite_score,
+                action=action,
+                judge_model=judge_model,
+                scores=scores,
+                latency_ms=latency_ms,
+                token_usage=token_usage,
+                metadata=metadata,
+            )
+        else:
+            fallback_name = evaluator_name or "judge"
+            with self.trace_block(
+                f"evaluator:{fallback_name}",
+                session_id,
+                attributes={
+                    "openbias.evaluator.name": fallback_name,
+                    "openbias.evaluator.phase": "judge_evaluation",
+                },
+            ) as span:
+                if span is not None:
+                    self._annotate_judge_details(
+                        span,
+                        rubric_name=rubric_name,
+                        scope=scope,
+                        composite_score=composite_score,
+                        action=action,
+                        judge_model=judge_model,
+                        scores=scores,
+                        latency_ms=latency_ms,
+                        token_usage=token_usage,
+                        metadata=metadata,
                     )
 
-            # Structured output for Langfuse
-            output = {
-                "composite_score": composite_score,
-                "action": action,
-                "rubric": rubric_name,
-                "scope": scope,
-            }
-            if scores:
-                output["scores"] = scores
-            span.set_attribute("output.value", self._safe_json(output))
-            span.set_attribute("langfuse.span.output", self._safe_json(output))
-
-            if metadata:
-                span.set_attribute("langfuse.span.metadata", self._safe_json(metadata))
-                for key, value in metadata.items():
-                    span.set_attribute(f"openbias.metadata.{key}", str(value))
-
-            logger.debug(
-                f"Logged judge evaluation for session {session_id} "
-                f"(rubric={rubric_name}, action={action}, score={composite_score:.2f})"
-            )
+        logger.debug(
+            f"Logged judge evaluation for session {session_id} "
+            f"(rubric={rubric_name}, action={action}, score={composite_score:.2f})"
+        )
 
     def end_trace(self, session_id: str) -> None:
         """Mark a session trace as complete and free the session memory."""

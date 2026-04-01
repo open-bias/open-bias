@@ -1479,58 +1479,27 @@ class TestSpanFactory:
             "openbias.evaluator.source", "async_applied"
         )
 
-    async def test_trace_callback_invoked_for_applied_async_results(self):
-        """trace_callback is called with result metadata and evaluator span at apply-time."""
-        verdict_metadata = {"judge": {"verdicts": [{"rubric_name": "safety"}]}}
+    async def test_async_applied_span_sets_phase_attribute(self):
+        """Apply-time async evaluator spans include explicit async phase metadata."""
         async_evaluator = _mock_engine(
-            name="traced_eval",
+            name="async_applied_attrs",
             decision=Decision.ALLOW,
-            metadata=verdict_metadata,
             delay=0.01,
         )
         interceptor = Interceptor(
             pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
         )
 
-        # Fire async evaluator during post_call
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
         await asyncio.sleep(0.05)
 
-        # Now run pre_call with both span_factory and trace_callback
         factory = _mock_span_factory()
-        trace_cb = MagicMock()
         await interceptor.run_pre_call(
-            SESSION, _request(), "req-003",
-            span_factory=factory, trace_callback=trace_cb,
+            SESSION, _request(), "req-003", span_factory=factory
         )
 
-        # trace_callback should have been called with the result metadata and span
-        trace_cb.assert_called_once()
-        call_args = trace_cb.call_args
-        assert call_args[0][0] == verdict_metadata  # result.metadata
-        assert call_args[0][1] is factory.spans[0]  # the evaluator span
-
-    async def test_trace_callback_not_called_without_span(self):
-        """trace_callback is NOT called when span_factory is not provided."""
-        async_evaluator = _mock_engine(
-            name="no_span_eval",
-            decision=Decision.ALLOW,
-            delay=0.01,
-        )
-        interceptor = Interceptor(
-            pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
-        )
-
-        await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
-        await asyncio.sleep(0.05)
-
-        trace_cb = MagicMock()
-        await interceptor.run_pre_call(
-            SESSION, _request(), "req-004", trace_callback=trace_cb,
-        )
-
-        # No span_factory means nullcontext yields None, so trace_callback should not fire
-        trace_cb.assert_not_called()
+        applied_span = factory.spans[factory.calls.index(("async_applied_attrs", "pre_call"))]
+        applied_span.set_attribute.assert_any_call("openbias.async.phase", "applied")
 
     async def test_span_factory_called_for_dispatched_async(self):
         """span_factory is called with post_call phase when dispatching async evaluators."""

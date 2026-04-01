@@ -1,9 +1,9 @@
 """
-Integration test: verify async eval spans nest correctly under the
-evaluator span using a real TracerProvider + InMemorySpanExporter.
+Integration test: verify judge details are traced on evaluator spans
+using a real TracerProvider + InMemorySpanExporter.
 
-Unlike the mock-based tests, this proves that the OTEL SDK actually
-records the parent-child chain: phase → evaluator → judge_evaluation_turn.
+Unlike the mock-based tests, this proves the OTEL SDK stores judge
+attributes/events directly on the evaluator span without extra judge-only spans.
 """
 
 import threading
@@ -77,13 +77,12 @@ def _spans_by_name(exporter):
 
 
 class TestAsyncEvalSpanNesting:
-    """Verify that judge_evaluation_turn nests under evaluator under phase."""
+    """Verify judge tracing stays on evaluator spans."""
 
     def test_judge_eval_nests_under_evaluator(self, real_tracer):
         """
-        phase_span → evaluator_span → judge_evaluation_turn
-
-        The parent_span_id chain must hold in the real OTEL SDK.
+        phase_span → evaluator_span
+        judge details are attached to evaluator_span
         """
         tracer, exporter = real_tracer
         session_id = "test-session"
@@ -114,22 +113,21 @@ class TestAsyncEvalSpanNesting:
 
         spans = _spans_by_name(exporter)
 
-        # All three spans must be present
+        # Phase + evaluator spans must be present
         assert "interceptor_pre_call" in spans
         assert "evaluator:test_judge" in spans
-        assert "judge_evaluation_turn" in spans
 
         phase = spans["interceptor_pre_call"]
         evaluator = spans["evaluator:test_judge"]
-        judge = spans["judge_evaluation_turn"]
 
         # evaluator is child of phase
         assert evaluator.parent is not None
         assert evaluator.parent.span_id == phase.context.span_id
 
-        # judge_evaluation_turn is child of evaluator
-        assert judge.parent is not None
-        assert judge.parent.span_id == evaluator.context.span_id
+        # judge details are attached directly to evaluator span
+        assert evaluator.attributes["openbias.judge.rubric"] == "safety"
+        assert evaluator.attributes["openbias.judge.action"] == "pass"
+        assert evaluator.attributes["openbias.judge.scope"] == "turn"
 
     def test_judge_eval_has_expected_attributes(self, real_tracer):
         """Judge evaluation span carries rubric, action, and score attributes."""
@@ -148,12 +146,12 @@ class TestAsyncEvalSpanNesting:
             )
 
         spans = _spans_by_name(exporter)
-        judge = spans["judge_evaluation_turn"]
+        phase = spans["phase"]
 
-        assert judge.attributes["openbias.judge.rubric"] == "fairness"
-        assert judge.attributes["openbias.judge.action"] == "intervene"
-        assert judge.attributes["openbias.judge.composite_score"] == 0.72
-        assert judge.attributes["openbias.judge.model"] == "judge-v2"
+        assert phase.attributes["openbias.judge.rubric"] == "fairness"
+        assert phase.attributes["openbias.judge.action"] == "intervene"
+        assert phase.attributes["openbias.judge.composite_score"] == 0.72
+        assert phase.attributes["openbias.judge.model"] == "judge-v2"
 
     def test_no_orphan_spans_outside_phase(self, real_tracer):
         """All spans share the same trace ID when properly nested."""
