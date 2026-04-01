@@ -65,53 +65,7 @@ class EvaluationResult:
     violations: list[ViolationRecord] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
-    # --- Backward-compatibility bridge to EngineResult ---
 
-    def to_engine_result(self) -> "EngineResult":
-        """Convert to legacy EngineResult for callers that haven't migrated."""
-        if self.status == EvaluationStatus.ALLOW:
-            return EngineResult(
-                decision=Decision.ALLOW,
-                metadata=self.metadata,
-            )
-        # VIOLATION → INTERVENE (interceptor may upgrade to BLOCK)
-        message = "\n".join(v.reason for v in self.violations) if self.violations else None
-        meta = dict(self.metadata)
-        meta["violations"] = [
-            {
-                "rule_id": v.rule_id,
-                "name": v.rule_name,
-                "message": v.reason,
-                "severity": v.severity,
-                "scope": v.scope,
-                "engine": v.engine,
-                **({"evidence": v.evidence} if v.evidence else {}),
-                **({"confidence": v.confidence} if v.confidence is not None else {}),
-                **v.extra,
-            }
-            for v in self.violations
-        ]
-        return EngineResult(
-            decision=Decision.INTERVENE,
-            message=message,
-            metadata=meta,
-        )
-
-
-@dataclass
-class EngineResult:
-    """Result returned by a policy engine evaluation.
-
-    .. deprecated::
-        Engines should migrate to returning ``EvaluationResult``.
-        ``EngineResult`` is retained during migration for backward
-        compatibility.
-    """
-
-    decision: Decision
-    message: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-    modified_messages: list[dict[str, Any]] | None = None
 
 class PolicyEngine(ABC):
     """
@@ -151,11 +105,12 @@ class PolicyEngine(ABC):
         session_id: str,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
+    ) -> EvaluationResult:
         """
         Evaluate an incoming request against policies.
 
-        Called BEFORE the LLM call. Can allow, intervene, or block the request.
+        Called BEFORE the LLM call. Returns a pure evaluation outcome
+        (ALLOW or VIOLATION). The interceptor decides enforcement.
 
         Args:
             session_id: Unique session identifier
@@ -163,7 +118,7 @@ class PolicyEngine(ABC):
             context: Additional context for evaluation
 
         Returns:
-            EngineResult with decision and optional message
+            EvaluationResult with status and optional violations
         """
         ...
 
@@ -174,12 +129,12 @@ class PolicyEngine(ABC):
         response_data: Any,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
+    ) -> EvaluationResult:
         """
         Evaluate an LLM response against policies.
 
-        Called AFTER the LLM call. Records violations for potential
-        intervention on next call.
+        Called AFTER the LLM call. Returns a pure evaluation outcome.
+        The interceptor decides enforcement on the next call.
 
         Args:
             session_id: Unique session identifier
@@ -188,7 +143,7 @@ class PolicyEngine(ABC):
             context: Additional context for evaluation
 
         Returns:
-            EngineResult with decision and optional message
+            EvaluationResult with status and optional violations
         """
         ...
 
