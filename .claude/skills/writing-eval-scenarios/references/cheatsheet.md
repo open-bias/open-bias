@@ -24,20 +24,20 @@ Mock responses replace `_rails.generate_async`. Return the string the guardrails
 ## Assertion Patterns
 
 ```python
-from openbias.policy.protocols import Decision
+from openbias.policy.protocols import EvaluationStatus
 
 # Single turn check
-assert result.turns[0].response_eval.decision == Decision.ALLOW
-assert result.turns[1].response_eval.decision == Decision.BLOCK
+assert result.turns[0].response_eval.status == EvaluationStatus.ALLOW
+assert result.turns[1].response_eval.status == EvaluationStatus.VIOLATION
 
 # All turns should pass
-assert all(t.response_eval.decision == Decision.ALLOW for t in result.turns)
+assert all(t.response_eval.status == EvaluationStatus.ALLOW for t in result.turns)
 
 # At least one violation detected
-assert any(t.response_eval.decision != Decision.ALLOW for t in result.turns)
+assert any(t.response_eval.status == EvaluationStatus.VIOLATION for t in result.turns)
 
-# Check violation message
-assert "policy violation" in result.turns[0].response_eval.message.lower()
+# Check violation reason
+assert any("policy violation" in v.reason.lower() for v in result.turns[0].response_eval.violations)
 
 # No errors
 assert result.error is None

@@ -120,8 +120,8 @@ Mock responses are consumed **sequentially across all scenarios, sorted alphabet
 ```json
 {"scores": [{"criterion": "policy_compliance", "score": 0, "max_score": 1, "reasoning": "Why it failed"}], "summary": "Description"}
 ```
-- `score: 1` → `Decision.ALLOW`
-- `score: 0` → `Decision.BLOCK`
+- `score: 1` → `EvaluationStatus.ALLOW`
+- `score: 0` → `EvaluationStatus.VIOLATION`
 
 **FSM engine:** Uses real classification (tool call → regex → embeddings), no mock needed for most scenarios. Set `policy:` to point to the FSM workflow YAML.
 
@@ -150,7 +150,7 @@ async def test_my_scenario():
     runner = EvalRunner()
     result = await runner.run(engine, messages)
 
-    assert result.turns[0].response_eval.decision == Decision.BLOCK
+    assert result.turns[0].response_eval.status == EvaluationStatus.VIOLATION
 ```
 
 ## Anti-patterns
