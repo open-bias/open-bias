@@ -119,7 +119,7 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
             settings.validate()
 
         with spinner("Compiling rules for runtime engines..."):
-            _compile_rules_for_serve(settings, config)
+            _compile_rules(settings, config)
 
         # Show config summary
         engine_type = settings.evaluators[0].type if settings.evaluators else "judge"
@@ -161,7 +161,7 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
         raise SystemExit(1)
 
 
-def _compile_rules_for_serve(settings: "Settings", config_path: Path | None) -> None:
+def _compile_rules(settings: "Settings", config_path: Path | None) -> None:
     """Compile canonical rules input into engine-native evaluator configs."""
     import asyncio
 
@@ -234,7 +234,7 @@ def trigger(config: Path, message: str, debug: bool) -> None:
             settings.validate()
 
         with spinner("Compiling rules for runtime engines..."):
-            _compile_rules_for_serve(settings, config)
+            _compile_rules(settings, config)
 
     except SystemExit:
         raise
@@ -620,7 +620,7 @@ def eval_cmd(config: Path | None, json_output: Path | None, verbose: bool, debug
                 settings = Settings(_config_path=str(config_path), debug=debug)
 
             with spinner("Compiling rules for runtime engines..."):
-                _compile_rules_for_serve(settings, config_path)
+                _compile_rules(settings, config_path)
 
             with spinner("Initializing engine..."):
                 policy_config = settings.get_policy_config()
