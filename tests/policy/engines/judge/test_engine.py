@@ -307,33 +307,33 @@ class TestResponseExtraction:
 
 
 class TestConfigShorthands:
-    """Tests for config shorthands: `rubric` and `policies`."""
+    """Tests for config keys: `default_rubric` and `rules`."""
 
-    async def test_rubric_shorthand(self, engine):
-        """rubric: 'name' sets default_rubric."""
+    async def test_default_rubric(self, engine):
+        """default_rubric sets the active rubric."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "rubric": "agent_behavior",
+            "default_rubric": "agent_behavior",
         }
         await engine.initialize(config)
         assert engine._default_rubric == "agent_behavior"
 
-    async def test_policies_shorthand(self, engine):
-        """policies: [list] treated as inline_policy."""
+    async def test_rules_creates_inline_rubric(self, engine):
+        """rules: [list] creates inline_rules rubric."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "policies": ["Be safe", "Be helpful"],
+            "rules": ["Be safe", "Be helpful"],
         }
         await engine.initialize(config)
-        assert engine._default_rubric == "inline_policy"
-        rubric = engine._registry.get("inline_policy")
+        assert engine._default_rubric == "inline_rules"
+        rubric = engine._registry.get("inline_rules")
         assert rubric is not None
 
-    async def test_explicit_overrides_shorthand(self, engine):
-        """Explicit default_rubric takes precedence over rubric shorthand."""
+    async def test_explicit_overrides_default(self, engine):
+        """Explicit default_rubric takes precedence over rules-derived rubric."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "rubric": "safety",
+            "rules": ["Be safe"],
             "default_rubric": "agent_behavior",
         }
         await engine.initialize(config)
@@ -354,7 +354,7 @@ class TestPerRuleCriteria:
         }
         await engine.initialize(config)
 
-        rubric = engine._registry.get("inline_policy")
+        rubric = engine._registry.get("inline_rules")
         criteria_names = [c.name for c in rubric.criteria]
 
         # Simulate: first rule fails, others pass
@@ -380,7 +380,7 @@ class TestPerRuleCriteria:
         }
         await engine.initialize(config)
 
-        rubric = engine._registry.get("inline_policy")
+        rubric = engine._registry.get("inline_rules")
         criteria_names = [c.name for c in rubric.criteria]
 
         judge_response = {
@@ -403,7 +403,7 @@ class TestPerRuleCriteria:
         }
         await engine.initialize(config)
 
-        rubric = engine._registry.get("inline_policy")
+        rubric = engine._registry.get("inline_rules")
         criteria_names = [c.name for c in rubric.criteria]
 
         judge_response = {
@@ -594,10 +594,10 @@ class TestInlinePolicy:
         }
         await engine.initialize(config)
         assert engine._initialized
-        assert engine._default_rubric == "inline_policy"
+        assert engine._default_rubric == "inline_rules"
 
         # Verify rubric is registered
-        rubric = engine._registry.get("inline_policy")
+        rubric = engine._registry.get("inline_rules")
         assert rubric is not None
         assert "No financial advice" in rubric.prompt_overrides["additional_instructions"]
 
@@ -631,15 +631,15 @@ class TestInlinePolicy:
         with pytest.raises(ValueError, match="Dict-format inline policy is no longer supported"):
             await engine.initialize(config)
 
-    async def test_inline_policy_does_not_break_custom_rubrics_path(self, engine):
-        """custom_rubrics_path and inline_policy should coexist."""
+    async def test_inline_rules_does_not_break_custom_rubrics_path(self, engine):
+        """custom_rubrics_path and inline_rules should coexist."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_policy": ["Be kind"],
         }
         await engine.initialize(config)
-        # Should have the inline_policy rubric as default
-        assert engine._default_rubric == "inline_policy"
+        # Should have the inline_rules rubric as default
+        assert engine._default_rubric == "inline_rules"
         # But built-in rubrics should still be available
         assert engine._registry.get("agent_behavior") is not None
 
@@ -719,7 +719,7 @@ class TestMissingCriterionFalsePositive:
         }
         await engine.initialize(config)
 
-        rubric = engine._registry.get("inline_policy")
+        rubric = engine._registry.get("inline_rules")
         criteria_names = [c.name for c in rubric.criteria]
 
         # Judge only returns score for the first criterion; second is omitted
@@ -772,13 +772,13 @@ class TestRubricIsolation:
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
         })
 
-        # Engine A has inline_policy rubric
-        assert engine_a._registry.get("inline_policy") is not None
+        # Engine A has inline_rules rubric
+        assert engine_a._registry.get("inline_rules") is not None
         # Engine B should NOT have it
-        assert engine_b._registry.get("inline_policy") is None
+        assert engine_b._registry.get("inline_rules") is None
 
-    async def test_inline_policy_doesnt_corrupt_builtins(self):
-        """Registering an inline_policy should not modify built-in rubrics globally."""
+    async def test_inline_rules_doesnt_corrupt_builtins(self):
+        """Registering an inline_rules should not modify built-in rubrics globally."""
         from openbias.policy.engines.judge.rubrics import RubricRegistry
 
         engine = JudgePolicyEngine()
@@ -787,9 +787,9 @@ class TestRubricIsolation:
             "inline_policy": ["Custom rule"],
         })
 
-        # A fresh registry should not have the inline_policy
+        # A fresh registry should not have the inline_rules
         fresh = RubricRegistry()
-        assert fresh.get("inline_policy") is None
+        assert fresh.get("inline_rules") is None
         # But should still have built-ins
         assert fresh.get("agent_behavior") is not None
 
@@ -803,7 +803,7 @@ class TestValidateConfig:
         })
         assert errors == []
 
-    def test_valid_config_with_inline_policy(self):
+    def test_valid_config_with_inline_rules(self):
         errors = JudgePolicyEngine.validate_config({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_policy": ["Be professional", "No PII"],
@@ -841,7 +841,7 @@ class TestValidateConfig:
         })
         assert errors == []
 
-    def test_invalid_inline_policy_type(self):
+    def test_invalid_inline_rules_type(self):
         errors = JudgePolicyEngine.validate_config({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_policy": {"rules": ["bad format"]},

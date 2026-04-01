@@ -62,6 +62,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         # Config
         self._default_rubric: str = "agent_behavior"
+        self._explicit_rubric: bool = False
 
     @property
     def name(self) -> str:
@@ -124,6 +125,7 @@ class JudgePolicyEngine(PolicyEngine):
             config = {**config, "inline_policy": config["rules"]}
 
         self._default_rubric = config.get("default_rubric", "agent_behavior")
+        self._explicit_rubric = "default_rubric" in config
 
         # Session memory management
         self._sessions.configure(
@@ -389,7 +391,8 @@ class JudgePolicyEngine(PolicyEngine):
             if rules:
                 rubric = create_rules_rubric(rules)
                 self._registry.register(rubric)
-                self._default_rubric = rubric.name
+                if not self._explicit_rubric:
+                    self._default_rubric = rubric.name
                 logger.info(f"Loaded {len(rules)} inline rules as '{rubric.name}'")
             return
 
@@ -400,7 +403,8 @@ class JudgePolicyEngine(PolicyEngine):
             if all(isinstance(item, str) for item in policy_data):
                 rubric = create_rules_rubric(policy_data)
                 self._registry.register(rubric)
-                self._default_rubric = rubric.name
+                if not self._explicit_rubric:
+                    self._default_rubric = rubric.name
                 logger.info(f"Loaded {len(policy_data)} inline rules as '{rubric.name}'")
                 return
             # List of dicts → formal rubric definitions
@@ -409,8 +413,8 @@ class JudgePolicyEngine(PolicyEngine):
                     try:
                         rubric = _parse_rubric_dict(item)
                         self._registry.register(rubric)
-                        # First rubric becomes default
-                        if idx == 0:
+                        # First rubric becomes default (when not explicitly set)
+                        if idx == 0 and not self._explicit_rubric:
                             self._default_rubric = rubric.name
                         logger.info(f"Loaded inline rubric '{rubric.name}'")
                     except Exception as e:

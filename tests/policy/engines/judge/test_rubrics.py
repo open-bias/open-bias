@@ -74,7 +74,7 @@ class TestCreateRulesRubric:
         rules = ["No financial advice", "Be professional"]
         rubric = create_rules_rubric(rules)
 
-        assert rubric.name == "inline_policy"
+        assert rubric.name == "inline_rules"
         assert len(rubric.criteria) == 2
         assert rubric.criteria[0].scale == ScoreScale.BINARY
         assert rubric.criteria[1].scale == ScoreScale.BINARY
