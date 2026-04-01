@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from openbias.policy.protocols import PolicyEngine, EngineResult
+from openbias.policy.protocols import PolicyEngine, EvaluationResult
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +21,8 @@ class TurnResult:
     turn_index: int
     request_data: dict[str, Any]
     response_data: dict[str, Any]
-    request_eval: EngineResult
-    response_eval: EngineResult
+    request_eval: EvaluationResult
+    response_eval: EvaluationResult
 
 
 @dataclass
@@ -135,7 +135,7 @@ class EvalRunner:
                 )
                 logger.debug(
                     "Eval turn %d: request=%s, response=%s",
-                    idx, request_eval.decision.value, response_eval.decision.value,
+                    idx, request_eval.status.value, response_eval.status.value,
                 )
 
                 turn_results.append(

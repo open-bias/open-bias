@@ -7,7 +7,7 @@ from typing import Any
 
 from openbias.eval.metrics import compute_metrics
 from openbias.eval.runner import EvalResult
-from openbias.policy.protocols import Decision
+from openbias.policy.protocols import EvaluationStatus
 
 
 def print_report(results: list[EvalResult], verbose: bool = False) -> None:
@@ -38,8 +38,7 @@ def print_report(results: list[EvalResult], verbose: bool = False) -> None:
         name = Path(result.scenario_path).name if result.scenario_path else "unknown"
         turns = str(len(result.turns))
         violations = sum(
-            len(t.request_eval.metadata.get("violations", []))
-            + len(t.response_eval.metadata.get("violations", []))
+            len(t.request_eval.violations) + len(t.response_eval.violations)
             for t in result.turns
         )
         status = (
@@ -57,17 +56,14 @@ def print_report(results: list[EvalResult], verbose: bool = False) -> None:
             name = Path(result.scenario_path).name if result.scenario_path else "unknown"
             console.print(f"\n[bold]{name}[/]")
             for turn in result.turns:
-                decision = turn.response_eval.decision.value
-                violations_list = turn.response_eval.metadata.get("violations", [])
-                v_count = len(violations_list)
+                status = turn.response_eval.status.value
+                v_count = len(turn.response_eval.violations)
                 marker = "[green].[/]" if v_count == 0 else "[red]![/]"
                 console.print(
-                    f"  {marker} Turn {turn.turn_index}: decision={decision}, violations={v_count}"
+                    f"  {marker} Turn {turn.turn_index}: status={status}, violations={v_count}"
                 )
-                for v in violations_list:
-                    v_name = v.get("name") or v.get("constraint_id") or "unknown"
-                    v_msg = v.get("message") or ""
-                    console.print(f"      - {v_name}: {v_msg}")
+                for v in turn.response_eval.violations:
+                    console.print(f"      - {v.rule_name}: {v.reason}")
 
     # Final status
     total_violations = metrics.violation_count
@@ -89,19 +85,25 @@ def export_json(results: list[EvalResult]) -> dict[str, Any]:
     for result in results:
         turns: list[dict[str, Any]] = []
         for turn in result.turns:
-            _blocking = (Decision.INTERVENE, Decision.BLOCK)
+            all_violations = [
+                {
+                    "rule_id": v.rule_id,
+                    "name": v.rule_name,
+                    "message": v.reason,
+                    "severity": v.severity,
+                    "engine": v.engine,
+                }
+                for v in turn.request_eval.violations + turn.response_eval.violations
+            ]
             turns.append(
                 {
                     "turn_index": turn.turn_index,
-                    "request_decision": turn.request_eval.decision.value,
-                    "response_decision": turn.response_eval.decision.value,
-                    "violations": (
-                        turn.request_eval.metadata.get("violations", [])
-                        + turn.response_eval.metadata.get("violations", [])
-                    ),
+                    "request_status": turn.request_eval.status.value,
+                    "response_status": turn.response_eval.status.value,
+                    "violations": all_violations,
                     "intervention_needed": (
-                        turn.request_eval.decision in _blocking
-                        or turn.response_eval.decision in _blocking
+                        turn.request_eval.status == EvaluationStatus.VIOLATION
+                        or turn.response_eval.status == EvaluationStatus.VIOLATION
                     ),
                 }
             )
