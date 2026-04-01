@@ -1,7 +1,7 @@
 """
-NeMo Policy Compiler - Natural Language to NeMo Guardrails Config.
+NeMo Rules Compiler - Rules Text to NeMo Guardrails Config.
 
-Converts natural language policy descriptions into NeMo Guardrails
+Converts normalized rules text into NeMo Guardrails
 configuration (config.yml + Colang rail definitions).
 
 Example:
@@ -107,14 +107,14 @@ Output:
 
 @register_compiler("nemo")
 class NemoCompiler(LLMPolicyCompiler):
-    """Compiler that converts natural language to NeMo Guardrails config.
+    """Compiler that converts normalized rules text to NeMo Guardrails config.
 
     Generates a config.yml and Colang rail definition files from
-    natural language policy descriptions.
+    normalized rules text.
     """
 
     SYSTEM_PROMPT = (
-        "You are a policy compiler that converts natural language policy descriptions "
+        "You are a rules compiler that converts normalized rules text "
         "into NVIDIA NeMo Guardrails configurations.\n\n"
         "Your task is to:\n"
         "1. Identify input rails (block certain user requests)\n"
@@ -135,11 +135,11 @@ class NemoCompiler(LLMPolicyCompiler):
 
     def _build_compilation_prompt(
         self,
-        natural_language: str,
+        rules_text: str,
         context: dict[str, Any] | None = None,
     ) -> str:
         prompt_parts = [
-            "Convert the following natural language policy into NeMo Guardrails configuration.",
+            "Convert the following rules into NeMo Guardrails configuration.",
             "",
             NEMO_CONFIG_SCHEMA,
             "",
@@ -154,9 +154,9 @@ class NemoCompiler(LLMPolicyCompiler):
             prompt_parts.append("")
 
         prompt_parts.extend([
-            "Natural language policy:",
+            "Rules:",
             "---",
-            natural_language,
+            rules_text,
             "---",
             "",
             "Generate the JSON NeMo configuration:",
@@ -167,7 +167,7 @@ class NemoCompiler(LLMPolicyCompiler):
     def _parse_compilation_response(
         self,
         response: dict[str, Any],
-        natural_language: str,
+        rules_text: str,
     ) -> CompilationResult:
         warnings: list[str] = []
         errors: list[str] = []
@@ -211,7 +211,7 @@ class NemoCompiler(LLMPolicyCompiler):
             config=config,
             warnings=warnings,
             metadata={
-                "source": natural_language[:200],
+                "source": rules_text[:200],
                 "colang_file_count": len(colang_files),
             },
         )
