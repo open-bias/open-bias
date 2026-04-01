@@ -75,7 +75,7 @@ class EvaluationResult:
                 metadata=self.metadata,
             )
         # VIOLATION → INTERVENE (interceptor may upgrade to BLOCK)
-        message = "; ".join(v.reason for v in self.violations) if self.violations else None
+        message = "\n".join(v.reason for v in self.violations) if self.violations else None
         meta = dict(self.metadata)
         meta["violations"] = [
             {

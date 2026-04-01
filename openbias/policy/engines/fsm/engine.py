@@ -32,6 +32,9 @@ from openbias.policy.engines.stateful import (
 from openbias.policy.protocols import (
     Decision,
     EngineResult,
+    EvaluationResult,
+    EvaluationStatus,
+    ViolationRecord,
     require_initialized,
 )
 from openbias.policy.registry import register_engine
@@ -164,13 +167,13 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         """Evaluate request — FSM evaluation happens post-call."""
         session = await self._state_machine.get_or_create_session(session_id)
 
-        return EngineResult(
-            decision=Decision.ALLOW,
+        return EvaluationResult(
+            status=EvaluationStatus.ALLOW,
             metadata={
                 "current_state": session.current_state,
                 "workflow": self._workflow.name,
             },
-        )
+        ).to_engine_result()
 
     @require_initialized
     async def evaluate_response(
@@ -189,14 +192,14 @@ class FSMPolicyEngine(StatefulPolicyEngine):
             logger.exception(
                 f"FSM engine error for session {session_id}: {e}"
             )
-            return EngineResult(
-                decision=Decision.ALLOW,
+            return EvaluationResult(
+                status=EvaluationStatus.ALLOW,
                 metadata={
                     "error": str(e),
                     "engine": self.name,
                     "session_id": session_id,
                 },
-            )
+            ).to_engine_result()
 
     async def _evaluate_response_inner(
         self,
@@ -244,16 +247,6 @@ class FSMPolicyEngine(StatefulPolicyEngine):
                 expected_from_state=previous_state,
             )
 
-        decision = Decision.ALLOW
-        message: str | None = None
-
-        if transition_result == TransitionResult.INVALID_TRANSITION:
-            decision = Decision.INTERVENE
-            message = error or f"Invalid transition to '{classification.state_name}'"
-        elif constraint_violations:
-            decision = Decision.INTERVENE
-            message = "\n".join(cv.message for cv in constraint_violations)
-
         # Session-boundary evaluation: check EVENTUALLY/RESPONSE at terminal state
         if transition_result == TransitionResult.SUCCESS:
             if await self._state_machine.is_in_terminal_state(session_id):
@@ -262,12 +255,40 @@ class FSMPolicyEngine(StatefulPolicyEngine):
                 )
                 if boundary_violations:
                     constraint_violations.extend(boundary_violations)
-                    decision = Decision.INTERVENE
-                    message = "\n".join(cv.message for cv in constraint_violations)
 
-        return EngineResult(
-            decision=decision,
-            message=message,
+        # Build violation records
+        violation_records: list[ViolationRecord] = []
+
+        if transition_result == TransitionResult.INVALID_TRANSITION:
+            violation_records.append(ViolationRecord(
+                rule_id="fsm_invalid_transition",
+                rule_name="invalid_transition",
+                reason=error or f"Invalid transition to '{classification.state_name}'",
+                severity="error",
+                scope="turn",
+                engine=self.name,
+            ))
+
+        for cv in constraint_violations:
+            violation_records.append(ViolationRecord(
+                rule_id=f"fsm_constraint_{cv.constraint_name}",
+                rule_name=cv.constraint_name,
+                reason=cv.message,
+                severity="error",
+                scope="turn",
+                engine=self.name,
+                extra={
+                    "constraint_type": cv.constraint_type.value,
+                    **cv.details,
+                },
+            ))
+
+        # Determine status
+        status = EvaluationStatus.VIOLATION if violation_records else EvaluationStatus.ALLOW
+
+        return EvaluationResult(
+            status=status,
+            violations=violation_records,
             metadata={
                 "previous_state": previous_state,
                 "current_state": session.current_state,
@@ -276,17 +297,8 @@ class FSMPolicyEngine(StatefulPolicyEngine):
                 "transition_result": transition_result.value,
                 "transition_error": error,
                 "workflow": self._workflow.name,
-                "violations": [
-                    {
-                        "name": cv.constraint_name,
-                        "message": cv.message,
-                        "constraint_type": cv.constraint_type.value,
-                        **cv.details,
-                    }
-                    for cv in constraint_violations
-                ],
             },
-        )
+        ).to_engine_result()
 
     @require_initialized
     async def classify_response(
