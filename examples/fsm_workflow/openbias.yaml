@@ -9,4 +9,4 @@ port: 4000
 evaluators:
   - name: customer-support
     type: fsm
-    policy: ./customer_support.yaml
+    rules_file: ./rules.md

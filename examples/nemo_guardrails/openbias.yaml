@@ -5,5 +5,5 @@ port: 4000
 evaluators:
   - name: nemo-rails
     type: nemo
-    policy: ./nemo_config/
+    rules_file: ./rules.md
     # fail_closed: false      # uncomment to deny on NeMo errors instead of warn
