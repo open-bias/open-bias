@@ -24,9 +24,89 @@ class Decision(Enum):
     BLOCK = "block"
     INTERVENE = "intervene"
 
+
+# ---------------------------------------------------------------------------
+# Unified evaluation contract
+# ---------------------------------------------------------------------------
+
+
+class EvaluationStatus(Enum):
+    """Pure evaluation outcome — no enforcement semantics."""
+
+    ALLOW = "allow"
+    VIOLATION = "violation"
+
+
+@dataclass
+class ViolationRecord:
+    """Normalized violation metadata produced by an engine."""
+
+    rule_id: str
+    rule_name: str
+    reason: str
+    severity: str = "error"
+    scope: str = "turn"
+    engine: str = ""
+    evidence: list[str] | None = None
+    confidence: float | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class EvaluationResult:
+    """Unified evaluation result returned by policy engines.
+
+    Engines are pure evaluators: they return ALLOW or VIOLATION with
+    normalized violation metadata.  The interceptor is the sole
+    enforcement gateway that maps violations to fail_action behavior.
+    """
+
+    status: EvaluationStatus
+    violations: list[ViolationRecord] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    # --- Backward-compatibility bridge to EngineResult ---
+
+    def to_engine_result(self) -> "EngineResult":
+        """Convert to legacy EngineResult for callers that haven't migrated."""
+        if self.status == EvaluationStatus.ALLOW:
+            return EngineResult(
+                decision=Decision.ALLOW,
+                metadata=self.metadata,
+            )
+        # VIOLATION → INTERVENE (interceptor may upgrade to BLOCK)
+        message = "; ".join(v.reason for v in self.violations) if self.violations else None
+        meta = dict(self.metadata)
+        meta["violations"] = [
+            {
+                "rule_id": v.rule_id,
+                "name": v.rule_name,
+                "message": v.reason,
+                "severity": v.severity,
+                "scope": v.scope,
+                "engine": v.engine,
+                **({"evidence": v.evidence} if v.evidence else {}),
+                **({"confidence": v.confidence} if v.confidence is not None else {}),
+                **v.extra,
+            }
+            for v in self.violations
+        ]
+        return EngineResult(
+            decision=Decision.INTERVENE,
+            message=message,
+            metadata=meta,
+        )
+
+
 @dataclass
 class EngineResult:
-    """Result returned by a policy engine evaluation."""
+    """Result returned by a policy engine evaluation.
+
+    .. deprecated::
+        Engines should migrate to returning ``EvaluationResult``.
+        ``EngineResult`` is retained during migration for backward
+        compatibility.
+    """
 
     decision: Decision
     message: str | None = None

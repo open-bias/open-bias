@@ -48,7 +48,10 @@ from openbias.policy.engines.stateful import (
 from openbias.policy.protocols import (
     Decision,
     EngineResult,
+    EvaluationResult,
+    EvaluationStatus,
     PolicyEngine,
+    ViolationRecord,
     require_initialized,
 )
 from openbias.policy.registry import GenericRegistry, PolicyEngineRegistry, register_engine
@@ -62,6 +65,9 @@ __all__ = [
     # Result types
     "Decision",
     "EngineResult",
+    "EvaluationResult",
+    "EvaluationStatus",
+    "ViolationRecord",
     "StateClassificationResult",
     # Registry
     "GenericRegistry",
