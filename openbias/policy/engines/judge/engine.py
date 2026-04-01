@@ -17,6 +17,9 @@ from openbias.policy.protocols import (
     PolicyEngine,
     Decision,
     EngineResult,
+    EvaluationResult,
+    EvaluationStatus,
+    ViolationRecord,
     require_initialized,
 )
 from openbias.policy.registry import register_engine
@@ -496,6 +499,7 @@ class JudgePolicyEngine(PolicyEngine):
         """Build EngineResult from judge verdicts.
 
         Takes the most restrictive action across all verdicts.
+        Engines are pure evaluators: PASS → ALLOW, anything else → VIOLATION.
         """
         action_priority = {
             VerdictAction.PASS: 0,
@@ -504,12 +508,28 @@ class JudgePolicyEngine(PolicyEngine):
         }
 
         worst_verdict = max(verdicts, key=lambda v: action_priority.get(v.action, 0))
-        decision = _VERDICT_MAP[worst_verdict.action]
 
-        # message = guidance for INTERVENE, reason for BLOCK
-        message: str | None = None
-        if decision in (Decision.INTERVENE, Decision.BLOCK):
-            message = self._build_violation_message(worst_verdict)
+        # Build violation records for non-PASS verdicts
+        violation_records: list[ViolationRecord] = []
+        for v in verdicts:
+            if v.action == VerdictAction.PASS:
+                continue
+            violation_records.append(ViolationRecord(
+                rule_id=f"judge_{v.scope.value}_{v.action.value}",
+                rule_name=f"judge_{v.scope.value}_{v.action.value}",
+                reason=self._build_violation_message(v),
+                severity=v.action.value,
+                scope=v.scope.value,
+                engine=self.name,
+                confidence=v.composite_score,
+                extra={
+                    "composite_score": v.composite_score,
+                    "judge_model": v.judge_model,
+                    "summary": v.summary,
+                },
+            ))
+
+        status = EvaluationStatus.VIOLATION if violation_records else EvaluationStatus.ALLOW
 
         metadata: dict[str, Any] = {
             "judge": {
@@ -519,25 +539,13 @@ class JudgePolicyEngine(PolicyEngine):
                 ],
                 "session_turn": session.turn_count + 1,
             },
-            "violations": [
-                {
-                    "name": f"judge_{v.scope.value}_{v.action.value}",
-                    "message": v.summary,
-                    "severity": v.action.value,
-                    "composite_score": v.composite_score,
-                    "judge_model": v.judge_model,
-                    "scope": v.scope.value,
-                }
-                for v in verdicts
-                if v.action != VerdictAction.PASS
-            ],
         }
 
-        return EngineResult(
-            decision=decision,
-            message=message,
+        return EvaluationResult(
+            status=status,
+            violations=violation_records,
             metadata=metadata,
-        )
+        ).to_engine_result()
 
     def _extract_conversation(self, request_data: dict[str, Any]) -> list[dict[str, Any]]:
         """Extract conversation messages from request data."""
