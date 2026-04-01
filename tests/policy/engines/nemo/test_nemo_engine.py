@@ -78,7 +78,7 @@ async def test_evaluate_request_allow(engine, mock_rails):
     assert result.status == EvaluationStatus.ALLOW
 
 
-async def test_evaluate_request_blocked(engine, mock_rails):
+async def test_evaluate_request_violation(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
 
     # Rail was activated
@@ -95,7 +95,7 @@ async def test_evaluate_request_blocked(engine, mock_rails):
     assert len(result.violations) > 0
 
 
-async def test_evaluate_request_blocked_violations_metadata(engine, mock_rails):
+async def test_evaluate_request_violation_violations_metadata(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
 
     mock_rails.generate_async.return_value = _make_result(
@@ -109,8 +109,10 @@ async def test_evaluate_request_blocked_violations_metadata(engine, mock_rails):
 
     assert result.status == EvaluationStatus.VIOLATION
     assert len(result.violations) == 1
-    assert result.violations[0].rule_name == "nemo_input_blocked"
+    assert result.violations[0].rule_name == "nemo_input_violation"
     assert result.violations[0].reason == "block jailbreak"
+    assert result.violations[0].extra["provider_decision"] == "flagged"
+    assert result.violations[0].extra["rail_type"] == "input"
 
 
 async def test_evaluate_response_allow(engine, mock_rails):
@@ -128,7 +130,7 @@ async def test_evaluate_response_allow(engine, mock_rails):
     assert result.status == EvaluationStatus.ALLOW
 
 
-async def test_evaluate_response_blocked(engine, mock_rails):
+async def test_evaluate_response_violation(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
 
     mock_rails.generate_async.return_value = _make_result(
@@ -145,7 +147,7 @@ async def test_evaluate_response_blocked(engine, mock_rails):
     assert len(result.violations) > 0
 
 
-async def test_evaluate_response_blocked_violations_metadata(engine, mock_rails):
+async def test_evaluate_response_violation_violations_metadata(engine, mock_rails):
     await engine.initialize({"config_path": "dummy"})
 
     mock_rails.generate_async.return_value = _make_result(
@@ -160,8 +162,10 @@ async def test_evaluate_response_blocked_violations_metadata(engine, mock_rails)
 
     assert result.status == EvaluationStatus.VIOLATION
     assert len(result.violations) == 1
-    assert result.violations[0].rule_name == "nemo_output_blocked"
+    assert result.violations[0].rule_name == "nemo_output_violation"
     assert result.violations[0].reason == "block unsafe content"
+    assert result.violations[0].extra["provider_decision"] == "flagged"
+    assert result.violations[0].extra["rail_type"] == "output"
 
 
 async def test_evaluate_request_plain_string_result_no_false_positive(engine, mock_rails):
@@ -269,7 +273,7 @@ async def test_violations_use_fallback_type_when_missing(engine, mock_rails):
     )
 
     assert result.status == EvaluationStatus.VIOLATION
-    assert result.violations[0].rule_name == "nemo_input_blocked"
+    assert result.violations[0].rule_name == "nemo_input_violation"
 
 
 async def test_multiple_rail_activations_produce_multiple_violations(engine, mock_rails):
@@ -368,10 +372,10 @@ async def test_check_rail_activations_log_is_none():
 @pytest.mark.parametrize(
     "rail_type, rail_name, expected_violation_name",
     [
-        pytest.param("input", "block jailbreak", "nemo_input_blocked", id="input-jailbreak"),
-        pytest.param("dialog", "topic guard", "nemo_dialog_blocked", id="dialog-topic-guard"),
-        pytest.param("execution", "sandbox escape", "nemo_execution_blocked", id="execution-rail"),
-        pytest.param("custom_type", "org policy", "nemo_custom_type_blocked", id="custom-type"),
+        pytest.param("input", "block jailbreak", "nemo_input_violation", id="input-jailbreak"),
+        pytest.param("dialog", "topic guard", "nemo_dialog_violation", id="dialog-topic-guard"),
+        pytest.param("execution", "sandbox escape", "nemo_execution_violation", id="execution-rail"),
+        pytest.param("custom_type", "org policy", "nemo_custom_type_violation", id="custom-type"),
     ],
 )
 async def test_evaluate_request_varied_rail_types(
@@ -397,9 +401,9 @@ async def test_evaluate_request_varied_rail_types(
 @pytest.mark.parametrize(
     "rail_type, rail_name, expected_violation_name",
     [
-        pytest.param("output", "block unsafe content", "nemo_output_blocked", id="output-unsafe"),
-        pytest.param("dialog", "off-topic", "nemo_dialog_blocked", id="dialog-off-topic"),
-        pytest.param("retrieval", "hallucination", "nemo_retrieval_blocked", id="retrieval-rail"),
+        pytest.param("output", "block unsafe content", "nemo_output_violation", id="output-unsafe"),
+        pytest.param("dialog", "off-topic", "nemo_dialog_violation", id="dialog-off-topic"),
+        pytest.param("retrieval", "hallucination", "nemo_retrieval_violation", id="retrieval-rail"),
     ],
 )
 async def test_evaluate_response_varied_rail_types(

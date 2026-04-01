@@ -235,11 +235,12 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             if activations:
                 violations = [
                     ViolationRecord(
-                        rule_id=f"nemo_{a.get('type', 'input')}_blocked",
-                        rule_name=f"nemo_{a.get('type', 'input')}_blocked",
+                        rule_id=f"nemo_{a.get('type', 'input')}_violation",
+                        rule_name=f"nemo_{a.get('type', 'input')}_violation",
                         reason=a.get("name", "NeMo input rail triggered"),
                         severity="error",
                         engine=self.name,
+                        extra={"provider_decision": "flagged", "rail_type": a.get("type", "input")},
                     )
                     for a in activations
                 ]
@@ -321,11 +322,12 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             if activations:
                 violations = [
                     ViolationRecord(
-                        rule_id=f"nemo_{a.get('type', 'output')}_blocked",
-                        rule_name=f"nemo_{a.get('type', 'output')}_blocked",
+                        rule_id=f"nemo_{a.get('type', 'output')}_violation",
+                        rule_name=f"nemo_{a.get('type', 'output')}_violation",
                         reason=a.get("name", "NeMo output rail triggered"),
                         severity="error",
                         engine=self.name,
+                        extra={"provider_decision": "flagged", "rail_type": a.get("type", "output")},
                     )
                     for a in activations
                 ]
