@@ -65,7 +65,6 @@ class Interceptor:
     - Async evaluators that run in background with results applied next request
     - Pending async results per session
     - Modification merging for deferred INTERVENE decisions
-    - Per-session intervention count tracking with escalation to BLOCK
     """
 
     # Defaults for session memory management
@@ -79,7 +78,6 @@ class Interceptor:
         mode: str = "async",
         default_strategy: str = "user_message_inject",
         fail_action: Literal["intervene", "block", "shadow"] = "intervene",
-        max_intervention_attempts: int = 3,
         session_ttl: int | None = None,
         max_sessions: int | None = None,
     ):
@@ -104,10 +102,6 @@ class Interceptor:
             )
         self._default_strategy = default_strategy
         self._fail_action = fail_action
-        self._max_intervention_attempts = max_intervention_attempts
-
-        # Per-session intervention count tracking
-        self._intervention_counts: dict[str, int] = {}
 
         # Temporary storage for collected-but-not-yet-confirmed async results
         self._last_collected: dict[str, list[asyncio.Task[_PendingResult]]] = {}
@@ -144,6 +138,7 @@ class Interceptor:
         self._sessions.evict_stale()
 
         modified_data = copy.deepcopy(request_data)
+        has_modifications = False
         all_metadata: dict[str, Any] = {"results": []}
 
         # Step 1: Apply pending async results
@@ -188,13 +183,17 @@ class Interceptor:
                         )
                         modified_data = dict(modified_data)
                         modified_data["messages"] = result.modified_messages
+                        has_modifications = True
                     elif result.message:
                         logger.info(
                             f"Applying async intervention from '{pending.evaluator_name}'"
                         )
-                        modified_data = self._apply_intervention(
+                        applied = self._apply_intervention(
                             modified_data, result.message, self._default_strategy
                         )
+                        if applied is not None:
+                            modified_data = applied
+                            has_modifications = True
 
         # Async results processed successfully — remove from session store
         self._confirm_collected(session_id)
@@ -245,13 +244,17 @@ class Interceptor:
                             )
                             modified_data = dict(modified_data)
                             modified_data["messages"] = result.modified_messages
+                            has_modifications = True
                         elif result.message:
                             logger.info(
                                 f"Applying sync intervention from '{evaluator.name}'"
                             )
-                            modified_data = self._apply_intervention(
+                            applied = self._apply_intervention(
                                 modified_data, result.message, self._default_strategy
                             )
+                            if applied is not None:
+                                modified_data = applied
+                                has_modifications = True
 
                 except Exception as e:
                     logger.error(f"Evaluator '{evaluator.name}' failed: {e}")
@@ -262,7 +265,7 @@ class Interceptor:
 
         return InterceptionResult(
             allowed=True,
-            modified_data=modified_data if modified_data != request_data else None,
+            modified_data=modified_data if has_modifications else None,
             metadata=all_metadata,
         )
 
@@ -403,7 +406,7 @@ class Interceptor:
         )
 
     def _effective_decision(self, decision: Decision, session_id: str) -> Decision:
-        """Map evaluator decision based on fail_action policy and intervention count."""
+        """Map evaluator decision based on fail_action policy."""
         if self._fail_action == "shadow":
             if decision != Decision.ALLOW:
                 logger.info("Shadow mode: downgrading %s to allow", decision.value)
@@ -411,17 +414,6 @@ class Interceptor:
 
         if decision == Decision.INTERVENE and self._fail_action == "block":
             return Decision.BLOCK
-
-        # Escalate INTERVENE to BLOCK when max_intervention_attempts exceeded
-        if decision == Decision.INTERVENE:
-            count = self._intervention_counts.get(session_id, 0) + 1
-            self._intervention_counts[session_id] = count
-            if count > self._max_intervention_attempts:
-                logger.warning(
-                    f"Session {session_id} exceeded max intervention attempts "
-                    f"({self._max_intervention_attempts}), escalating to BLOCK"
-                )
-                return Decision.BLOCK
 
         return decision
 
@@ -600,7 +592,7 @@ class Interceptor:
         request_data: dict[str, Any],
         message: str,
         strategy: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
         """
         Apply an intervention message to request data using the configured strategy.
 
@@ -610,7 +602,8 @@ class Interceptor:
             strategy: Strategy name override; falls back to self._default_strategy.
 
         Returns:
-            New request data dict with the intervention applied.
+            New request data dict with the intervention applied, or None if
+            the strategy cannot be applied at request time (e.g. response_modification).
         """
         result = dict(request_data)
         messages = result.get("messages", [])
@@ -618,18 +611,20 @@ class Interceptor:
 
         if effective_strategy == "user_message_inject":
             result["messages"] = UserMessageInjectStrategy.merge(messages, message)
+            return result
         elif effective_strategy == "system_prompt_append":
             result["messages"] = SystemPromptAppendStrategy.merge(messages, message)
+            return result
         elif effective_strategy == "response_modification":
             logger.warning(
                 "response_modification is a response-time strategy and cannot be applied "
                 "during request modification (PRE_CALL); intervention skipped"
             )
 
-        return result
+        return None
 
     def _on_session_evict(self, session_id: str, tasks: list[asyncio.Task[_PendingResult]]) -> None:
-        """Cancel all async tasks and clean up intervention count when a session is evicted."""
+        """Cancel all async tasks when a session is evicted."""
         pending_count = 0
         for task in tasks:
             if not task.done():
@@ -641,7 +636,6 @@ class Interceptor:
                 pending_count,
                 session_id,
             )
-        self._intervention_counts.pop(session_id, None)
 
     async def cleanup_session(self, session_id: str) -> None:
         """Cancel running async tasks and clear pending results for a session."""
@@ -650,9 +644,6 @@ class Interceptor:
             for task in tasks:
                 if not task.done():
                     task.cancel()
-
-        # Clear intervention count for this session
-        self._intervention_counts.pop(session_id, None)
 
         logger.debug(f"Cleaned up session {session_id}")
 
