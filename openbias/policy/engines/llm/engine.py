@@ -14,8 +14,6 @@ if TYPE_CHECKING:
 
 from openbias.policy.registry import register_engine
 from openbias.policy.protocols import (
-    Decision,
-    EngineResult,
     EvaluationResult,
     EvaluationStatus,
     ViolationRecord,
@@ -165,9 +163,9 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         session_id: str,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
+    ) -> EvaluationResult:
         """Evaluate incoming request — pass-through, evaluation happens post-call."""
-        return EvaluationResult(status=EvaluationStatus.ALLOW).to_engine_result()
+        return EvaluationResult(status=EvaluationStatus.ALLOW)
 
     @require_initialized
     async def evaluate_response(
@@ -176,7 +174,7 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         response_data: Any,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
+    ) -> EvaluationResult:
         """Evaluate LLM response — classify, detect drift, check constraints."""
         session = self._get_or_create_session(session_id)
 
@@ -357,15 +355,13 @@ class LLMPolicyEngine(StatefulPolicyEngine):
                     "transition_legal": classification.transition_legal,
                     "max_severity": max_severity,
                 },
-            ).to_engine_result()
-
+            )
         except Exception as e:
             logger.error(f"Response evaluation failed: {e}")
             return EvaluationResult(
                 status=EvaluationStatus.ALLOW,
                 metadata={"error": str(e)},
-            ).to_engine_result()
-
+            )
     @require_initialized
     async def classify_response(
         self,

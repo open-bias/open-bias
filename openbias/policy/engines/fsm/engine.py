@@ -30,8 +30,6 @@ from openbias.policy.engines.stateful import (
     StatefulPolicyEngine,
 )
 from openbias.policy.protocols import (
-    Decision,
-    EngineResult,
     EvaluationResult,
     EvaluationStatus,
     ViolationRecord,
@@ -163,7 +161,7 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         session_id: str,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
+    ) -> EvaluationResult:
         """Evaluate request — FSM evaluation happens post-call."""
         session = await self._state_machine.get_or_create_session(session_id)
 
@@ -173,7 +171,7 @@ class FSMPolicyEngine(StatefulPolicyEngine):
                 "current_state": session.current_state,
                 "workflow": self._workflow.name,
             },
-        ).to_engine_result()
+        )
 
     @require_initialized
     async def evaluate_response(
@@ -182,7 +180,7 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         response_data: Any,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
+    ) -> EvaluationResult:
         """Evaluate response — classify state, check constraints, transition."""
         try:
             return await self._evaluate_response_inner(
@@ -199,7 +197,7 @@ class FSMPolicyEngine(StatefulPolicyEngine):
                     "engine": self.name,
                     "session_id": session_id,
                 },
-            ).to_engine_result()
+            )
 
     async def _evaluate_response_inner(
         self,
@@ -207,7 +205,7 @@ class FSMPolicyEngine(StatefulPolicyEngine):
         response_data: Any,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
+    ) -> EvaluationResult:
         """Inner evaluate_response logic, separated for fail-open wrapping."""
         session = await self._state_machine.get_or_create_session(session_id)
         previous_state = session.current_state
@@ -298,7 +296,7 @@ class FSMPolicyEngine(StatefulPolicyEngine):
                 "transition_error": error,
                 "workflow": self._workflow.name,
             },
-        ).to_engine_result()
+        )
 
     @require_initialized
     async def classify_response(

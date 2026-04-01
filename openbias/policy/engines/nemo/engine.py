@@ -23,8 +23,6 @@ if TYPE_CHECKING:
 from openbias.core.utils import extract_response_content
 from openbias.policy.protocols import (
     PolicyEngine,
-    Decision,
-    EngineResult,
     EvaluationResult,
     EvaluationStatus,
     ViolationRecord,
@@ -204,7 +202,7 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         session_id: str,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
+    ) -> EvaluationResult:
         """
         Evaluate request using NeMo input rails.
 
@@ -218,12 +216,10 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             return EvaluationResult(
                 status=EvaluationStatus.ALLOW,
                 metadata={"rails_skipped": "input not enabled"},
-            ).to_engine_result()
-
+            )
         messages = request_data.get("messages", [])
         if not messages:
-            return EvaluationResult(status=EvaluationStatus.ALLOW).to_engine_result()
-
+            return EvaluationResult(status=EvaluationStatus.ALLOW)
         try:
             # Process through NeMo input rails
             result = await self._rails.generate_async(
@@ -251,13 +247,11 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
                     status=EvaluationStatus.VIOLATION,
                     violations=violations,
                     metadata={"session_id": session_id},
-                ).to_engine_result()
-
+                )
             return EvaluationResult(
                 status=EvaluationStatus.ALLOW,
                 metadata={"nemo_processed": True},
-            ).to_engine_result()
-
+            )
         except Exception as e:
             logger.error(f"NeMo input rail evaluation failed: {e}", exc_info=True)
 
@@ -274,14 +268,12 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
                         engine=self.name,
                         extra={"provider_decision": "block", "provider_reason": str(e)},
                     )],
-                ).to_engine_result()
-
+                )
             # Fail open
             return EvaluationResult(
                 status=EvaluationStatus.ALLOW,
                 metadata={"error": str(e)},
-            ).to_engine_result()
-
+            )
     @require_initialized
     async def evaluate_response(
         self,
@@ -289,7 +281,7 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
         response_data: Any,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
+    ) -> EvaluationResult:
         """
         Evaluate response using NeMo output rails.
 
@@ -304,13 +296,11 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             return EvaluationResult(
                 status=EvaluationStatus.ALLOW,
                 metadata={"rails_skipped": "output not enabled"},
-            ).to_engine_result()
-
+            )
         # Extract response content
         content = extract_response_content(response_data)
         if not content:
-            return EvaluationResult(status=EvaluationStatus.ALLOW).to_engine_result()
-
+            return EvaluationResult(status=EvaluationStatus.ALLOW)
         messages = request_data.get("messages", [])
         messages_with_response = messages + [
             {"role": "assistant", "content": content}
@@ -343,13 +333,11 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
                     status=EvaluationStatus.VIOLATION,
                     violations=violations,
                     metadata={"original_response": content[:200]},
-                ).to_engine_result()
-
+                )
             return EvaluationResult(
                 status=EvaluationStatus.ALLOW,
                 metadata={"nemo_output_verified": True},
-            ).to_engine_result()
-
+            )
         except Exception as e:
             logger.error(f"NeMo output rail evaluation failed: {e}", exc_info=True)
 
@@ -364,13 +352,11 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
                         engine=self.name,
                         extra={"provider_decision": "block", "provider_reason": str(e)},
                     )],
-                ).to_engine_result()
-
+                )
             return EvaluationResult(
                 status=EvaluationStatus.ALLOW,
                 metadata={"error": str(e)},
-            ).to_engine_result()
-
+            )
     def _check_rail_activations(self, result: Any) -> list[dict[str, Any]]:
         """
         Inspect NeMo result for activated rails.

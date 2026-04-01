@@ -15,8 +15,6 @@ if TYPE_CHECKING:
 from openbias.core.session import SessionStore
 from openbias.policy.protocols import (
     PolicyEngine,
-    Decision,
-    EngineResult,
     EvaluationResult,
     EvaluationStatus,
     ViolationRecord,
@@ -38,14 +36,6 @@ from openbias.policy.engines.judge.rubrics import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Mapping from VerdictAction to Decision
-_VERDICT_MAP: dict[VerdictAction, Decision] = {
-    VerdictAction.PASS: Decision.ALLOW,
-    VerdictAction.INTERVENE: Decision.INTERVENE,
-    VerdictAction.BLOCK: Decision.BLOCK,
-}
-
 
 @register_engine("judge")
 class JudgePolicyEngine(PolicyEngine):
@@ -177,7 +167,7 @@ class JudgePolicyEngine(PolicyEngine):
         session_id: str,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
+    ) -> EvaluationResult:
         """Evaluate an incoming request (PRE_CALL).
 
         Runs the configured default rubric against the latest user message.
@@ -186,7 +176,7 @@ class JudgePolicyEngine(PolicyEngine):
         """
         rubric = self._registry.get(self._default_rubric)
         if not rubric:
-            return EngineResult(decision=Decision.ALLOW)
+            return EvaluationResult(status=EvaluationStatus.ALLOW)
 
         messages = request_data.get("messages", [])
         user_message = ""
@@ -196,11 +186,11 @@ class JudgePolicyEngine(PolicyEngine):
                 break
 
         if not user_message:
-            return EngineResult(decision=Decision.ALLOW)
+            return EvaluationResult(status=EvaluationStatus.ALLOW)
 
         primary_model = self._client.primary_model
         if not primary_model:
-            return EngineResult(decision=Decision.ALLOW)
+            return EvaluationResult(status=EvaluationStatus.ALLOW)
 
         try:
             verdict = await self._evaluator.evaluate_turn(
@@ -217,7 +207,7 @@ class JudgePolicyEngine(PolicyEngine):
             return self._build_result([verdict], self._get_or_create_session(session_id), rubric_name=rubric.name)
         except Exception as e:
             logger.error(f"Pre-call evaluation failed: {e}")
-            return EngineResult(decision=Decision.ALLOW)
+            return EvaluationResult(status=EvaluationStatus.ALLOW)
 
     @require_initialized
     async def evaluate_response(
@@ -226,7 +216,7 @@ class JudgePolicyEngine(PolicyEngine):
         response_data: Any,
         request_data: dict[str, Any],
         context: dict[str, Any] | None = None,
-    ) -> EngineResult:
+    ) -> EvaluationResult:
         """Evaluate an LLM response (POST_CALL).
 
         Runs the configured default rubric against the latest response.
@@ -244,7 +234,7 @@ class JudgePolicyEngine(PolicyEngine):
         primary_model = self._client.primary_model
         if not primary_model:
             logger.error("No judge models configured")
-            return EngineResult(decision=Decision.ALLOW)
+            return EvaluationResult(status=EvaluationStatus.ALLOW)
 
         verdicts: list[JudgeVerdict] = []
 
@@ -276,7 +266,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         # Build result
         if not verdicts:
-            return EngineResult(decision=Decision.ALLOW)
+            return EvaluationResult(status=EvaluationStatus.ALLOW)
 
         # Build result before recording verdicts so escalation checks
         # compare against prior session state, not the current turn's own data
@@ -495,8 +485,8 @@ class JudgePolicyEngine(PolicyEngine):
         verdicts: list[JudgeVerdict],
         session: JudgeSessionContext,
         rubric_name: str = "unknown",
-    ) -> EngineResult:
-        """Build EngineResult from judge verdicts.
+    ) -> EvaluationResult:
+        """Build EvaluationResult from judge verdicts.
 
         Takes the most restrictive action across all verdicts.
         Engines are pure evaluators: PASS → ALLOW, anything else → VIOLATION.
@@ -545,7 +535,7 @@ class JudgePolicyEngine(PolicyEngine):
             status=status,
             violations=violation_records,
             metadata=metadata,
-        ).to_engine_result()
+        )
 
     def _extract_conversation(self, request_data: dict[str, Any]) -> list[dict[str, Any]]:
         """Extract conversation messages from request data."""
