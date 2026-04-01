@@ -441,6 +441,4 @@ def format_session_context_block(session: JudgeSessionContext | None) -> str:
         trend_str = " → ".join(f"{s:.1f}" for s in session.score_trend[-10:])
         lines.append(f"Score trend: {trend_str}")
 
-    lines.append(f"Active intervention count: {session.intervention_count}")
-
     return "\n".join(lines)

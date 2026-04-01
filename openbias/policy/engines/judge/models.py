@@ -144,11 +144,6 @@ class JudgeSessionContext:
     total_tokens_used: int = 0
     created_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
     last_updated_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
-    # Intervention tracking for escalation
-    intervention_count: int = 0
-    last_intervention_criteria: list[str] = field(default_factory=list)
-    criterion_intervention_counts: dict[str, int] = field(default_factory=dict)
-
     def record_verdict(self, verdict: JudgeVerdict) -> None:
         """Record a verdict and update trends.
 
@@ -166,18 +161,6 @@ class JudgeSessionContext:
             action_key = verdict.action.value
             self.violation_counts[action_key] = self.violation_counts.get(action_key, 0) + 1
 
-        # Track intervention criteria for escalation
-        if verdict.action != VerdictAction.PASS:
-            failed = verdict.metadata.get("criterion_failures", [])
-            if failed:
-                self.last_intervention_criteria.extend(
-                    c for c in failed if c not in self.last_intervention_criteria
-                )
-                for criterion in failed:
-                    self.criterion_intervention_counts[criterion] = (
-                        self.criterion_intervention_counts.get(criterion, 0) + 1
-                    )
-
     def to_dict(self) -> dict[str, Any]:
         return {
             "session_id": self.session_id,
@@ -185,8 +168,6 @@ class JudgeSessionContext:
             "total_tokens_used": self.total_tokens_used,
             "score_trend": self.score_trend,
             "violation_counts": self.violation_counts,
-            "intervention_count": self.intervention_count,
-            "criterion_intervention_counts": self.criterion_intervention_counts,
             "evaluation_count": len(self.evaluation_history),
             "created_at": self.created_at.isoformat(),
             "last_updated_at": self.last_updated_at.isoformat(),

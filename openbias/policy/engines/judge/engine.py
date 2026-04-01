@@ -69,7 +69,6 @@ class JudgePolicyEngine(PolicyEngine):
 
         # Config
         self._default_rubric: str = "agent_behavior"
-        self._max_intervention_attempts: int = 3
 
     @property
     def name(self) -> str:
@@ -99,7 +98,6 @@ class JudgePolicyEngine(PolicyEngine):
                 - rubric: Shorthand for default_rubric
                 - policies: List of rule strings (shorthand for inline_policy)
                 - inline_policy: Inline policy rules or rubric definitions
-                - max_intervention_attempts: Escalation cap (default: 3)
                 - custom_rubrics_path: Path to custom rubric YAML files
                 - session_ttl: Session TTL in seconds
                 - max_sessions: Maximum concurrent sessions
@@ -138,7 +136,6 @@ class JudgePolicyEngine(PolicyEngine):
             config = {**config, "inline_policy": config["policies"]}
 
         self._default_rubric = config.get("default_rubric", "agent_behavior")
-        self._max_intervention_attempts = config.get("max_intervention_attempts", 3)
 
         # Session memory management
         self._sessions.configure(
@@ -284,11 +281,8 @@ class JudgePolicyEngine(PolicyEngine):
 
         # Record verdicts to session after result is built
         session.turn_count += 1
-        session.last_intervention_criteria = []
         for v in verdicts:
             session.record_verdict(v)
-        if result.decision == Decision.INTERVENE:
-            session.intervention_count += 1
 
         return result
 
@@ -502,9 +496,6 @@ class JudgePolicyEngine(PolicyEngine):
         """Build EngineResult from judge verdicts.
 
         Takes the most restrictive action across all verdicts.
-        Applies escalation when repeat violations are detected:
-        if the escalation cap is reached and the current decision is
-        INTERVENE, it is upgraded to BLOCK.
         """
         action_priority = {
             VerdictAction.PASS: 0,
@@ -515,33 +506,10 @@ class JudgePolicyEngine(PolicyEngine):
         worst_verdict = max(verdicts, key=lambda v: action_priority.get(v.action, 0))
         decision = _VERDICT_MAP[worst_verdict.action]
 
-        # Check escalation across all non-PASS verdicts, not just the worst.
-        # A turn verdict with repeat criterion violations must trigger escalation
-        # even when a conversation verdict is the worst overall.
-        escalation_info: dict[str, Any] = {
-            "should_escalate": False,
-            "reason": "",
-            "escalation_prefix": "",
-        }
-        for v in verdicts:
-            if v.action == VerdictAction.PASS:
-                continue
-            info = self._check_escalation(v, session)
-            if info["should_escalate"]:
-                escalation_info = info
-                break
-
-        was_escalated = False
-        if escalation_info["should_escalate"] and decision == Decision.INTERVENE:
-            decision = Decision.BLOCK
-            was_escalated = True
-
         # message = guidance for INTERVENE, reason for BLOCK
         message: str | None = None
         if decision in (Decision.INTERVENE, Decision.BLOCK):
             message = self._build_violation_message(worst_verdict)
-            if was_escalated:
-                message = escalation_info["escalation_prefix"] + "\n" + message
 
         metadata: dict[str, Any] = {
             "judge": {
@@ -565,75 +533,11 @@ class JudgePolicyEngine(PolicyEngine):
             ],
         }
 
-        if was_escalated:
-            metadata["escalated"] = True
-            metadata["escalation_reason"] = escalation_info["reason"]
-
         return EngineResult(
             decision=decision,
             message=message,
             metadata=metadata,
         )
-
-    def _check_escalation(
-        self,
-        verdict: JudgeVerdict,
-        session: JudgeSessionContext,
-    ) -> dict[str, Any]:
-        """Check if the current violation should be escalated.
-
-        Escalation triggers:
-        1. Same criterion fails after a prior intervention was applied
-        2. Total intervention count exceeds max_intervention_attempts
-
-        Returns dict with should_escalate, reason, and escalation_prefix.
-        """
-        result: dict[str, Any] = {
-            "should_escalate": False,
-            "reason": "",
-            "escalation_prefix": "",
-        }
-
-        if verdict.action == VerdictAction.PASS:
-            return result
-
-        failed_criteria = verdict.metadata.get("criterion_failures", [])
-
-        # Check 1: repeat criterion violation after prior intervention
-        repeat_criteria = [
-            c for c in failed_criteria
-            if c in session.last_intervention_criteria
-        ]
-        if repeat_criteria:
-            counts = {
-                c: session.criterion_intervention_counts.get(c, 0) + 1
-                for c in repeat_criteria
-            }
-            detail = ", ".join(
-                f"{c} (violation #{counts[c]})" for c in repeat_criteria
-            )
-            result["should_escalate"] = True
-            result["reason"] = f"repeat_criterion_violation: {detail}"
-            result["escalation_prefix"] = (
-                f"ESCALATED — repeat violation after prior intervention: {detail}."
-            )
-            return result
-
-        # Check 2: total intervention count cap
-        # +1 because session hasn't recorded this verdict yet
-        pending_count = session.intervention_count + 1
-        if pending_count > self._max_intervention_attempts:
-            result["should_escalate"] = True
-            result["reason"] = (
-                f"intervention_count_exceeded: {pending_count} interventions in session"
-            )
-            result["escalation_prefix"] = (
-                f"ESCALATED — intervention limit exceeded "
-                f"({pending_count} violations in this session)."
-            )
-            return result
-
-        return result
 
     def _extract_conversation(self, request_data: dict[str, Any]) -> list[dict[str, Any]]:
         """Extract conversation messages from request data."""
