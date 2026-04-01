@@ -601,7 +601,7 @@ class Tracer:
             token_usage: Total tokens consumed.
             metadata: Additional metadata.
             parent_span: Optional explicit span to annotate.
-            evaluator_name: Evaluator name used for fallback span naming.
+            evaluator_name: Evaluator name for metadata consistency.
         """
         if not self._enabled or not self._tracer:
             return
@@ -614,44 +614,27 @@ class Tracer:
             if current and current.is_recording():
                 target_span = current
 
-        if target_span is not None:
-            if evaluator_name:
-                target_span.set_attribute("openbias.evaluator.name", evaluator_name)
-            self._annotate_judge_details(
-                target_span,
-                rubric_name=rubric_name,
-                scope=scope,
-                composite_score=composite_score,
-                action=action,
-                judge_model=judge_model,
-                scores=scores,
-                latency_ms=latency_ms,
-                token_usage=token_usage,
-                metadata=metadata,
-            )
-        else:
-            fallback_name = evaluator_name or "judge"
-            with self.trace_block(
-                f"evaluator:{fallback_name}",
+        if target_span is None:
+            logger.warning(
+                "Skipping judge trace details for session %s: no active/parent span",
                 session_id,
-                attributes={
-                    "openbias.evaluator.name": fallback_name,
-                    "openbias.evaluator.phase": "judge_evaluation",
-                },
-            ) as span:
-                if span is not None:
-                    self._annotate_judge_details(
-                        span,
-                        rubric_name=rubric_name,
-                        scope=scope,
-                        composite_score=composite_score,
-                        action=action,
-                        judge_model=judge_model,
-                        scores=scores,
-                        latency_ms=latency_ms,
-                        token_usage=token_usage,
-                        metadata=metadata,
-                    )
+            )
+            return
+
+        if evaluator_name:
+            target_span.set_attribute("openbias.evaluator.name", evaluator_name)
+        self._annotate_judge_details(
+            target_span,
+            rubric_name=rubric_name,
+            scope=scope,
+            composite_score=composite_score,
+            action=action,
+            judge_model=judge_model,
+            scores=scores,
+            latency_ms=latency_ms,
+            token_usage=token_usage,
+            metadata=metadata,
+        )
 
         logger.debug(
             f"Logged judge evaluation for session {session_id} "

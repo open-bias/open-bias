@@ -150,7 +150,7 @@ class Interceptor:
         pending_results = self._collect_completed_async(session_id)
         for processed_count, pending in enumerate(pending_results, start=1):
             _async_ctx = (
-                span_factory(pending.evaluator_name, "pre_call")
+                span_factory(pending.evaluator_name, "async_applied")
                 if span_factory is not None
                 else nullcontext()
             )

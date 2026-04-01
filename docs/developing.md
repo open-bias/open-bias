@@ -328,6 +328,13 @@ docker run -d -p 4317:4317 -p 16686:16686 jaegertracing/all-in-one:latest
 
 Traces are grouped by session. View them at `http://localhost:16686`.
 
+Tracing contract for async evaluators:
+
+- `openbias.async.phase` is canonical for async lifecycle (`dispatched`, `executing`, `applied`, and `dropped` for eviction logs/telemetry).
+- Apply-time spans use `openbias.evaluator.phase=async_applied` (not `pre_call`) to avoid query ambiguity.
+- Async execution causality is links-canonical: execution spans carry origin attributes (`openbias.origin.trace_id`, `openbias.origin.span_id`) and OTEL links to dispatch context.
+- Judge verdict metadata is written onto the current evaluator span; no fallback standalone judge span is emitted when no active span is available.
+
 ## Performance Reference
 
 ### Classification Latency (FSM Engine)

@@ -13,6 +13,7 @@ from openbias.proxy.hooks import (
     _fail_open_counter,
     get_fail_open_counts,
     EvaluatorSpanFactory,
+    AsyncEvaluatorExecutionSpanFactory,
     request_span_var,
 )
 
@@ -1357,6 +1358,77 @@ class TestEvaluatorSpanFactory:
                 "openbias.evaluator.phase": "pre_call",
             },
             parent_span=mock_phase_span,
+        )
+
+
+class TestAsyncEvaluatorExecutionSpanFactory:
+
+    def test_creates_execution_span_with_link_attributes(self):
+        """Async execution spans carry canonical link-origin attributes."""
+        mock_span = MagicMock()
+        mock_link = MagicMock()
+        mock_tracer = MagicMock()
+        mock_tracer.build_span_link.return_value = mock_link
+
+        @contextmanager
+        def fake_trace_block(name, session_id, attributes=None, links=None):
+            yield mock_span
+
+        mock_tracer.trace_block = MagicMock(side_effect=fake_trace_block)
+        factory = AsyncEvaluatorExecutionSpanFactory(mock_tracer, "sess-2")
+
+        trace_context = {
+            "request_id": "req-1",
+            "origin_trace_id": "000000000000000000000000000000aa",
+            "origin_span_id": "00000000000000bb",
+        }
+        with factory("judge:agent_behavior", trace_context) as span:
+            assert span is mock_span
+
+        mock_tracer.build_span_link.assert_called_once_with(
+            trace_id_hex="000000000000000000000000000000aa",
+            span_id_hex="00000000000000bb",
+        )
+        mock_tracer.trace_block.assert_called_once_with(
+            "evaluator:judge:agent_behavior",
+            "sess-2",
+            attributes={
+                "openbias.evaluator.name": "judge:agent_behavior",
+                "openbias.evaluator.phase": "async_execute",
+                "openbias.async.phase": "executing",
+                "openbias.request_id": "req-1",
+                "openbias.origin.trace_id": "000000000000000000000000000000aa",
+                "openbias.origin.span_id": "00000000000000bb",
+            },
+            links=[mock_link],
+        )
+
+    def test_creates_execution_span_without_links_when_context_missing(self):
+        """Async execution spans still carry executing phase without links."""
+        mock_span = MagicMock()
+        mock_tracer = MagicMock()
+        mock_tracer.build_span_link.return_value = None
+
+        @contextmanager
+        def fake_trace_block(name, session_id, attributes=None, links=None):
+            yield mock_span
+
+        mock_tracer.trace_block = MagicMock(side_effect=fake_trace_block)
+        factory = AsyncEvaluatorExecutionSpanFactory(mock_tracer, "sess-3")
+
+        with factory("llm_safety", None) as span:
+            assert span is mock_span
+
+        mock_tracer.build_span_link.assert_not_called()
+        mock_tracer.trace_block.assert_called_once_with(
+            "evaluator:llm_safety",
+            "sess-3",
+            attributes={
+                "openbias.evaluator.name": "llm_safety",
+                "openbias.evaluator.phase": "async_execute",
+                "openbias.async.phase": "executing",
+            },
+            links=None,
         )
 
 

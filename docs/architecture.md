@@ -71,6 +71,13 @@ Engine-specific docs: [engines.md](engines.md). Engine-specific READMEs live in 
 
 `Tracer` provides session-aware OpenTelemetry tracing. Spans are grouped by session. Uses GenAI semantic conventions (`gen_ai.request.model`, `gen_ai.usage.prompt_tokens`). Supports OTLP and Langfuse backends.
 
+Async evaluator tracing follows a links-canonical model:
+
+- Dispatch emits `openbias.async.phase=dispatched` on `evaluator:<name>` during post-call.
+- Background execution emits `openbias.async.phase=executing` and links to dispatch context via `openbias.origin.trace_id` and `openbias.origin.span_id`.
+- Next-request application emits `openbias.async.phase=applied` with `openbias.evaluator.phase=async_applied`.
+- Judge verdict details are attached to the active evaluator span only; no standalone fallback `judge_evaluation` span is created.
+
 ## Data Flows
 
 ### No violation

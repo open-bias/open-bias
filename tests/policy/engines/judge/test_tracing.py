@@ -140,13 +140,13 @@ class TestTracerIntegration:
         assert call_kwargs["parent_span"] is None
 
 
-class TestSuppressTrace:
-    """Test that _suppress_trace in context skips _trace_verdict."""
+class TestTraceAlwaysOn:
+    """Judge tracing is always emitted when tracer is present."""
 
-    async def test_suppress_trace_skips_trace_verdict_on_response(
+    async def test_suppress_trace_flag_is_ignored_on_response(
         self, engine, judge_config, mock_tracer, sample_request, sample_response,
     ):
-        """evaluate_response does not call _trace_verdict when _suppress_trace is set."""
+        """Legacy _suppress_trace context no longer disables tracing."""
         await engine.initialize(judge_config)
         engine.set_tracer(mock_tracer)
         engine._client.call_judge = AsyncMock(return_value=_passing_response())
@@ -156,12 +156,12 @@ class TestSuppressTrace:
             context={"_suppress_trace": True},
         )
 
-        mock_tracer.log_judge_evaluation.assert_not_called()
+        mock_tracer.log_judge_evaluation.assert_called_once()
 
-    async def test_suppress_trace_skips_trace_verdict_on_request(
+    async def test_suppress_trace_flag_is_ignored_on_request(
         self, engine, judge_config, sample_request,
     ):
-        """evaluate_request does not call _trace_verdict when _suppress_trace is set."""
+        """evaluate_request still emits tracing even if legacy flag is passed."""
         await engine.initialize(judge_config)
 
         mock_verdict = MagicMock()
@@ -181,19 +181,7 @@ class TestSuppressTrace:
                     context={"_suppress_trace": True},
                 )
 
-            mock_trace.assert_not_called()
-
-    async def test_no_suppress_trace_still_traces(
-        self, engine, judge_config, mock_tracer, sample_request, sample_response,
-    ):
-        """Without _suppress_trace, _trace_verdict is still called normally."""
-        await engine.initialize(judge_config)
-        engine.set_tracer(mock_tracer)
-        engine._client.call_judge = AsyncMock(return_value=_passing_response())
-
-        await engine.evaluate_response("s1", sample_response, sample_request)
-
-        mock_tracer.log_judge_evaluation.assert_called_once()
+            mock_trace.assert_called_once()
 
 
 class TestTraceVerdictFromEvaluateRequest:

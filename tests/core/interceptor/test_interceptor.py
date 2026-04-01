@@ -1452,7 +1452,7 @@ class TestSpanFactory:
         assert ctx["_parent_span"] is factory.spans[0]
 
     async def test_span_factory_called_for_applied_async_results(self):
-        """span_factory is called with pre_call phase when applying pending async results."""
+        """span_factory is called with async_applied phase for pending async results."""
         async_evaluator = _mock_engine(
             name="async_eval",
             decision=Decision.ALLOW,
@@ -1472,9 +1472,9 @@ class TestSpanFactory:
             SESSION, _request(), "req-002", span_factory=factory
         )
 
-        assert ("async_eval", "pre_call") in factory.calls
+        assert ("async_eval", "async_applied") in factory.calls
         # The span should have the async_applied source attribute
-        applied_span = factory.spans[factory.calls.index(("async_eval", "pre_call"))]
+        applied_span = factory.spans[factory.calls.index(("async_eval", "async_applied"))]
         applied_span.set_attribute.assert_any_call(
             "openbias.evaluator.source", "async_applied"
         )
@@ -1498,7 +1498,7 @@ class TestSpanFactory:
             SESSION, _request(), "req-003", span_factory=factory
         )
 
-        applied_span = factory.spans[factory.calls.index(("async_applied_attrs", "pre_call"))]
+        applied_span = factory.spans[factory.calls.index(("async_applied_attrs", "async_applied"))]
         applied_span.set_attribute.assert_any_call("openbias.async.phase", "applied")
 
     async def test_span_factory_called_for_dispatched_async(self):

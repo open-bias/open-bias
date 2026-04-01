@@ -175,3 +175,23 @@ class TestAsyncEvalSpanNesting:
         finished = exporter.get_finished_spans()
         trace_ids = {s.context.trace_id for s in finished}
         assert len(trace_ids) == 1, f"Expected 1 trace, got {len(trace_ids)}"
+
+    def test_log_judge_evaluation_without_parent_does_not_create_fallback_span(
+        self, real_tracer
+    ):
+        """Legacy standalone judge_evaluation fallback span is not emitted."""
+        tracer, exporter = real_tracer
+        session_id = "test-no-fallback"
+
+        tracer.log_judge_evaluation(
+            session_id=session_id,
+            rubric_name="safety",
+            scope="turn",
+            composite_score=0.8,
+            action="intervene",
+            judge_model="judge-x",
+            parent_span=None,
+            evaluator_name="judge:safety",
+        )
+
+        assert exporter.get_finished_spans() == []
