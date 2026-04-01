@@ -8,7 +8,11 @@ descriptions into engine-specific configurations:
 - NeMo: Natural language → Colang + config
 - Judge: Natural language → rubric.yaml
 
-Usage:
+Compilation happens automatically during ``openbias serve`` startup.
+Rules defined in ``openbias.yaml`` (inline ``rules`` or ``rules_file``)
+are resolved and compiled into engine-native config before engine init.
+
+Programmatic usage:
     ```python
     from openbias.policy.compiler import PolicyCompilerRegistry
 
@@ -16,7 +20,7 @@ Usage:
     compiler_class = PolicyCompilerRegistry.get("fsm")
     compiler = compiler_class()
 
-    # Compile natural language policy
+    # Compile natural language rules
     result = await compiler.compile(
         "Agent must verify identity before processing refunds. "
         "Never share internal system information."
@@ -27,15 +31,6 @@ Usage:
         compiler.export(result, Path("workflow.yaml"))
     else:
         print("Errors:", result.errors)
-    ```
-
-CLI Usage:
-    ```bash
-    # Compile to FSM workflow
-    openbias compile "verify identity before refunds" --engine fsm -o workflow.yaml
-
-    # Auto-detect best engine
-    openbias compile "..." --engine auto
     ```
 """
 
