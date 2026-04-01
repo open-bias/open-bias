@@ -18,7 +18,12 @@ from openbias.core.intervention.strategies import (
     UserMessageInjectStrategy,
 )
 from openbias.core.session import SessionStore
-from openbias.policy.protocols import Decision, EngineResult, PolicyEngine
+from openbias.policy.protocols import (
+    Decision,
+    EvaluationResult,
+    EvaluationStatus,
+    PolicyEngine,
+)
 
 from .types import InterceptionResult
 
@@ -26,11 +31,20 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class _MappedResult:
+    """Internal: an EvaluationResult mapped to an enforcement decision."""
+
+    decision: Decision
+    message: str | None
+    metadata: dict[str, Any]
+
+
+@dataclass
 class _PendingResult:
-    """Internal: pairs an EngineResult with the evaluator name that produced it."""
+    """Internal: pairs an EvaluationResult with the evaluator name that produced it."""
 
     evaluator_name: str
-    result: EngineResult
+    result: EvaluationResult
 
 
 @dataclass
@@ -163,45 +177,33 @@ class Interceptor:
                         "openbias.evaluator.source", "async_applied"
                     )
                     _async_span.set_attribute("openbias.async.phase", "applied")
-                result = pending.result
-                decision = self._effective_decision(result.decision, session_id)
+                mapped = self._map_evaluation(pending.result, session_id)
                 all_metadata["results"].append(
-                    {"evaluator": pending.evaluator_name, "decision": decision.value}
+                    {"evaluator": pending.evaluator_name, "decision": mapped.decision.value}
                 )
 
-                if decision == Decision.BLOCK:
+                if mapped.decision == Decision.BLOCK:
                     logger.warning(
                         f"Request blocked by async evaluator '{pending.evaluator_name}': "
-                        f"{result.message}"
+                        f"{mapped.message}"
                     )
-                    # Only confirm tasks up to and including the blocking one.
-                    # Any remaining completed-but-unprocessed tasks stay in the
-                    # session so they are picked up on the next request.
                     self._confirm_collected(session_id, count=processed_count)
                     return InterceptionResult(
                         allowed=False,
-                        message=result.message,
+                        message=mapped.message,
                         metadata=all_metadata,
                     )
 
-                if decision == Decision.INTERVENE:
-                    if result.modified_messages is not None:
-                        logger.info(
-                            f"Applying async message replacement from '{pending.evaluator_name}'"
-                        )
-                        modified_data = dict(modified_data)
-                        modified_data["messages"] = result.modified_messages
+                if mapped.decision == Decision.INTERVENE and mapped.message:
+                    logger.info(
+                        f"Applying async intervention from '{pending.evaluator_name}'"
+                    )
+                    applied = self._apply_intervention(
+                        modified_data, mapped.message, self._default_strategy
+                    )
+                    if applied is not None:
+                        modified_data = applied
                         has_modifications = True
-                    elif result.message:
-                        logger.info(
-                            f"Applying async intervention from '{pending.evaluator_name}'"
-                        )
-                        applied = self._apply_intervention(
-                            modified_data, result.message, self._default_strategy
-                        )
-                        if applied is not None:
-                            modified_data = applied
-                            has_modifications = True
 
         # Async results processed successfully — remove from session store
         self._confirm_collected(session_id)
@@ -220,49 +222,41 @@ class Interceptor:
                     ctx: dict[str, Any] = {"user_request_id": user_request_id}
                     if _eval_span is not None:
                         ctx["_parent_span"] = _eval_span
-                    result = await evaluator.evaluate_request(
+                    eval_result = await evaluator.evaluate_request(
                         session_id=session_id,
                         request_data=modified_data,
                         context=ctx,
                     )
-                    decision = self._effective_decision(result.decision, session_id)
+                    mapped = self._map_evaluation(eval_result, session_id)
                     if _eval_span is not None and hasattr(_eval_span, "set_attribute"):
                         _eval_span.set_attribute(
-                            "openbias.evaluator.decision", decision.value
+                            "openbias.evaluator.decision", mapped.decision.value
                         )
                     all_metadata["results"].append(
-                        {"evaluator": evaluator.name, "decision": decision.value}
+                        {"evaluator": evaluator.name, "decision": mapped.decision.value}
                     )
 
-                    if decision == Decision.BLOCK:
+                    if mapped.decision == Decision.BLOCK:
                         logger.warning(
                             f"Request blocked by sync evaluator '{evaluator.name}': "
-                            f"{result.message}"
+                            f"{mapped.message}"
                         )
                         return InterceptionResult(
                             allowed=False,
-                            message=result.message,
+                            message=mapped.message,
                             metadata=all_metadata,
                         )
 
-                    if decision == Decision.INTERVENE:
-                        if result.modified_messages is not None:
-                            logger.info(
-                                f"Applying sync message replacement from '{evaluator.name}'"
-                            )
-                            modified_data = dict(modified_data)
-                            modified_data["messages"] = result.modified_messages
+                    if mapped.decision == Decision.INTERVENE and mapped.message:
+                        logger.info(
+                            f"Applying sync intervention from '{evaluator.name}'"
+                        )
+                        applied = self._apply_intervention(
+                            modified_data, mapped.message, self._default_strategy
+                        )
+                        if applied is not None:
+                            modified_data = applied
                             has_modifications = True
-                        elif result.message:
-                            logger.info(
-                                f"Applying sync intervention from '{evaluator.name}'"
-                            )
-                            applied = self._apply_intervention(
-                                modified_data, result.message, self._default_strategy
-                            )
-                            if applied is not None:
-                                modified_data = applied
-                                has_modifications = True
 
                 except Exception as e:
                     logger.error(f"Evaluator '{evaluator.name}' failed: {e}")
@@ -313,43 +307,41 @@ class Interceptor:
                         "user_request_id": user_request_id,
                         "_parent_span": _eval_span if _eval_span is not None else parent_span,
                     }
-                    result = await evaluator.evaluate_response(
+                    eval_result = await evaluator.evaluate_response(
                         session_id=session_id,
                         response_data=response_data,
                         request_data=request_data,
                         context=ctx,
                     )
-                    decision = self._effective_decision(result.decision, session_id)
+                    mapped = self._map_evaluation(eval_result, session_id)
                     if _eval_span is not None and hasattr(_eval_span, "set_attribute"):
                         _eval_span.set_attribute(
-                            "openbias.evaluator.decision", decision.value
+                            "openbias.evaluator.decision", mapped.decision.value
                         )
                     all_metadata["results"].append(
-                        {"evaluator": evaluator.name, "decision": decision.value}
+                        {"evaluator": evaluator.name, "decision": mapped.decision.value}
                     )
 
-                    if decision == Decision.BLOCK:
+                    if mapped.decision == Decision.BLOCK:
                         logger.warning(
                             f"Response blocked by sync evaluator '{evaluator.name}': "
-                            f"{result.message}"
+                            f"{mapped.message}"
                         )
                         return InterceptionResult(
                             allowed=False,
-                            message=result.message,
+                            message=mapped.message,
                             metadata=all_metadata,
                         )
 
-                    if decision == Decision.INTERVENE:
+                    if mapped.decision == Decision.INTERVENE:
                         logger.info(
                             f"Sync POST_CALL evaluator '{evaluator.name}' returned INTERVENE: "
-                            f"{result.message}"
+                            f"{mapped.message}"
                         )
                         intervention_info: dict[str, Any] = {
                             "evaluator": evaluator.name,
-                            "message": result.message,
+                            "message": mapped.message,
                         }
-                        if result.modified_messages is not None:
-                            intervention_info["has_modified_messages"] = True
                         all_metadata["interventions"].append(intervention_info)
                         # Store the evaluator result for the hooks layer to act on
                         if modified_data is None:
@@ -357,9 +349,8 @@ class Interceptor:
                         modified_data.setdefault("_interventions", []).append(
                             {
                                 "evaluator": evaluator.name,
-                                "message": result.message,
-                                "modified_messages": result.modified_messages,
-                                "metadata": result.metadata,
+                                "message": mapped.message,
+                                "metadata": mapped.metadata,
                             }
                         )
 
@@ -413,22 +404,47 @@ class Interceptor:
             metadata=all_metadata,
         )
 
-    def _effective_decision(self, decision: Decision, session_id: str) -> Decision:
-        """Map evaluator decision to enforcement action based on fail_action policy.
+    def _map_evaluation(self, eval_result: EvaluationResult, session_id: str) -> _MappedResult:
+        """Map an EvaluationResult to an enforcement decision.
 
         This is the sole enforcement gateway: engines report pure evaluation
-        outcomes (ALLOW or INTERVENE via the VIOLATION→INTERVENE bridge),
-        and this method converts them to the actual runtime action.
+        outcomes (ALLOW or VIOLATION), and this method converts them to the
+        actual runtime action based on fail_action policy.
         """
+        if eval_result.status == EvaluationStatus.ALLOW:
+            return _MappedResult(
+                decision=Decision.ALLOW,
+                message=None,
+                metadata=eval_result.metadata,
+            )
+
+        # VIOLATION → map to enforcement action
+        message = "\n".join(v.reason for v in eval_result.violations) if eval_result.violations else None
+        meta = dict(eval_result.metadata)
+        meta["violations"] = [
+            {
+                "rule_id": v.rule_id,
+                "name": v.rule_name,
+                "message": v.reason,
+                "severity": v.severity,
+                "scope": v.scope,
+                "engine": v.engine,
+                **({"evidence": v.evidence} if v.evidence else {}),
+                **({"confidence": v.confidence} if v.confidence is not None else {}),
+                **v.extra,
+            }
+            for v in eval_result.violations
+        ]
+
         if self._fail_action == "shadow":
-            if decision != Decision.ALLOW:
-                logger.info("Shadow mode: downgrading %s to allow", decision.value)
-            return Decision.ALLOW
+            logger.info("Shadow mode: downgrading violation to allow")
+            return _MappedResult(decision=Decision.ALLOW, message=None, metadata=meta)
 
-        if decision == Decision.INTERVENE and self._fail_action == "block":
-            return Decision.BLOCK
+        if self._fail_action == "block":
+            return _MappedResult(decision=Decision.BLOCK, message=message, metadata=meta)
 
-        return decision
+        # fail_action == "intervene" (default)
+        return _MappedResult(decision=Decision.INTERVENE, message=message, metadata=meta)
 
     def _collect_completed_async(self, session_id: str) -> list[_PendingResult]:
         """Collect results from completed async tasks for a session.
@@ -455,10 +471,9 @@ class Interceptor:
                     results.append(
                         _PendingResult(
                             evaluator_name="async_evaluator_cancelled",
-                            result=EngineResult(
-                                decision=Decision.ALLOW,
-                                message="Async evaluator cancelled",
-                                metadata={},
+                            result=EvaluationResult(
+                                status=EvaluationStatus.ALLOW,
+                                metadata={"cancelled": True},
                             ),
                         )
                     )
@@ -467,9 +482,8 @@ class Interceptor:
                     results.append(
                         _PendingResult(
                             evaluator_name="async_evaluator_error",
-                            result=EngineResult(
-                                decision=Decision.ALLOW,
-                                message=f"Async evaluator error: {e}",
+                            result=EvaluationResult(
+                                status=EvaluationStatus.ALLOW,
                                 metadata={"error": str(e)},
                             ),
                         )
@@ -556,9 +570,8 @@ class Interceptor:
                 logger.error(f"Async evaluator '{evaluator.name}' failed: {e}")
                 return _PendingResult(
                     evaluator_name=evaluator.name,
-                    result=EngineResult(
-                        decision=Decision.ALLOW,
-                        message=f"Async evaluator error: {e}",
+                    result=EvaluationResult(
+                        status=EvaluationStatus.ALLOW,
                         metadata={"error": str(e)},
                     ),
                 )

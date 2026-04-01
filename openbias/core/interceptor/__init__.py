@@ -5,7 +5,12 @@ Provides a clean abstraction for running policy engines at different phases
 of the LLM request lifecycle.
 """
 
-from openbias.policy.protocols import Decision, EngineResult
+from openbias.policy.protocols import (
+    Decision,
+    EvaluationResult,
+    EvaluationStatus,
+    ViolationRecord,
+)
 
 from .interceptor import Interceptor
 from .types import InterceptionResult
@@ -13,7 +18,9 @@ from .types import InterceptionResult
 __all__ = [
     # Types
     "Decision",
-    "EngineResult",
+    "EvaluationResult",
+    "EvaluationStatus",
+    "ViolationRecord",
     "InterceptionResult",
     # Classes
     "Interceptor",
