@@ -84,14 +84,14 @@ Key patterns:
 
 1. Prohibitions ("never", "block", "do not") -> input rail flows that match and block
 2. Output requirements ("ensure", "must not contain") -> output rail flows
-3. Each policy rule should map to at least one user intent + bot response + flow
+3. Each rule should map to at least one user intent + bot response + flow
 4. Use descriptive intent names (e.g., "ask about hacking", "request pii")
 5. Provide 2-3 example utterances per user intent
 6. Bot refusal messages should be professional and specific
 """
 
 NEMO_EXAMPLES = """
-Example - Content moderation policy:
+Example - Content moderation rules:
 
 Input: "Block requests about hacking or illegal activities. Ensure no PII in responses."
 
@@ -193,7 +193,7 @@ class NemoCompiler(LLMPolicyCompiler):
             errors.append(f"config_yml is not valid YAML: {e}")
             return CompilationResult.failure(errors, warnings)
 
-        # Filter out empty colang files (e.g. output_rails.co when policy is input-only)
+        # Filter out empty colang files (e.g. output_rails.co when rules are input-only)
         non_empty_colang: dict[str, str] = {}
         for filename, content in colang_files.items():
             if not content or not content.strip():

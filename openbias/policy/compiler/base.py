@@ -16,11 +16,11 @@ from openbias.policy.compiler.protocol import PolicyCompiler, CompilationResult
 
 logger = logging.getLogger(__name__)
 
-# Default system prompt for policy compilation
+# Default system prompt for rules compilation
 DEFAULT_COMPILER_SYSTEM_PROMPT = """You are a rules compiler that converts normalized rules text into structured configuration.
 
 Your task is to:
-1. Extract states/phases mentioned in the policy
+1. Extract states/phases mentioned in the rules
 2. Identify temporal constraints (must happen before, never, eventually, etc.)
 3. Determine classification hints (tool calls, patterns, exemplars)
 4. Generate intervention messages for violations
@@ -188,7 +188,7 @@ class LLMPolicyCompiler(PolicyCompiler):
         """
         Compile normalized rules text to engine config.
 
-        Uses LLM to parse the policy and convert to engine-specific
+        Uses LLM to parse the rules and convert to engine-specific
         configuration.
 
         Args:

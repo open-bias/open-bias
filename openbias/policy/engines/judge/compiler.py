@@ -73,7 +73,7 @@ Field descriptions:
 
 Note: fail_action is enforced at the interceptor level via policy.fail_action, not per-engine.
 
-Rules for converting natural language policies:
+Rules for converting rules text to rubric config:
 1. Prohibitions ("never", "do not", "must not") -> binary scale, fail_threshold: 0.5
 2. Quality requirements ("be professional", "clear", "helpful") -> likert_5 scale
 3. Mandatory behaviors ("always", "must", "ensure") -> likert_5 scale, weight: 1.5

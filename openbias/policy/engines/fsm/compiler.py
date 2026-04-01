@@ -1,5 +1,5 @@
 """
-FSM Policy Compiler — Deterministic SimpleWorkflowConfig → WorkflowDefinition.
+FSM Rules Compiler — Deterministic SimpleWorkflowConfig → WorkflowDefinition.
 
 Transforms plain-English steps/rules into the internal FSM representation
 without any LLM calls. The pipeline:
@@ -165,7 +165,7 @@ def _infer_transitions(states: list[State], steps: list[str]) -> list[Transition
 
     Every state can transition to any later state (forward-only). Steps define
     an ordering constraint — you can't go backward — but an agent may advance
-    multiple steps in a single turn. Policy constraints (PRECEDENCE, NEVER, etc.)
+    multiple steps in a single turn. Rule constraints (PRECEDENCE, NEVER, etc.)
     handle enforcement of required intermediate steps.
     """
     transitions: list[Transition] = []
@@ -242,7 +242,7 @@ def _parse_single_rule(
                 type=ConstraintType.RESPONSE,
                 trigger=trigger_slug,
                 target=target_slug,
-                message=f"Policy: {rule}",
+                message=f"Rule: {rule}",
             ),
             None,
         )
@@ -261,7 +261,7 @@ def _parse_single_rule(
                 type=ConstraintType.PRECEDENCE,
                 trigger=trigger_slug,
                 target=target_slug,
-                message=f"Policy: {rule}",
+                message=f"Rule: {rule}",
             ),
             None,
         )
@@ -293,7 +293,7 @@ def _parse_single_rule(
                 description=rule,
                 type=ConstraintType.NEVER,
                 target=target_slug,
-                message=f"Policy: {rule}",
+                message=f"Rule: {rule}",
             ),
             hidden,
         )
@@ -309,7 +309,7 @@ def _parse_single_rule(
                 description=rule,
                 type=ConstraintType.EVENTUALLY,
                 target=target_slug,
-                message=f"Policy: {rule}",
+                message=f"Rule: {rule}",
             ),
             None,
         )
@@ -425,17 +425,17 @@ def _generate_exemplars(description: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# FSMCompiler — PolicyCompiler wrapper for registry / engine integration
+# FSMCompiler — compiler wrapper for registry / engine integration
 # ---------------------------------------------------------------------------
 
 
 @register_compiler("fsm")
 class FSMCompiler(PolicyCompiler):
     """
-    Deterministic FSM compiler registered as a PolicyCompiler.
+    Deterministic FSM compiler registered with the compiler registry.
 
     Wraps :func:`compile_workflow` so the engine and compiler registry
-    can use the standard PolicyCompiler interface.  No LLM calls are made.
+    can use the standard compiler interface.  No LLM calls are made.
     """
 
     def __init__(self, **kwargs: Any) -> None:  # noqa: ARG002
