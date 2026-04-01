@@ -42,7 +42,6 @@ def full_config():
             {"name": "primary", "model": "gpt-4o-mini", "temperature": 0.0},
         ],
         "default_rubric": "agent_behavior",
-        "max_intervention_attempts": 3,
     }
 
 
@@ -108,7 +107,6 @@ class TestInitialization:
     async def test_initialize_full_config(self, engine, full_config):
         await engine.initialize(full_config)
         assert engine._initialized
-        assert engine._max_intervention_attempts == 3
 
     async def test_initialize_raises_without_models(self, engine):
         """Test that engine raises ValueError when no models provided."""
@@ -343,17 +341,6 @@ class TestConfigShorthands:
         }
         await engine.initialize(config)
         assert engine._default_rubric == "agent_behavior"
-
-    async def test_max_intervention_attempts_from_config(self):
-        """max_intervention_attempts is read from config."""
-        engine = JudgePolicyEngine()
-        config = {
-            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "max_intervention_attempts": 5,
-        }
-        await engine.initialize(config)
-        assert engine._max_intervention_attempts == 5
-
 
 class TestPerRuleCriteria:
     """Tests for per-rule criteria in inline policies (Step 3)."""

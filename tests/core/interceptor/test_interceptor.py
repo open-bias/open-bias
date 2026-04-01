@@ -10,7 +10,7 @@ Covers:
 - Session TTL and LRU eviction
 - Context passing to evaluators
 - fail_action upgrade logic
-- max_intervention_attempts escalation
+- fail_action policy mapping
 - Separate pre_call / post_call evaluator lists
 - span_factory integration (sync, async applied, async dispatched)
 """

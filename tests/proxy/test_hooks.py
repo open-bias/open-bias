@@ -183,7 +183,7 @@ def mock_settings():
     settings.mode = "async"
     settings.strategy = "user_message_inject"
     settings.fail_action = "intervene"
-    settings.max_intervention_attempts = 3
+
     settings.session_ttl = 3600
     settings.max_sessions = 10000
     settings.evaluators = []
@@ -1044,7 +1044,7 @@ async def test_pre_call_fail_action_block_upgrades_intervene_to_exception(
     settings.fail_action = "block"
     settings.strategy = "user_message_inject"
     settings.mode = "async"
-    settings.max_intervention_attempts = 3
+
     settings.session_ttl = 3600
     settings.max_sessions = 10000
     settings.evaluators = []
@@ -1141,7 +1141,6 @@ async def test_initialize_propagates_global_config_to_interceptor(mock_settings)
     # Set non-default values on settings
     mock_settings.mode = "sync"
     mock_settings.fail_action = "block"
-    mock_settings.max_intervention_attempts = 5
     mock_settings.session_ttl = 7200
     mock_settings.max_sessions = 500
     mock_settings.strategy = "system_prompt_append"
@@ -1168,7 +1167,6 @@ async def test_initialize_propagates_global_config_to_interceptor(mock_settings)
     # Verify global config landed on interceptor attributes
     assert interceptor._default_strategy == "system_prompt_append"
     assert interceptor._fail_action == "block"
-    assert interceptor._max_intervention_attempts == 5
     assert interceptor._sessions._ttl == 7200
     assert interceptor._sessions._max_sessions == 500
 

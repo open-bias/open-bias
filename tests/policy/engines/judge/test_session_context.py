@@ -39,7 +39,6 @@ class TestFormatSessionContextBlock:
         result = format_session_context_block(session)
         assert "Turn 1: No violations" in result
         assert "Score trend: 1.0" in result
-        assert "Active intervention count: 0" in result
 
     def test_mixed_verdicts(self):
         session = JudgeSessionContext(session_id="s1")
@@ -62,7 +61,6 @@ class TestFormatSessionContextBlock:
             judge_model="test",
             metadata={"criterion_failures": ["tool_use_safety"]},
         ))
-        session.intervention_count += 1  # engine responsibility
 
         # Turn 3: INTERVENE (minor)
         session.record_verdict(JudgeVerdict(
@@ -73,7 +71,6 @@ class TestFormatSessionContextBlock:
             judge_model="test",
             metadata={"criterion_failures": ["tone"]},
         ))
-        session.intervention_count += 1  # engine responsibility
 
         result = format_session_context_block(session)
         assert "Turn 1: No violations" in result
@@ -82,7 +79,6 @@ class TestFormatSessionContextBlock:
         assert 'Intervention applied: "Agent used delete without permission"' in result
         assert "Turn 3: INTERVENE" in result
         assert "Score trend: 0.8 → 0.3 → 0.5" in result
-        assert "Active intervention count: 2" in result
 
     def test_caps_at_10_turns(self):
         session = JudgeSessionContext(session_id="s1")

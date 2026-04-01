@@ -147,10 +147,9 @@ class JudgeSessionContext:
     def record_verdict(self, verdict: JudgeVerdict) -> None:
         """Record a verdict and update trends.
 
-        Note: turn_count and intervention_count are NOT incremented here.
-        They are managed by the engine's evaluate_response() to avoid
-        double-counting when multiple verdicts (turn + conversation) are
-        recorded per evaluation.
+        Note: turn_count is NOT incremented here — it is managed by the
+        engine's evaluate_response() to avoid double-counting when multiple
+        verdicts (turn + conversation) are recorded per evaluation.
         """
         self.evaluation_history.append(verdict)
         self.score_trend.append(verdict.composite_score)
