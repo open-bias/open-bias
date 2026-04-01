@@ -41,13 +41,10 @@ class EvaluationStatus(Enum):
 class ViolationRecord:
     """Normalized violation metadata produced by an engine."""
 
-    rule_id: str
-    rule_name: str
     reason: str
     severity: str = "error"
     scope: str = "turn"
     engine: str = ""
-    evidence: list[str] | None = None
     confidence: float | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
