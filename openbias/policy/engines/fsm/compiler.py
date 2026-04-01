@@ -447,11 +447,11 @@ class FSMCompiler(PolicyCompiler):
 
     async def compile(
         self,
-        natural_language: str,
+        rules_text: str,
         context: dict[str, Any] | None = None,
     ) -> CompilationResult:
         """
-        Compile a simple config dict (or natural-language placeholder) to a WorkflowDefinition.
+        Compile a simple config dict (or rules text) to a WorkflowDefinition.
 
         If *context* contains a ``"simple_config"`` key whose value is a
         :class:`SimpleWorkflowConfig` (or a raw dict), the deterministic
@@ -461,7 +461,7 @@ class FSMCompiler(PolicyCompiler):
         context = context or {}
         raw = context.get("simple_config")
         if raw is None:
-            derived_rules = [line.strip() for line in natural_language.splitlines() if line.strip()]
+            derived_rules = [line.strip() for line in rules_text.splitlines() if line.strip()]
             if not derived_rules:
                 return CompilationResult.failure(
                     errors=["FSMCompiler received empty rules text."]
