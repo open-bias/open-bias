@@ -171,7 +171,7 @@ Create a package under `openbias/policy/engines/`:
 
 ```python
 # openbias/policy/engines/my_engine/engine.py
-from openbias.policy.protocols import PolicyEngine, Decision, EngineResult
+from openbias.policy.protocols import PolicyEngine, EvaluationResult, EvaluationStatus
 from openbias.policy.registry import register_engine
 
 @register_engine("my_engine")
@@ -188,10 +188,10 @@ class MyPolicyEngine(PolicyEngine):
         ...
 
     async def evaluate_request(self, session_id, request_data, context=None):
-        return EngineResult(decision=Decision.ALLOW)
+        return EvaluationResult(status=EvaluationStatus.ALLOW)
 
     async def evaluate_response(self, session_id, response_data, request_data, context=None):
-        return EngineResult(decision=Decision.ALLOW)
+        return EvaluationResult(status=EvaluationStatus.ALLOW)
 
     async def get_session_state(self, session_id):
         return None
