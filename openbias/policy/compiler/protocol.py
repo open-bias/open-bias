@@ -5,7 +5,7 @@ Compilers convert normalized rules text into
 engine-specific configurations (e.g., FSM workflow YAML, NeMo Colang).
 
 This mirrors the PolicyEngine pattern, enabling pluggable compilers
-for different policy engines.
+for different engines.
 """
 
 from abc import ABC, abstractmethod
@@ -61,7 +61,7 @@ class PolicyCompiler(ABC):
 
             async def compile(
                 self,
-                natural_language: str,
+                rules_text: str,
                 context: dict[str, Any] | None = None,
             ) -> CompilationResult:
                 # Use LLM to parse NL -> WorkflowDefinition
