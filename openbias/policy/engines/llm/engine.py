@@ -199,8 +199,6 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             # Check for structural drift
             if session.is_structurally_drifting():
                 violation_records.append(ViolationRecord(
-                    rule_id="structural_drift",
-                    rule_name="structural_drift",
                     reason="Multiple consecutive uncertain classifications",
                     severity="warning",
                     engine=self.name,
@@ -209,8 +207,6 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             # Check for skip violations
             for skipped in classification.skip_violations:
                 violation_records.append(ViolationRecord(
-                    rule_id="skip_violation",
-                    rule_name="skip_violation",
                     reason=f"Skipped required state: {skipped}",
                     severity="error",
                     engine=self.name,
@@ -230,8 +226,6 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             # Add anomaly violations
             if drift.anomaly_flags.get("unexpected_tool_call"):
                 violation_records.append(ViolationRecord(
-                    rule_id="unexpected_tool_call",
-                    rule_name="unexpected_tool_call",
                     reason="Unexpected tool call for current state",
                     severity="warning",
                     engine=self.name,
@@ -239,8 +233,6 @@ class LLMPolicyEngine(StatefulPolicyEngine):
 
             if drift.anomaly_flags.get("missing_expected_tool_call"):
                 violation_records.append(ViolationRecord(
-                    rule_id="missing_expected_tool_call",
-                    rule_name="missing_expected_tool_call",
                     reason="Expected tool call not made",
                     severity="warning",
                     engine=self.name,
@@ -260,8 +252,6 @@ class LLMPolicyEngine(StatefulPolicyEngine):
             for cv in constraint_evals:
                 if cv.violated:
                     violation_records.append(ViolationRecord(
-                        rule_id=cv.constraint_id,
-                        rule_name=cv.constraint_id,
                         reason=cv.evidence,
                         severity=cv.severity,
                         engine=self.name,
