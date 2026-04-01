@@ -121,7 +121,7 @@ Inside `evaluate_response()`:
     -   Combines verdicts from all run rubrics.
     -   Takes the **most restrictive** action (e.g., if Turn says `PASS` but Conversation says `INTERVENE`, result is `INTERVENE`).
 5.  **Mapping**:
-    -   Converts `VerdictAction` to Open Bias `EngineResult`.
+    -   Converts `VerdictAction` to Open Bias `EvaluationResult`.
 
 ### Decision Logic
 
