@@ -322,7 +322,7 @@ class TestJudgeEngineConformance:
                     "evidence": ["bad content"],
                     "confidence": 0.9,
                 }
-                for c in engine._registry.get("inline_policy").criteria[:1]
+                for c in engine._registry.get("inline_rules").criteria[:1]
             ] + [
                 {
                     "criterion": c.name,
@@ -331,7 +331,7 @@ class TestJudgeEngineConformance:
                     "evidence": [],
                     "confidence": 0.9,
                 }
-                for c in engine._registry.get("inline_policy").criteria[1:]
+                for c in engine._registry.get("inline_rules").criteria[1:]
             ],
             "summary": "Policy violation detected.",
         })
