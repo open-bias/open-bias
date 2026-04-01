@@ -2,7 +2,7 @@
 LLM-as-a-Judge Policy Engine.
 
 Evaluates agent responses and conversation trajectories against
-configurable rubrics using LLM judges. Integrates with the Open Bias
+configurable rules using LLM judges. Integrates with the Open Bias
 policy engine infrastructure via PolicyEngine ABC.
 """
 
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 class JudgePolicyEngine(PolicyEngine):
     """Policy engine that uses LLM judges to evaluate agent behavior.
 
-    Supports turn-level evaluation against configurable rubrics.
+    Supports turn-level evaluation against configurable rules.
     Works with single or multiple judge models.
     """
 
@@ -88,10 +88,10 @@ class JudgePolicyEngine(PolicyEngine):
         Args:
             config: Configuration dict with:
                 - models: List of judge model configs [{name, model, temperature, ...}]
-                - default_rubric: Name of default rubric for this evaluator instance
+                - default_rubric: Name of default ruleset for this evaluator instance
                 - rules: Inline rules payload (string/list)
-                - inline_policy: Compiled rubric definitions or inline rules
-                - custom_rubrics_path: Path to custom rubric YAML files
+                - inline_rules: Compiled ruleset definitions or inline rules
+                - custom_rubrics_path: Path to custom ruleset YAML files
                 - session_ttl: Session TTL in seconds
                 - max_sessions: Maximum concurrent sessions
         """
@@ -120,9 +120,9 @@ class JudgePolicyEngine(PolicyEngine):
             verbose=config.get("verbose", False),
         )
 
-        # Canonical shorthand: `rules` maps to inline policy input.
-        if "rules" in config and "inline_policy" not in config:
-            config = {**config, "inline_policy": config["rules"]}
+        # Canonical shorthand: `rules` maps to inline rules input.
+        if "rules" in config and "inline_rules" not in config:
+            config = {**config, "inline_rules": config["rules"]}
 
         self._default_rubric = config.get("default_rubric", "agent_behavior")
         self._explicit_rubric = "default_rubric" in config
@@ -138,16 +138,16 @@ class JudgePolicyEngine(PolicyEngine):
         if custom_path:
             self._registry.load_from_yaml(custom_path)
 
-        # Load inline policy if provided
-        inline_policy = config.get("inline_policy")
-        if inline_policy is not None:
-            self._load_inline_policy(inline_policy)
+        # Load inline rules if provided
+        inline_rules = config.get("inline_rules")
+        if inline_rules is not None:
+            self._load_inline_rules(inline_rules)
 
-        # Fail-loud: verify default rubric exists
+        # Fail-loud: verify default ruleset exists
         if not self._registry.get(self._default_rubric):
             available = self._registry.list_rubrics()
             raise ValueError(
-                f"Default rubric '{self._default_rubric}' not found. "
+                f"Default ruleset '{self._default_rubric}' not found. "
                 f"Available: {available}"
             )
 
@@ -167,7 +167,7 @@ class JudgePolicyEngine(PolicyEngine):
     ) -> EvaluationResult:
         """Evaluate an incoming request (PRE_CALL).
 
-        Runs the configured default rubric against the latest user message.
+        Runs the configured default ruleset against the latest user message.
         The interceptor only calls this method when the evaluator is assigned
         to the pre_call phase, so no phase guard is needed here.
         """
@@ -216,8 +216,8 @@ class JudgePolicyEngine(PolicyEngine):
     ) -> EvaluationResult:
         """Evaluate an LLM response (POST_CALL).
 
-        Runs the configured default rubric against the latest response.
-        Each evaluator instance has one rubric; conversation-scope evaluation
+        Runs the configured default ruleset against the latest response.
+        Each evaluator instance has one ruleset; conversation-scope evaluation
         is handled by configuring a separate evaluator instance.
         """
         session = self._get_or_create_session(session_id)
@@ -259,7 +259,7 @@ class JudgePolicyEngine(PolicyEngine):
                     f"({type(e).__name__}): {e}"
                 )
         else:
-            logger.warning(f"Default rubric not found: {self._default_rubric}")
+            logger.warning(f"Default ruleset not found: {self._default_rubric}")
 
         # Build result
         if not verdicts:
@@ -328,10 +328,10 @@ class JudgePolicyEngine(PolicyEngine):
                     errors.append(f"models[{i}]: missing 'model' field.")
 
         # Apply canonical shorthand (same as initialize)
-        if "rules" in config and "inline_policy" not in config:
-            config = {**config, "inline_policy": config["rules"]}
+        if "rules" in config and "inline_rules" not in config:
+            config = {**config, "inline_rules": config["rules"]}
 
-        # Build a temporary registry and load inline policy to check rubrics
+        # Build a temporary registry and load inline rules to check rulesets
         registry = RubricRegistry()
 
         custom_path = config.get("custom_rubrics_path")
@@ -344,23 +344,23 @@ class JudgePolicyEngine(PolicyEngine):
             else:
                 registry.load_from_yaml(custom_path)
 
-        inline_policy = config.get("inline_policy")
-        if inline_policy is not None:
+        inline_rules = config.get("inline_rules")
+        if inline_rules is not None:
             try:
-                # Validate inline policy by attempting to parse it
+                # Validate inline rules by attempting to parse them
                 temp_engine = cls()
                 temp_engine._registry = registry
-                temp_engine._load_inline_policy(inline_policy)
+                temp_engine._load_inline_rules(inline_rules)
                 registry = temp_engine._registry
             except (ValueError, TypeError) as e:
-                errors.append(f"Invalid inline policy: {e}")
+                errors.append(f"Invalid inline rules: {e}")
 
-        # Check default rubric exists
+        # Check default ruleset exists
         default_rubric = config.get("default_rubric", "agent_behavior")
         if not registry.get(default_rubric):
             available = registry.list_rubrics()
             errors.append(
-                f"Default rubric '{default_rubric}' not found. Available: {available}"
+                f"Default ruleset '{default_rubric}' not found. Available: {available}"
             )
 
         return errors
@@ -375,19 +375,19 @@ class JudgePolicyEngine(PolicyEngine):
     # Private helpers
     # =========================================================================
 
-    def _load_inline_policy(self, policy_data: Any) -> None:
-        """Load inline rules/rubric definitions from config.
+    def _load_inline_rules(self, rules_data: Any) -> None:
+        """Load inline rules or ruleset definitions from config.
 
         Supported shapes:
         - str: multiline string split into rules
-        - list[str]: plain-text rules → auto-generated binary rubric
-        - list[dict]: formal rubric definitions
+        - list[str]: plain-text rules → auto-generated binary ruleset
+        - list[dict]: formal ruleset definitions
 
         Raises ValueError for dict input or unrecognized formats.
         """
-        if isinstance(policy_data, str):
+        if isinstance(rules_data, str):
             # Multiline string → split into rules
-            rules = [line.strip() for line in policy_data.strip().splitlines() if line.strip()]
+            rules = [line.strip() for line in rules_data.strip().splitlines() if line.strip()]
             if rules:
                 rubric = create_rules_rubric(rules)
                 self._registry.register(rubric)
@@ -396,38 +396,38 @@ class JudgePolicyEngine(PolicyEngine):
                 logger.info(f"Loaded {len(rules)} inline rules as '{rubric.name}'")
             return
 
-        if isinstance(policy_data, list):
-            if not policy_data:
+        if isinstance(rules_data, list):
+            if not rules_data:
                 return
             # List of strings → plain-text rules
-            if all(isinstance(item, str) for item in policy_data):
-                rubric = create_rules_rubric(policy_data)
+            if all(isinstance(item, str) for item in rules_data):
+                rubric = create_rules_rubric(rules_data)
                 self._registry.register(rubric)
                 if not self._explicit_rubric:
                     self._default_rubric = rubric.name
-                logger.info(f"Loaded {len(policy_data)} inline rules as '{rubric.name}'")
+                logger.info(f"Loaded {len(rules_data)} inline rules as '{rubric.name}'")
                 return
-            # List of dicts → formal rubric definitions
-            for idx, item in enumerate(policy_data):
+            # List of dicts → formal ruleset definitions
+            for idx, item in enumerate(rules_data):
                 if isinstance(item, dict):
                     try:
                         rubric = _parse_rubric_dict(item)
                         self._registry.register(rubric)
-                        # First rubric becomes default (when not explicitly set)
+                        # First ruleset becomes default (when not explicitly set)
                         if idx == 0 and not self._explicit_rubric:
                             self._default_rubric = rubric.name
-                        logger.info(f"Loaded inline rubric '{rubric.name}'")
+                        logger.info(f"Loaded inline ruleset '{rubric.name}'")
                     except Exception as e:
-                        logger.error(f"Failed to parse inline rubric: {e}")
+                        logger.error(f"Failed to parse inline ruleset: {e}")
             return
 
-        if isinstance(policy_data, dict):
+        if isinstance(rules_data, dict):
             raise ValueError(
-                "Dict-format inline policy is no longer supported. "
-                "Use a list of rule strings or a list of rubric dicts instead."
+                "Dict-format inline rules are no longer supported. "
+                "Use a list of rule strings or a list of ruleset dicts instead."
             )
 
-        raise ValueError(f"Unrecognized inline_policy format: {type(policy_data)}")
+        raise ValueError(f"Unrecognized inline_rules format: {type(rules_data)}")
 
     def _trace_verdict(
         self,
@@ -592,7 +592,7 @@ class JudgePolicyEngine(PolicyEngine):
         """
         failed_criteria: list[str] = verdict.metadata.get("criterion_failures", [])
         if not failed_criteria:
-            return verdict.summary or "Policy violation detected."
+            return verdict.summary or "Rule violation detected."
 
         score_map = {s.criterion: s for s in verdict.scores}
 
