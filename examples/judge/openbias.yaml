@@ -10,7 +10,7 @@
 # The judge runs async by default — zero latency on the critical path.
 
 port: 4000
-fail_action: block            # block, intervene, or shadow on violation
+fail_action: intervene        # intervene, block, or shadow on violation
 
 evaluators:
   - name: policy-judge
