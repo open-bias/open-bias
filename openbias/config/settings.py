@@ -15,7 +15,7 @@ The simplified openbias.yaml format:
     evaluators:
       - name: safety
         type: judge
-        rules_file: ./rules.md
+        phase: post_call
     tracing:
       type: none
 
@@ -229,11 +229,19 @@ class YamlConfigSource(PydanticBaseSettingsSource):
     _EVALUATOR_FIELD_KEYS = frozenset({"name", "type", "phase"})
     _DEPRECATED_TOPLEVEL_KEYS = frozenset({"policy", "policies", "rubric", "workflow"})
     _DEPRECATED_EVALUATOR_KEYS = frozenset({"policy", "policies", "rubric", "workflow"})
+    _DISALLOWED_EVALUATOR_KEYS = frozenset({"rules", "rules_file", "workflow", "config_path"})
 
     @staticmethod
     def _legacy_key_error(key: str) -> ValueError:
         return ValueError(
-            f"Legacy key `{key}` is no longer supported. Use `rules` or `rules_file`."
+            f"Legacy key `{key}` is no longer supported. Use evaluator entries and project rules.md."
+        )
+
+    @staticmethod
+    def _rules_contract_error(key: str) -> ValueError:
+        return ValueError(
+            f"Evaluator key `{key}` is not allowed. All evaluators use project rules.md "
+            "and engine-native config is internal only."
         )
 
     def _map_common_fields(self, data: dict[str, Any], result: dict[str, Any]) -> None:
@@ -313,8 +321,14 @@ class YamlConfigSource(PydanticBaseSettingsSource):
                 if k in self._DEPRECATED_EVALUATOR_KEYS:
                     raise self._legacy_key_error(k)
 
-                if k == "rules_file":
-                    config["rules_file"] = self._resolve_path(v)
+                if k in self._DISALLOWED_EVALUATOR_KEYS:
+                    raise self._rules_contract_error(k)
+
+                if ev_type == "nemo" and k == "config":
+                    raise self._rules_contract_error(k)
+
+                if isinstance(v, str) and k.endswith("_path"):
+                    config[k] = self._resolve_path(v)
                     continue
 
                 config[k] = v

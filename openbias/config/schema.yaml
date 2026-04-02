@@ -69,9 +69,9 @@ log_level: INFO            # default: INFO
 #   type  — engine type: judge | fsm | llm | nemo (default: "judge")
 #   phase — when to run: pre_call | post_call (default: "post_call")
 #
-# All other keys are collected into the evaluator's `config` dict.
-# Canonical rule source key is:
-#   rules_file: ./rules.md         → external markdown/plaintext rules source
+# All evaluators compile from project-local `rules.md`.
+# Do not set evaluator-level `rules`, `rules_file`, `workflow`, `config_path`,
+# or inline NeMo `config`; engine-native config is internal only.
 #
 
 evaluators:
@@ -85,14 +85,10 @@ evaluators:
   - name: safety-screen
     type: judge
     phase: pre_call
-    # Required for judge:
-    rules_file: ./rules.md
 
   - name: behavior-eval
     type: judge
     phase: post_call
-    # Required for judge:
-    rules_file: ./rules.md
 
   # --- FSM evaluator (type: fsm) ---
   #
@@ -101,16 +97,6 @@ evaluators:
   - name: workflow-guard
     type: fsm
     phase: post_call
-    rules:
-      - "Collect required account verification fields before payout."
-      - "Require manager approval before overriding sanctions checks."
-    # Optional classifier config (passed through to config dict):
-    # classifier:
-    #   model_name: all-MiniLM-L6-v2   # sentence-transformers model
-    #   backend: pytorch               # pytorch | onnx
-    #   similarity_threshold: 0.7      # minimum similarity score
-    #   cache_embeddings: true         # cache computed embeddings
-    #   device: cpu                    # cpu | cuda
 
   # --- LLM evaluator (type: llm) ---
   #
@@ -119,6 +105,7 @@ evaluators:
   # - name: llm-guard
   #   type: llm
   #   phase: post_call
+  #   llm_model: anthropic/claude-sonnet-4-5
   #   temperature: 0.0               # default: 0.0
   #   max_tokens: 1024               # default: 1024
   #   timeout: 10.0                  # default: 10.0 seconds
@@ -137,7 +124,6 @@ evaluators:
   # - name: nemo-rails
   #   type: nemo
   #   phase: post_call
-  #   rules_file: ./rules.md         # markdown/plaintext rules source
   #   fail_closed: false             # report error as violation (default: false = allow)
   #   rails:                         # which rails to enable (omit for all)
   #     - input
