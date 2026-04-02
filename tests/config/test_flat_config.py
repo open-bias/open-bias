@@ -178,8 +178,8 @@ class TestEvaluatorYamlMapping:
         assert ev["phase"] == "post_call"
         assert ev["config"] == {}
 
-    def test_judge_rules_key_passes_through(self):
-        """Judge evaluator with canonical rules key is preserved in config."""
+    def test_judge_rules_key_rejected(self):
+        """Judge evaluator cannot define inline rules in config."""
         source = self._build_source({
             "evaluators": [
                 {
@@ -190,14 +190,11 @@ class TestEvaluatorYamlMapping:
                 },
             ],
         })
-        result = source._map_evaluators(source._yaml_data)
-        ev = result["evaluators"][0]
-        assert ev["config"]["rules"] == ["No harmful content", "No PII leaks"]
+        with pytest.raises(ValueError, match="Evaluator key `rules` is not allowed"):
+            source._map_evaluators(source._yaml_data)
 
-    def test_judge_rules_file_resolved(self):
-        """rules_file is resolved relative to the config file."""
-        from pathlib import Path
-        config_file = Path("/etc/openbias/openbias.yaml")
+    def test_judge_rules_file_rejected(self):
+        """Judge evaluator cannot define a custom rules_file."""
         source = self._build_source({
             "evaluators": [
                 {
@@ -207,10 +204,9 @@ class TestEvaluatorYamlMapping:
                     "rules_file": "./rules.md",
                 },
             ],
-        }, config_file=config_file)
-        result = source._map_evaluators(source._yaml_data)
-        ev = result["evaluators"][0]
-        assert ev["config"]["rules_file"] == "/etc/openbias/rules.md"
+        })
+        with pytest.raises(ValueError, match="Evaluator key `rules_file` is not allowed"):
+            source._map_evaluators(source._yaml_data)
 
     def test_judge_extra_keys_in_config(self):
         """Extra keys on a judge evaluator go into config dict."""
@@ -230,47 +226,35 @@ class TestEvaluatorYamlMapping:
         assert ev["config"]["pass_threshold"] == 0.6
         assert ev["config"]["temperature"] == 0.0
 
-    def test_fsm_evaluator_rules_file_resolved(self):
-        """FSM evaluator with rules_file gets resolved relative to config file."""
-        from pathlib import Path
-        config_file = Path("/etc/openbias/openbias.yaml")
-        source = self._build_source(
-            {
-                "evaluators": [
-                    {
-                        "name": "workflow",
-                        "type": "fsm",
-                        "phase": "post_call",
-                        "rules_file": "./workflow-rules.md",
-                    },
-                ],
-            },
-            config_file=config_file,
-        )
-        result = source._map_evaluators(source._yaml_data)
-        ev = result["evaluators"][0]
-        assert ev["config"]["rules_file"] == "/etc/openbias/workflow-rules.md"
+    def test_fsm_evaluator_rules_file_rejected(self):
+        """FSM evaluator cannot define a custom rules_file."""
+        source = self._build_source({
+            "evaluators": [
+                {
+                    "name": "workflow",
+                    "type": "fsm",
+                    "phase": "post_call",
+                    "rules_file": "./workflow-rules.md",
+                },
+            ],
+        })
+        with pytest.raises(ValueError, match="Evaluator key `rules_file` is not allowed"):
+            source._map_evaluators(source._yaml_data)
 
-    def test_nemo_evaluator_rules_file_resolved(self):
-        """NeMo evaluator with rules_file gets resolved relative to config file."""
-        from pathlib import Path
-        config_file = Path("/etc/openbias/openbias.yaml")
-        source = self._build_source(
-            {
-                "evaluators": [
-                    {
-                        "name": "nemo-rails",
-                        "type": "nemo",
-                        "phase": "post_call",
-                        "rules_file": "./nemo-rules.md",
-                    },
-                ],
-            },
-            config_file=config_file,
-        )
-        result = source._map_evaluators(source._yaml_data)
-        ev = result["evaluators"][0]
-        assert ev["config"]["rules_file"] == "/etc/openbias/nemo-rules.md"
+    def test_nemo_evaluator_rules_file_rejected(self):
+        """NeMo evaluator cannot define a custom rules_file."""
+        source = self._build_source({
+            "evaluators": [
+                {
+                    "name": "nemo-rails",
+                    "type": "nemo",
+                    "phase": "post_call",
+                    "rules_file": "./nemo-rules.md",
+                },
+            ],
+        })
+        with pytest.raises(ValueError, match="Evaluator key `rules_file` is not allowed"):
+            source._map_evaluators(source._yaml_data)
 
     def test_fsm_evaluator_extra_keys(self):
         """FSM evaluator extra keys go into config."""
@@ -280,14 +264,12 @@ class TestEvaluatorYamlMapping:
                     "name": "workflow",
                     "type": "fsm",
                     "phase": "post_call",
-                    "rules_file": "/abs/workflow-rules.md",
                     "max_steps": 10,
                 },
             ],
         })
         result = source._map_evaluators(source._yaml_data)
         ev = result["evaluators"][0]
-        assert ev["config"]["rules_file"] == "/abs/workflow-rules.md"
         assert ev["config"]["max_steps"] == 10
 
     def test_multiple_evaluators(self):
@@ -298,19 +280,18 @@ class TestEvaluatorYamlMapping:
                     "name": "pre-screen",
                     "type": "judge",
                     "phase": "pre_call",
-                    "rules": ["No harmful content"],
                 },
                 {
                     "name": "post-eval",
                     "type": "judge",
                     "phase": "post_call",
-                    "rules_file": "/path/to/post-rules.md",
+                    "pass_threshold": 0.5,
                 },
                 {
                     "name": "workflow",
                     "type": "fsm",
                     "phase": "post_call",
-                    "rules_file": "/path/to/workflow-rules.md",
+                    "max_steps": 12,
                 },
             ],
         })
@@ -320,15 +301,15 @@ class TestEvaluatorYamlMapping:
         pre = result["evaluators"][0]
         assert pre["name"] == "pre-screen"
         assert pre["phase"] == "pre_call"
-        assert pre["config"]["rules"] == ["No harmful content"]
+        assert pre["config"] == {}
 
         post = result["evaluators"][1]
         assert post["name"] == "post-eval"
-        assert post["config"]["rules_file"] == "/path/to/post-rules.md"
+        assert post["config"]["pass_threshold"] == 0.5
 
         fsm = result["evaluators"][2]
         assert fsm["type"] == "fsm"
-        assert fsm["config"]["rules_file"] == "/path/to/workflow-rules.md"
+        assert fsm["config"]["max_steps"] == 12
 
     @pytest.mark.parametrize("legacy_key", ["policy", "policies", "rubric", "workflow"])
     def test_legacy_top_level_keys_fail_fast(self, legacy_key):
