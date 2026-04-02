@@ -7,7 +7,6 @@ policy engine infrastructure via PolicyEngine ABC.
 """
 
 import logging
-from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -30,7 +29,6 @@ from openbias.policy.engines.judge.models import (
 from openbias.core.utils import extract_response_content, extract_tool_calls
 from openbias.policy.engines.judge.client import JudgeClient
 from openbias.policy.engines.judge.evaluator import JudgeEvaluator
-from openbias.policy.rules.resolver import resolve_rules_payload
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +54,7 @@ class JudgePolicyEngine(PolicyEngine):
         )
         self._tracer: Any | None = None
         self._rules: list[str] = []
-        self._rules_source: str = "rules_file"
+        self._rules_source: str = "compiled_rules"
 
     @property
     def name(self) -> str:
@@ -82,8 +80,7 @@ class JudgePolicyEngine(PolicyEngine):
         Args:
             config: Configuration dict with:
                 - models: List of judge model configs [{name, model, temperature, ...}]
-                - _compiled_rules: Precompiled canonical rules list (preferred)
-                - rules_file: Legacy path to markdown/text rules source
+                - _compiled_rules: Precompiled canonical rules list (required)
                 - session_ttl: Session TTL in seconds
                 - max_sessions: Maximum concurrent sessions
         """
@@ -118,27 +115,20 @@ class JudgePolicyEngine(PolicyEngine):
             max_sessions=int(config["max_sessions"]) if "max_sessions" in config else None,
         )
 
-        compiled_rules = config.get("_compiled_rules")
-        if compiled_rules is not None:
-            if not isinstance(compiled_rules, list) or not all(
-                isinstance(rule, str) and rule.strip() for rule in compiled_rules
-            ):
-                raise ValueError(
-                    "Judge engine `_compiled_rules` must be a non-empty list of strings."
-                )
-            self._rules = [rule.strip() for rule in compiled_rules if rule.strip()]
-            self._rules_source = str(config.get("_rules_source") or "compiled_rules")
-        else:
-            rules_file = config.get("rules_file")
-            if not isinstance(rules_file, str) or not rules_file.strip():
-                raise ValueError(
-                    "Judge engine requires compiled rules from runtime compilation."
-                )
-            self._rules = resolve_rules_payload(
-                {"rules_file": rules_file},
-                auto_discover_rules_md=False,
+        if "rules_file" in config:
+            raise ValueError(
+                "Judge engine no longer accepts `rules_file`; use runtime-compiled "
+                "`_compiled_rules` from project rules.md."
             )
-            self._rules_source = "rules_file"
+        compiled_rules = config.get("_compiled_rules")
+        if not isinstance(compiled_rules, list) or not all(
+            isinstance(rule, str) and rule.strip() for rule in compiled_rules
+        ):
+            raise ValueError(
+                "Judge engine `_compiled_rules` must be a non-empty list of strings."
+            )
+        self._rules = [rule.strip() for rule in compiled_rules if rule.strip()]
+        self._rules_source = str(config.get("_rules_source") or "compiled_rules")
         if not self._rules:
             raise ValueError("No rules found for judge evaluator.")
 
@@ -268,8 +258,10 @@ class JudgePolicyEngine(PolicyEngine):
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> "PolicyCompiler | None":
-        """Judge no longer supports compiler-based runtime configuration."""
-        return None
+        """Return the judge runtime compiler used by serve-time compilation."""
+        del model, api_key, base_url
+        from openbias.policy.engines.judge.compiler import JudgeRuntimeCompiler
+        return JudgeRuntimeCompiler()
 
     @classmethod
     def validate_config(cls, config: dict[str, Any]) -> list[str]:
@@ -294,26 +286,18 @@ class JudgePolicyEngine(PolicyEngine):
                 if not isinstance(m, dict) or not m.get("model"):
                     errors.append(f"models[{i}]: missing 'model' field.")
 
+        if "rules_file" in config:
+            errors.append(
+                "Judge engine no longer accepts `rules_file`; use runtime-compiled "
+                "`_compiled_rules` from project rules.md."
+            )
         compiled_rules = config.get("_compiled_rules")
-        if compiled_rules is not None:
-            if not isinstance(compiled_rules, list) or not all(
-                isinstance(rule, str) and rule.strip() for rule in compiled_rules
-            ):
-                errors.append(
-                    "Judge engine `_compiled_rules` must be a non-empty list of strings."
-                )
-        else:
-            rules_file = config.get("rules_file")
-            if not isinstance(rules_file, str) or not rules_file.strip():
-                errors.append(
-                    "Judge engine requires compiled rules from runtime compilation."
-                )
-            else:
-                path = Path(rules_file)
-                if path.suffix.lower() not in {".md", ".txt"}:
-                    errors.append("`rules_file` must point to a .md or .txt file.")
-                if not path.exists():
-                    errors.append(f"Rules file not found: {rules_file}")
+        if not isinstance(compiled_rules, list) or not all(
+            isinstance(rule, str) and rule.strip() for rule in compiled_rules
+        ):
+            errors.append(
+                "Judge engine `_compiled_rules` must be a non-empty list of strings."
+            )
 
         return errors
 
