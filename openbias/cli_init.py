@@ -186,7 +186,7 @@ def run_interactive_init() -> None:
             "Tracing provider",
             [
                 {"name": "console    \u2500 Print traces to stdout (dev)", "value": "console"},
-                {"name": "otel       \u2500 OpenTelemetry (OTLP endpoint)", "value": "otel"},
+                {"name": "otel       \u2500 OpenTelemetry (OTLP endpoint)", "value": "otlp"},
                 {"name": "langfuse   \u2500 Langfuse cloud/self-hosted", "value": "langfuse"},
             ],
         )
@@ -201,9 +201,9 @@ def run_interactive_init() -> None:
                 "langfuse_secret_key": sk,
                 "langfuse_host": host,
             }
-        elif trace_type == "otel":
+        elif trace_type == "otlp":
             endpoint = text("OTLP Endpoint", default="http://localhost:4317")
-            tracing_config = {"type": "otel", "endpoint": endpoint}
+            tracing_config = {"type": "otlp", "endpoint": endpoint}
         else:
             tracing_config = {"type": "console"}
     else:

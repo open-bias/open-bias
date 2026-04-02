@@ -24,7 +24,7 @@ openbias --help
 ## Running Locally
 
 ```bash
-# Initialize config files (creates openbias.yaml and policy.yaml)
+# Initialize config (creates openbias.yaml)
 openbias init
 
 # Start the proxy
