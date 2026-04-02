@@ -81,6 +81,16 @@ def test_validate_config_rejects_rules_file_fallback():
     assert any("no longer accepts `rules_file`" in e for e in errors)
 
 
+def test_validate_config_rejects_empty_compiled_rules():
+    errors = JudgePolicyEngine.validate_config(
+        {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "_compiled_rules": [],
+        }
+    )
+    assert any("_compiled_rules" in e for e in errors)
+
+
 @pytest.mark.asyncio
 async def test_evaluate_response_maps_failed_rule_to_violation():
     engine = JudgePolicyEngine()
@@ -100,3 +110,24 @@ async def test_evaluate_response_maps_failed_rule_to_violation():
     assert result.status == EvaluationStatus.VIOLATION
     assert result.violations
     assert result.violations[0].severity == "intervene"
+
+
+@pytest.mark.asyncio
+async def test_evaluate_response_reports_rules_source_in_metadata():
+    engine = JudgePolicyEngine()
+    await engine.initialize(_config(["Never reveal secrets", "Stay on task"]))
+
+    async def _mock_eval(*args, **kwargs):
+        return _verdict(VerdictAction.PASS)
+
+    engine._evaluator.evaluate_turn = _mock_eval
+
+    result = await engine.evaluate_response(
+        session_id="s1",
+        response_data={"content": "all good"},
+        request_data={"messages": [{"role": "user", "content": "help"}]},
+    )
+
+    verdicts = result.metadata["judge"]["verdicts"]
+    assert verdicts[0]["rules_source"] == "rules.md"
+    assert "rubric_name" not in verdicts[0]

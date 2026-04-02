@@ -7,7 +7,7 @@ description: Guide for creating a new policy engine under openbias/policy/engine
 
 ## Decision: PolicyEngine vs StatefulPolicyEngine
 
-- **`PolicyEngine`** — Use when each request/response is evaluated independently against policy. No state transitions between turns. Examples: Judge (rubric scoring), NeMo (guardrails).
+- **`PolicyEngine`** — Use when each request/response is evaluated independently against policy. No state transitions between turns. Examples: Judge (compiled-rule evaluation), NeMo (guardrails).
 - **`StatefulPolicyEngine`** (from `openbias.policy.engines.stateful`) — Use when you need to track state transitions across turns (e.g., FSM workflows). Adds `classify_response`, `get_current_state`, `get_state_history`, `get_valid_next_states`.
 
 If you're unsure, start with `PolicyEngine`. You can always extend later.
@@ -136,4 +136,4 @@ If you're unsure, start with `PolicyEngine`. You can always extend later.
 | `openbias/policy/engines/__init__.py` | Where to add your import |
 | `openbias/policy/engines/fsm/` | Stateful engine example (smallest engine at ~340 lines) |
 | `openbias/policy/engines/nemo/` | Stateless engine wrapping an external library |
-| `openbias/policy/engines/judge/` | Complex example with LLM calls and rubric scoring |
+| `openbias/policy/engines/judge/` | Judge engine example with LLM calls and compiled-rule evaluation |

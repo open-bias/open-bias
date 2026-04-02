@@ -9,7 +9,7 @@ attributes/events directly on the evaluator span without extra judge-only spans.
 import threading
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter, SpanExportResult
@@ -95,7 +95,7 @@ class TestAsyncEvalSpanNesting:
             ) as evaluator_span:
                 tracer.log_judge_evaluation(
                     session_id=session_id,
-                    rubric_name="safety",
+                    rules_source="rules.md",
                     scope="turn",
                     composite_score=0.85,
                     action="pass",
@@ -125,19 +125,19 @@ class TestAsyncEvalSpanNesting:
         assert evaluator.parent.span_id == phase.context.span_id
 
         # judge details are attached directly to evaluator span
-        assert evaluator.attributes["openbias.judge.rubric"] == "safety"
+        assert evaluator.attributes["openbias.judge.rules_source"] == "rules.md"
         assert evaluator.attributes["openbias.judge.action"] == "pass"
         assert evaluator.attributes["openbias.judge.scope"] == "turn"
 
     def test_judge_eval_has_expected_attributes(self, real_tracer):
-        """Judge evaluation span carries rubric, action, and score attributes."""
+        """Judge evaluation span carries rules-source, action, and score attributes."""
         tracer, exporter = real_tracer
         session_id = "test-session-attrs"
 
         with tracer.trace_block("phase", session_id) as phase_span:
             tracer.log_judge_evaluation(
                 session_id=session_id,
-                rubric_name="fairness",
+                rules_source="compiled_rules",
                 scope="turn",
                 composite_score=0.72,
                 action="intervene",
@@ -148,7 +148,7 @@ class TestAsyncEvalSpanNesting:
         spans = _spans_by_name(exporter)
         phase = spans["phase"]
 
-        assert phase.attributes["openbias.judge.rubric"] == "fairness"
+        assert phase.attributes["openbias.judge.rules_source"] == "compiled_rules"
         assert phase.attributes["openbias.judge.action"] == "intervene"
         assert phase.attributes["openbias.judge.composite_score"] == 0.72
         assert phase.attributes["openbias.judge.model"] == "judge-v2"
@@ -164,7 +164,7 @@ class TestAsyncEvalSpanNesting:
             ) as eval_span:
                 tracer.log_judge_evaluation(
                     session_id=session_id,
-                    rubric_name="r",
+                    rules_source="rules.md",
                     scope="turn",
                     composite_score=1.0,
                     action="pass",
@@ -185,7 +185,7 @@ class TestAsyncEvalSpanNesting:
 
         tracer.log_judge_evaluation(
             session_id=session_id,
-            rubric_name="safety",
+            rules_source="rules.md",
             scope="turn",
             composite_score=0.8,
             action="intervene",

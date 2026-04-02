@@ -514,7 +514,7 @@ class Tracer:
     def _annotate_judge_details(
         self,
         span: Any,
-        rubric_name: str,
+        rules_source: str,
         scope: str,
         composite_score: float,
         action: str,
@@ -525,7 +525,7 @@ class Tracer:
         metadata: dict[str, Any] | None = None,
     ) -> None:
         """Attach judge verdict details to an existing span."""
-        span.set_attribute("openbias.judge.rubric", rubric_name)
+        span.set_attribute("openbias.judge.rules_source", rules_source)
         span.set_attribute("openbias.judge.scope", scope)
         span.set_attribute("openbias.judge.composite_score", composite_score)
         span.set_attribute("openbias.judge.action", action)
@@ -556,7 +556,7 @@ class Tracer:
         output = {
             "composite_score": composite_score,
             "action": action,
-            "rubric": rubric_name,
+            "rules_source": rules_source,
             "scope": scope,
         }
         if scores:
@@ -572,7 +572,7 @@ class Tracer:
     def log_judge_evaluation(
         self,
         session_id: str,
-        rubric_name: str,
+        rules_source: str,
         scope: str,
         composite_score: float,
         action: str,
@@ -589,8 +589,8 @@ class Tracer:
 
         Args:
             session_id: Session identifier.
-            rubric_name: Name of the rubric used for evaluation.
-            scope: Evaluation scope ("turn" or "conversation").
+            rules_source: Source label for the compiled rules used for evaluation.
+            scope: Evaluation scope label (currently "turn").
             composite_score: Normalized composite score (0-1).
             action: Verdict action (pass/intervene/block).
             judge_model: Model used for evaluation.
@@ -623,7 +623,7 @@ class Tracer:
             target_span.set_attribute("openbias.evaluator.name", evaluator_name)
         self._annotate_judge_details(
             target_span,
-            rubric_name=rubric_name,
+            rules_source=rules_source,
             scope=scope,
             composite_score=composite_score,
             action=action,
@@ -636,7 +636,7 @@ class Tracer:
 
         logger.debug(
             f"Logged judge evaluation for session {session_id} "
-            f"(rubric={rubric_name}, action={action}, score={composite_score:.2f})"
+            f"(rules_source={rules_source}, action={action}, score={composite_score:.2f})"
         )
 
     def end_trace(self, session_id: str) -> None:

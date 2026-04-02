@@ -1,11 +1,12 @@
 """
 LLM-as-a-Judge Policy Engine.
 
-Evaluates agent responses against configurable rules using LLM judges.
+Evaluates agent responses against runtime-compiled rules using LLM judges.
 
 Usage:
     The engine is auto-registered as "judge" when this package is imported.
-    Use PolicyEngineRegistry.create("judge") to instantiate.
+    Use PolicyEngineRegistry.create("judge") to instantiate for request or
+    response evaluation.
 """
 
 # Import engine to trigger @register_engine("judge")

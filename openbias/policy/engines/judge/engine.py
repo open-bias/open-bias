@@ -1,9 +1,8 @@
 """
 LLM-as-a-Judge Policy Engine.
 
-Evaluates agent responses and conversation trajectories against
-configurable rules using LLM judges. Integrates with the Open Bias
-policy engine infrastructure via PolicyEngine ABC.
+Evaluates agent responses against runtime-compiled rules using LLM judges.
+Integrates with the Open Bias policy engine infrastructure via PolicyEngine ABC.
 """
 
 import logging
@@ -34,7 +33,7 @@ logger = logging.getLogger(__name__)
 class JudgePolicyEngine(PolicyEngine):
     """Policy engine that uses LLM judges to evaluate agent behavior.
 
-    Supports turn-level evaluation against configurable rules.
+    Supports turn-level evaluation against runtime-compiled rules.
     Works with single or multiple judge models.
     """
 
@@ -146,7 +145,7 @@ class JudgePolicyEngine(PolicyEngine):
     ) -> EvaluationResult:
         """Evaluate an incoming request (PRE_CALL).
 
-        Runs the configured default ruleset against the latest user message.
+        Runs the evaluator's compiled rules against the latest user message.
         The interceptor only calls this method when the evaluator is assigned
         to the pre_call phase, so no phase guard is needed here.
         """
@@ -191,9 +190,7 @@ class JudgePolicyEngine(PolicyEngine):
     ) -> EvaluationResult:
         """Evaluate an LLM response (POST_CALL).
 
-        Runs the configured default ruleset against the latest response.
-        Each evaluator instance has one ruleset; conversation-scope evaluation
-        is handled by configuring a separate evaluator instance.
+        Runs the evaluator's compiled rules against the latest response.
         """
         session = self._get_or_create_session(session_id)
         response_content = extract_response_content(response_data)
@@ -291,8 +288,10 @@ class JudgePolicyEngine(PolicyEngine):
                 "`_compiled_rules` from project rules.md."
             )
         compiled_rules = config.get("_compiled_rules")
-        if not isinstance(compiled_rules, list) or not all(
-            isinstance(rule, str) and rule.strip() for rule in compiled_rules
+        if (
+            not isinstance(compiled_rules, list)
+            or not compiled_rules
+            or not all(isinstance(rule, str) and rule.strip() for rule in compiled_rules)
         ):
             errors.append(
                 "Judge engine `_compiled_rules` must be a non-empty list of strings."
@@ -322,7 +321,7 @@ class JudgePolicyEngine(PolicyEngine):
         try:
             self._tracer.log_judge_evaluation(
                 session_id=session_id,
-                rubric_name=self._rules_source,
+                rules_source=self._rules_source,
                 scope=verdict.scope.value,
                 composite_score=verdict.composite_score,
                 action=verdict.action.value,
@@ -398,7 +397,7 @@ class JudgePolicyEngine(PolicyEngine):
         metadata: dict[str, Any] = {
             "judge": {
                 "verdicts": [
-                    {**v.to_dict(), "rubric_name": self._rules_source}
+                    {**v.to_dict(), "rules_source": self._rules_source}
                     for v in verdicts
                 ],
                 "session_turn": session.turn_count + 1,

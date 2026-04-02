@@ -15,7 +15,7 @@ class _TracerSpy:
 
 
 @pytest.mark.asyncio
-async def test_trace_verdict_uses_compiled_rules_rubric_name():
+async def test_trace_verdict_uses_compiled_rules_source_name():
     engine = JudgePolicyEngine()
     await engine.initialize(
         {
@@ -46,4 +46,4 @@ async def test_trace_verdict_uses_compiled_rules_rubric_name():
     )
 
     assert tracer.calls
-    assert tracer.calls[0]["rubric_name"] == "rules.md"
+    assert tracer.calls[0]["rules_source"] == "rules.md"
