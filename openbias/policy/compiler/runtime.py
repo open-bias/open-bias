@@ -19,40 +19,25 @@ async def compile_runtime_config_for_evaluator(
     base_dir: Path,
 ) -> dict[str, Any]:
     """Compile canonical rules inputs into engine-native runtime config."""
-    if evaluator_type == "judge":
-        if evaluator_config.get("rules") is not None:
-            raise ValueError(
-                f"Evaluator '{evaluator_name}' (judge) no longer supports inline `rules`. "
-                "Use `rules_file` instead."
-            )
-
-        cleaned = dict(evaluator_config)
-        rules_file = cleaned.get("rules_file")
-
-        if rules_file is None:
-            autodiscovered = base_dir / "rules.md"
-            if autodiscovered.exists():
-                cleaned["rules_file"] = str(autodiscovered)
-                return cleaned
-            raise ValueError(
-                f"Evaluator '{evaluator_name}' (judge) requires `rules_file`."
-            )
-
-        # Validate the rules file payload shape early at CLI startup.
-        resolve_rules_payload(
-            {"rules_file": rules_file},
-            base_dir=base_dir,
-            auto_discover_rules_md=False,
-        )
-        return cleaned
-
     normalized_rules = resolve_rules_payload(
-        evaluator_config,
+        {},
         base_dir=base_dir,
         auto_discover_rules_md=True,
     )
     if not normalized_rules:
-        return evaluator_config
+        raise ValueError(
+            f"Evaluator '{evaluator_name}' requires project rules.md. "
+            f"Expected file at: {base_dir / 'rules.md'}"
+        )
+
+    cleaned = dict(evaluator_config)
+    cleaned.pop("rules", None)
+    cleaned.pop("rules_file", None)
+
+    if evaluator_type == "judge":
+        cleaned["_compiled_rules"] = normalized_rules
+        cleaned["_rules_source"] = "rules.md"
+        return cleaned
 
     engine_cls = PolicyEngineRegistry.get(evaluator_type)
     compiler = None
@@ -85,10 +70,6 @@ async def compile_runtime_config_for_evaluator(
             f"Failed to compile rules for evaluator '{evaluator_name}': "
             + "; ".join(result.errors)
         )
-
-    cleaned = dict(evaluator_config)
-    cleaned.pop("rules", None)
-    cleaned.pop("rules_file", None)
 
     if evaluator_type == "fsm":
         cleaned["workflow"] = result.config
