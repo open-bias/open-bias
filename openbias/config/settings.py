@@ -15,9 +15,7 @@ The simplified openbias.yaml format:
     evaluators:
       - name: safety
         type: judge
-        rules:
-          - "Must NOT provide financial advice"
-          - "Be professional and helpful"
+        rules_file: ./rules.md
     tracing:
       type: none
 
