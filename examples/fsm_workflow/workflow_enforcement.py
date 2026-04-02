@@ -8,7 +8,8 @@ verify identity before processing account actions.
 Architecture (what happens on each call):
   1. pre_call_hook: checks for pending interventions from previous violations.
      If the FSM queued one, it's applied here (system prompt amendment, context
-     reminder, or hard block — configurable per-constraint in the workflow YAML).
+     reminder, or hard block — configurable in the workflow compiled from
+     `rules.md`).
   2. LLM call: forwarded to provider. Unmodified.
   3. post_call_hook: the FSM engine classifies the response to a workflow state
      using a three-tier cascade:
@@ -76,10 +77,11 @@ print(f"Using model: {MODEL}\n")
 
 # -- Tools -------------------------------------------------------------------
 # These function names are what the FSM's tool-call classifier keys on.
-# In customer_support.yaml, the "account_action" state has:
-#   classification.tool_calls: [process_refund, update_subscription, ...]
-# When the LLM emits a tool call with one of these names, the classifier
-# immediately assigns that state with confidence 1.0 — no regex or embeddings.
+# The compiled FSM workflow includes an "account_action"-style state with
+# `classification.tool_calls` entries such as `process_refund` and
+# `update_subscription`. When the LLM emits one of those tool calls, the
+# classifier immediately assigns that state with confidence 1.0 — no regex or
+# embeddings.
 
 tools = [
     {

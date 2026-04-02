@@ -1,6 +1,6 @@
 # Examples
 
-Each example is a self-contained directory with an `openbias.yaml` config and a Python client script. Start the proxy in one terminal, run the client in another.
+Each example is a self-contained directory with an `openbias.yaml` config, a project-local `rules.md`, and a Python client script. Start the proxy in one terminal, run the client in another.
 
 **Provider-agnostic**: every example auto-detects the model from whichever API key you have set. Set exactly one of `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `ANTHROPIC_API_KEY`.
 
@@ -38,7 +38,7 @@ python quickstart.py         # terminal 2
 
 A coding assistant that gets hit with a prompt injection attack. The judge engine evaluates the response asynchronously (zero latency on your call), catches the violation, and injects a system prompt amendment on the next turn. Watch the agent reassert its boundaries.
 
-**What's happening under the hood**: The judge LLM scores responses on built-in rules (safety, instruction_following, tone) and maps the verdict to an action (pass/intervene/block/shadow).
+**What's happening under the hood**: The judge LLM scores responses on criteria compiled from the example's `rules.md` and maps the verdict to an action (pass/intervene/block/shadow).
 
 ```bash
 cd examples/judge
@@ -80,7 +80,7 @@ python workflow_enforcement.py
 
 [`examples/nemo_guardrails/`](nemo_guardrails/)
 
-Wraps NVIDIA NeMo Guardrails as an evaluator engine. Input rails run pre-call (jailbreak detection, PII filtering), output rails run post-call (toxicity, topical control). Fail-open by default — if NeMo throws, the request passes through with a warning.
+Wraps NVIDIA NeMo Guardrails as an evaluator engine. Input rails run pre-call (jailbreak detection, PII filtering), output rails run post-call (toxicity, topical control). Like the other examples, the authored policy lives in local `rules.md`. Fail-open by default — if NeMo throws, the request passes through with a warning.
 
 ```bash
 pip install 'openbias[nemo]'   # extra dependency

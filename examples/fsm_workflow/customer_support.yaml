@@ -1,11 +1,10 @@
 # Customer Support Agent Workflow
 #
-# This workflow defines the expected behavior for a customer support agent.
-# It ensures the agent follows proper procedures, including identity verification
-# before performing any account actions.
+# Illustrative internal workflow shape for the FSM example.
+# The runnable example authors policy in `rules.md`; this file shows the kind of
+# compiled workflow the FSM runtime operates on after compilation.
 #
-# Usage:
-#   cd examples/fsm_workflow && openbias serve
+# This file is not wired directly through `openbias.yaml`.
 
 name: customer-support-agent
 

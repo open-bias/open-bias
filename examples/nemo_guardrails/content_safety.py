@@ -25,9 +25,10 @@ Prerequisites:
   pip install 'openbias[nemo]'
 
 Note on providers:
-  NeMo Guardrails has its own model config (config/config.yml) for the
-  rails evaluation LLM. The MODEL below is for the agent's LLM — it goes
-  through Open Bias's proxy. Both are independently configurable.
+  Open Bias compiles the example's `rules.md` into NeMo runtime artifacts
+  internally. The MODEL below is for the agent's LLM — it goes through
+  Open Bias's proxy. The sidecar rails evaluation model is configured by
+  the compiled runtime, not as a separate user-authored input surface.
 
 Run:
   cd examples/nemo_guardrails
