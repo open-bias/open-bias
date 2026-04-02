@@ -7,12 +7,11 @@ policy engine infrastructure via PolicyEngine ABC.
 """
 
 import logging
-from typing import Any, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from openbias.policy.compiler.protocol import PolicyCompiler
+from pathlib import Path
+from typing import Any
 
 from openbias.core.session import SessionStore
+from openbias.policy.compiler.protocol import CompilationResult, PolicyCompiler
 from openbias.policy.protocols import (
     PolicyEngine,
     EvaluationResult,
@@ -31,6 +30,37 @@ from openbias.policy.engines.judge.client import JudgeClient
 from openbias.policy.engines.judge.evaluator import JudgeEvaluator
 
 logger = logging.getLogger(__name__)
+
+
+class JudgeRuntimeCompiler(PolicyCompiler):
+    """Runtime compiler used by serve-time rule normalization."""
+
+    @property
+    def engine_type(self) -> str:
+        return "judge"
+
+    async def compile(
+        self,
+        rules_text: str,
+        context: dict[str, Any] | None = None,
+    ) -> CompilationResult:
+        del context
+        compiled_rules = [line.strip() for line in rules_text.splitlines() if line.strip()]
+        if not compiled_rules:
+            return CompilationResult.failure(
+                errors=["Judge runtime compilation produced no rules."],
+            )
+        return CompilationResult(
+            success=True,
+            config={
+                "_compiled_rules": compiled_rules,
+                "_rules_source": "rules.md",
+            },
+        )
+
+    def export(self, result: CompilationResult, output_path: Path) -> None:
+        del result, output_path
+        return None
 
 @register_engine("judge")
 class JudgePolicyEngine(PolicyEngine):
@@ -257,10 +287,9 @@ class JudgePolicyEngine(PolicyEngine):
         model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
-    ) -> "PolicyCompiler | None":
+    ) -> PolicyCompiler | None:
         """Return the judge runtime compiler used by serve-time compilation."""
         del model, api_key, base_url
-        from openbias.policy.engines.judge.compiler import JudgeRuntimeCompiler
         return JudgeRuntimeCompiler()
 
     @classmethod
