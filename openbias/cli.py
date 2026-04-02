@@ -5,7 +5,7 @@ Commands:
 - openbias init: Initialize a new Open Bias project
 - openbias serve: Start the proxy server
 - openbias eval: Run evaluation scenarios against a policy engine
-- openbias validate: Validate a workflow file
+- openbias validate: Validate an Open Bias config or workflow file
 - openbias info: Show workflow information
 """
 
@@ -283,9 +283,9 @@ def init(quick: bool) -> None:
     type=click.Path(exists=True, path_type=Path),
 )
 def validate(config_path: Path) -> None:
-    """Validate a workflow or openbias.yaml configuration file.
+    """Validate an Open Bias config or workflow file.
 
-    For openbias.yaml: validates engine config (model, rubrics, rules).
+    For openbias.yaml: validates evaluator config and runtime compilation inputs.
     For workflow YAML: validates workflow structure and references.
 
     Examples:
@@ -346,7 +346,8 @@ def _validate_openbias_config(config_path: Path, raw: dict) -> None:
         error(f"Configuration error: {e}")
         raise SystemExit(1)
 
-    # Determine engine type: new format uses evaluators list, old uses top-level engine key
+    policy_config = settings.get_policy_config()
+    engine_type = policy_config.get("type", "judge")
     judge_evaluators = [ev for ev in settings.evaluators if ev.type == "judge"]
 
     if judge_evaluators:
@@ -407,7 +408,6 @@ def _validate_openbias_config(config_path: Path, raw: dict) -> None:
         )
     else:
         # No evaluators configured — show basic summary
-        engine_type = raw.get("engine", "unknown")
         config_panel(
             "\u2713 Valid Configuration",
             {
@@ -606,9 +606,6 @@ def eval_cmd(config: Path | None, json_output: Path | None, verbose: bool, debug
         error("No scenario files found.", hint="Check the 'eval.scenarios' paths in your config.")
         raise SystemExit(1)
 
-    # --- Determine engine type and config ---
-    engine_type = raw.get("engine", "judge")
-
     async def run_eval() -> None:
         # Build engine config from the full YAML (reuse Settings logic)
         from openbias.config.settings import Settings
@@ -622,9 +619,10 @@ def eval_cmd(config: Path | None, json_output: Path | None, verbose: bool, debug
 
             with spinner("Initializing engine..."):
                 policy_config = settings.get_policy_config()
+                engine_type = policy_config["type"]
 
                 engine = await PolicyEngineRegistry.create_and_initialize(
-                    policy_config["type"],
+                    engine_type,
                     policy_config.get("config", {}),
                 )
         except Exception as e:
@@ -668,62 +666,5 @@ def eval_cmd(config: Path | None, json_output: Path | None, verbose: bool, debug
             success(f"Results exported to {json_output}")
 
     asyncio.run(run_eval())
-
-
-def _detect_engine_type(policy_text: str) -> str:
-    """Auto-detect the best engine type from the policy text.
-
-    Uses keyword heuristics:
-    - Temporal/workflow keywords -> fsm
-    - Quality/behavioral keywords -> judge
-    - Default to judge if ambiguous
-    """
-    text_lower = policy_text.lower()
-
-    fsm_keywords = {
-        "before",
-        "after",
-        "first",
-        "then",
-        "state",
-        "step",
-        "workflow",
-        "sequence",
-        "transition",
-        "phase",
-        "stage",
-        "proceed",
-        "next",
-        "previous",
-        "order",
-    }
-    judge_keywords = {
-        "ensure",
-        "always",
-        "never",
-        "professional",
-        "safe",
-        "appropriate",
-        "tone",
-        "quality",
-        "helpful",
-        "accurate",
-        "polite",
-        "respectful",
-        "pii",
-        "harmful",
-        "block",
-        "warn",
-        "evaluate",
-        "score",
-        "rubric",
-    }
-
-    fsm_score = sum(1 for kw in fsm_keywords if kw in text_lower)
-    judge_score = sum(1 for kw in judge_keywords if kw in text_lower)
-
-    if fsm_score > judge_score:
-        return "fsm"
-    return "judge"
 if __name__ == "__main__":
     main()

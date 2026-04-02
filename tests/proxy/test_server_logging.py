@@ -138,3 +138,18 @@ def test_generate_litellm_config_omits_master_key_when_empty_string():
     proxy = _make_proxy(proxy={"master_key": ""})
     config = yaml.safe_load(proxy.generate_litellm_config())
     assert "master_key" not in config["general_settings"]
+
+
+def test_log_policy_config_reports_llm_engine():
+    proxy = _make_proxy()
+
+    with patch.object(
+        Settings,
+        "get_policy_config",
+        return_value={"type": "llm", "config": {"llm_model": "gpt-4o-mini"}},
+    ):
+        with patch("openbias.proxy.server.logger") as mock_logger:
+            proxy._log_policy_config()
+
+    mock_logger.info.assert_called_once()
+    assert "LLM" in mock_logger.info.call_args.args[0]

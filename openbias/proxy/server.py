@@ -182,6 +182,8 @@ class Proxy:
             logger.info("Running with NeMo Guardrails engine")
         elif engine_type == "fsm" and (engine_conf.get("config_path") or engine_conf.get("workflow")):
             logger.info(f"Running with FSM engine: {engine_conf.get('config_path', 'inline')}")
+        elif engine_type == "llm":
+            logger.info("Running with LLM policy engine")
         elif engine_type == "judge":
             logger.info("Running with Judge policy engine")
         else:
@@ -240,10 +242,11 @@ def start_proxy(settings: Settings | None = None) -> None:
                  from environment variables.
     """
     resolved_settings = settings or Settings()
+    policy_config = resolved_settings.get_policy_config()
     logger.info(f"Default model: {resolved_settings.proxy.default_model}")
     logger.info(
-        f"Policy engine: {resolved_settings.evaluators[0].type if resolved_settings.evaluators else 'judge'}"
-        f" (config_path={resolved_settings.evaluators[0].config.get('config_path') if resolved_settings.evaluators else None})"
+        f"Policy engine: {policy_config.get('type')}"
+        f" (config_path={policy_config.get('config_path')})"
     )
 
     proxy = Proxy(resolved_settings)
