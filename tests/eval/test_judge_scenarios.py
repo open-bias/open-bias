@@ -21,36 +21,31 @@ INLINE_RULES = [
 ]
 
 
-def _get_inline_criteria_names() -> list[str]:
-    """Get criterion names that create_rules_rubric would generate for INLINE_RULES."""
-    from openbias.policy.engines.judge.rubrics import create_rules_rubric
-    rubric = create_rules_rubric(INLINE_RULES)
-    return [c.name for c in rubric.criteria]
-
-
 def _make_judge_response(score: int, reasoning: str = "", summary: str = "") -> dict:
-    """Build a mock judge response with per-rule criteria matching INLINE_RULES."""
-    criteria_names = _get_inline_criteria_names()
+    """Build a mock judge response with per-rule binary results."""
     return {
-        "scores": [
+        "results": [
             {
-                "criterion": name,
-                "score": score,
-                "max_score": 1,
+                "rule": rule,
+                "passed": bool(score),
                 "reasoning": reasoning,
+                "evidence": [],
+                "confidence": 0.9,
             }
-            for name in criteria_names
+            for rule in INLINE_RULES
         ],
         "summary": summary,
     }
 
 
 @pytest.fixture
-async def engine():
+async def engine(tmp_path):
+    rules_file = tmp_path / "rules.md"
+    rules_file.write_text("\n".join(f"- {rule}" for rule in INLINE_RULES), encoding="utf-8")
     eng = await PolicyEngineRegistry.create_and_initialize(
         "judge",
         {
-            "inline_rules": INLINE_RULES,
+            "rules_file": str(rules_file),
             "models": [{"model": "mock-model"}],
         },
     )
@@ -197,13 +192,14 @@ async def test_multi_turn_drift(engine, runner):
 
 
 @pytest.fixture
-async def recovery_engine():
+async def recovery_engine(tmp_path):
     """Dedicated engine with conversation eval disabled for recovery test."""
+    rules_file = tmp_path / "rules.md"
+    rules_file.write_text("\n".join(f"- {rule}" for rule in INLINE_RULES), encoding="utf-8")
     eng = await PolicyEngineRegistry.create_and_initialize(
         "judge",
         {
-            "inline_rules": INLINE_RULES,
-            "conversation_rubric": None,
+            "rules_file": str(rules_file),
             "models": [{"model": "mock-model"}],
         },
     )

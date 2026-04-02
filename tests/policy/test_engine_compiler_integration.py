@@ -39,21 +39,19 @@ class TestFSMGetCompiler:
 
 
 class TestJudgeGetCompiler:
-    """JudgePolicyEngine.get_compiler() returns a JudgeCompiler."""
+    """JudgePolicyEngine.get_compiler() returns None."""
 
-    def test_returns_compiler(self):
+    def test_returns_none(self):
         engine = JudgePolicyEngine()
         compiler = engine.get_compiler()
-        assert compiler is not None
-        assert isinstance(compiler, PolicyCompiler)
-        assert compiler.engine_type == "judge"
+        assert compiler is None
 
-    def test_returns_judge_compiler_type(self):
-        from openbias.policy.engines.judge.compiler import JudgeCompiler
-
+    def test_returns_none_consistently(self):
         engine = JudgePolicyEngine()
-        compiler = engine.get_compiler()
-        assert isinstance(compiler, JudgeCompiler)
+        c1 = engine.get_compiler()
+        c2 = engine.get_compiler()
+        assert c1 is None
+        assert c2 is None
 
 
 class TestLLMGetCompiler:

@@ -302,36 +302,35 @@ class TestNeMoEngineConformance:
 class TestJudgeEngineConformance:
     """Judge engine produces conformant ViolationRecord entries."""
 
-    async def test_violation_record_shape(self):
+    async def test_violation_record_shape(self, tmp_path):
         """Judge violations have all required fields populated."""
         from openbias.policy.engines.judge.engine import JudgePolicyEngine
 
         engine = JudgePolicyEngine()
+        rules_file = tmp_path / "rules.md"
+        rules_file.write_text("- Be helpful\n- Be safe\n", encoding="utf-8")
         await engine.initialize({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "inline_rules": ["Be helpful", "Be safe"],
+            "rules_file": str(rules_file),
         })
 
         # Mock the judge call to return a failing verdict
         engine._client.call_judge = AsyncMock(return_value={
-            "scores": [
+            "results": [
                 {
-                    "criterion": c.name,
-                    "score": 0,
+                    "rule": "Be helpful",
+                    "passed": False,
                     "reasoning": "Violated policy",
                     "evidence": ["bad content"],
                     "confidence": 0.9,
-                }
-                for c in engine._registry.get("inline_rules").criteria[:1]
-            ] + [
+                },
                 {
-                    "criterion": c.name,
-                    "score": 1,
+                    "rule": "Be safe",
+                    "passed": True,
                     "reasoning": "OK",
                     "evidence": [],
                     "confidence": 0.9,
-                }
-                for c in engine._registry.get("inline_rules").criteria[1:]
+                },
             ],
             "summary": "Policy violation detected.",
         })

@@ -81,6 +81,7 @@ class TestValidateCommand:
         """validate with a valid openbias.yaml should show summary."""
         runner = CliRunner()
         with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n- No PII\n")
             Path("openbias.yaml").write_text(
                 "model: gpt-4o-mini\n"
                 "evaluators:\n"
@@ -88,9 +89,7 @@ class TestValidateCommand:
                 "    type: judge\n"
                 "    phase: post_call\n"
                 "    model: gpt-4o-mini\n"
-                '    rules:\n'
-                '      - "Be professional"\n'
-                '      - "No PII"\n'
+                "    rules_file: ./rules.md\n"
                 ""
             )
 
@@ -113,13 +112,13 @@ class TestValidateCommand:
         """validate with no model should fail with clear error."""
         runner = CliRunner()
         with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n")
             Path("openbias.yaml").write_text(
                 "evaluators:\n"
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                '    rules:\n'
-                '      - "Be professional"\n'
+                "    rules_file: ./rules.md\n"
                 ""
             )
 
@@ -137,8 +136,8 @@ class TestValidateCommand:
             assert result.exit_code != 0
             assert "No model configured" in combined
 
-    def test_validate_judge_config_bad_rubric(self):
-        """validate with a nonexistent default rubric should fail."""
+    def test_validate_judge_config_missing_rules_file(self):
+        """validate fails when judge rules_file does not exist."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             Path("openbias.yaml").write_text(
@@ -148,7 +147,7 @@ class TestValidateCommand:
                 "    type: judge\n"
                 "    phase: post_call\n"
                 "    model: gpt-4o-mini\n"
-                "    default_rubric: nonexistent_rubric\n"
+                "    rules_file: ./missing-rules.md\n"
                 ""
             )
 
@@ -164,7 +163,7 @@ class TestValidateCommand:
 
             combined = result.output + buf.getvalue()
             assert result.exit_code != 0
-            assert "nonexistent_rubric" in combined
+            assert "Rules file not found" in combined
 
 
 class TestInitCommand:
@@ -217,6 +216,7 @@ class TestServeCommand:
         """serve with an openbias.yaml should pass the gate and attempt startup."""
         runner = CliRunner()
         with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n")
             # Write a minimal valid yaml
             Path("openbias.yaml").write_text(
                 "model: gpt-4o-mini\nport: 4000\n"
@@ -224,8 +224,7 @@ class TestServeCommand:
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules:\n"
-                "      - 'Be professional'\n"
+                "    rules_file: ./rules.md\n"
             )
             # Mock start_proxy so we don't actually start a server
             with patch("openbias.proxy.server.start_proxy"):
@@ -238,14 +237,14 @@ class TestServeCommand:
     def test_serve_compiles_rules_before_start(self):
         runner = CliRunner()
         with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n")
             Path("openbias.yaml").write_text(
                 "model: gpt-4o-mini\n"
                 "evaluators:\n"
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules:\n"
-                "      - 'Be professional'\n"
+                "    rules_file: ./rules.md\n"
             )
             with patch("openbias.proxy.server.start_proxy"):
                 with patch("openbias.config.settings.Settings.validate"):
@@ -253,7 +252,7 @@ class TestServeCommand:
                         "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
                         new_callable=AsyncMock,
                     ) as mock_compile:
-                        mock_compile.return_value = {"inline_rules": ["Be professional"]}
+                        mock_compile.return_value = {"rules_file": "./rules.md"}
                         result = runner.invoke(main, ["serve"])
 
             assert result.exit_code == 0
@@ -278,7 +277,7 @@ class TestServeCommand:
                         "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
                         new_callable=AsyncMock,
                     ) as mock_compile:
-                        mock_compile.return_value = {"inline_rules": ["Be helpful", "No secrets"]}
+                        mock_compile.return_value = {"rules_file": "./rules.md"}
                         result = runner.invoke(main, ["serve"])
 
             assert result.exit_code == 0
@@ -290,19 +289,19 @@ class TestServeCommand:
         """serve compiles rules for each evaluator in sequence."""
         runner = CliRunner()
         with runner.isolated_filesystem():
+            Path("rules-pre.md").write_text("- No harmful content\n")
+            Path("rules-post.md").write_text("- Be professional\n")
             Path("openbias.yaml").write_text(
                 "model: gpt-4o-mini\n"
                 "evaluators:\n"
                 "  - name: pre-screen\n"
                 "    type: judge\n"
                 "    phase: pre_call\n"
-                "    rules:\n"
-                "      - 'No harmful content'\n"
+                "    rules_file: ./rules-pre.md\n"
                 "  - name: post-eval\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules:\n"
-                "      - 'Be professional'\n"
+                "    rules_file: ./rules-post.md\n"
             )
             with patch("openbias.proxy.server.start_proxy"):
                 with patch("openbias.config.settings.Settings.validate"):
@@ -310,7 +309,7 @@ class TestServeCommand:
                         "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
                         new_callable=AsyncMock,
                     ) as mock_compile:
-                        mock_compile.return_value = {"inline_rules": ["compiled"]}
+                        mock_compile.return_value = {"rules_file": "./compiled.md"}
                         result = runner.invoke(main, ["serve"])
 
             assert result.exit_code == 0
@@ -320,14 +319,14 @@ class TestServeCommand:
         """serve exits with error when rules compilation fails."""
         runner = CliRunner()
         with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n")
             Path("openbias.yaml").write_text(
                 "model: gpt-4o-mini\n"
                 "evaluators:\n"
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules:\n"
-                "      - 'Be professional'\n"
+                "    rules_file: ./rules.md\n"
             )
             with patch("openbias.proxy.server.start_proxy"):
                 with patch("openbias.config.settings.Settings.validate"):
@@ -358,7 +357,7 @@ class TestServeCommand:
                         "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
                         new_callable=AsyncMock,
                     ) as mock_compile:
-                        mock_compile.return_value = {"inline_rules": ["Auto rule one", "Auto rule two"]}
+                        mock_compile.return_value = {"rules_file": "./rules.md"}
                         result = runner.invoke(main, ["serve"])
 
             assert result.exit_code == 0
@@ -392,14 +391,14 @@ class TestTriggerCommand:
         """trigger with valid config should show ALLOW output."""
         runner = CliRunner()
         with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n")
             Path("openbias.yaml").write_text(
                 "model: gpt-4o-mini\n"
                 "evaluators:\n"
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules:\n"
-                "      - 'Be professional'\n"
+                "    rules_file: ./rules.md\n"
                 ""
             )
 
@@ -445,14 +444,14 @@ class TestTriggerCommand:
         """trigger when completion raises should print error cleanly."""
         runner = CliRunner()
         with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n")
             Path("openbias.yaml").write_text(
                 "model: gpt-4o-mini\n"
                 "evaluators:\n"
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules:\n"
-                "      - 'Be professional'\n"
+                "    rules_file: ./rules.md\n"
                 ""
             )
 
@@ -497,14 +496,14 @@ class TestTriggerCommand:
         """--message flag should be passed through to the completion call."""
         runner = CliRunner()
         with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n")
             Path("openbias.yaml").write_text(
                 "model: gpt-4o-mini\n"
                 "evaluators:\n"
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules:\n"
-                "      - 'Be professional'\n"
+                "    rules_file: ./rules.md\n"
                 ""
             )
 
