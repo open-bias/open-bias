@@ -335,6 +335,8 @@ def _validate_workflow(config_path: Path) -> None:
 
 def _validate_openbias_config(config_path: Path, raw: dict) -> None:
     """Validate an openbias.yaml configuration file."""
+    import asyncio
+
     from openbias.config.settings import Settings
 
     try:
@@ -349,16 +351,32 @@ def _validate_openbias_config(config_path: Path, raw: dict) -> None:
 
     if judge_evaluators:
         from openbias.policy.engines.judge.engine import JudgePolicyEngine
+        from openbias.policy.compiler.runtime import compile_runtime_config_for_evaluator
 
         # Validate each judge evaluator
         all_errors: list[str] = []
+        compiled_judge_configs: list[dict] = []
         for ev in judge_evaluators:
-            engine_config = dict(ev.config)
+            raw_engine_config = dict(ev.config)
             # Inject default model if not explicitly set
-            if not engine_config.get("models") and settings.proxy.default_model:
-                engine_config["models"] = [
+            if not raw_engine_config.get("models") and settings.proxy.default_model:
+                raw_engine_config["models"] = [
                     {"name": "primary", "model": settings.proxy.default_model}
                 ]
+            try:
+                engine_config = asyncio.run(
+                    compile_runtime_config_for_evaluator(
+                        evaluator_name=ev.name,
+                        evaluator_type=ev.type,
+                        evaluator_config=raw_engine_config,
+                        default_model=settings.proxy.default_model,
+                        base_dir=config_path.parent,
+                    )
+                )
+                compiled_judge_configs.append(engine_config)
+            except Exception as e:
+                all_errors.append(str(e))
+                continue
             ev_errors = JudgePolicyEngine.validate_config(engine_config)
             if ev_errors:
                 all_errors.extend(ev_errors)
@@ -370,22 +388,13 @@ def _validate_openbias_config(config_path: Path, raw: dict) -> None:
             raise SystemExit(1)
 
         # Build summary using first judge evaluator
-        first_ev_config = dict(judge_evaluators[0].config)
-        if not first_ev_config.get("models") and settings.proxy.default_model:
-            first_ev_config["models"] = [
-                {"name": "primary", "model": settings.proxy.default_model}
-            ]
+        first_ev_config = compiled_judge_configs[0] if compiled_judge_configs else {}
         models = first_ev_config.get("models", [])
         model_name = models[0]["model"] if models else "(none)"
         fail_action = settings.fail_action
 
-        # Count resolved rules from rules_file
-        from openbias.policy.rules.resolver import resolve_rules_payload
-
-        resolved_rules = resolve_rules_payload(
-            {"rules_file": first_ev_config.get("rules_file")},
-            auto_discover_rules_md=False,
-        )
+        # Count rules from runtime-compiled judge payload.
+        resolved_rules = first_ev_config.get("_compiled_rules", [])
 
         config_panel(
             "\u2713 Valid Configuration",
