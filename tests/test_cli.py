@@ -89,7 +89,6 @@ class TestValidateCommand:
                 "    type: judge\n"
                 "    phase: post_call\n"
                 "    model: gpt-4o-mini\n"
-                "    rules_file: ./rules.md\n"
                 ""
             )
 
@@ -118,7 +117,6 @@ class TestValidateCommand:
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules_file: ./rules.md\n"
                 ""
             )
 
@@ -136,8 +134,8 @@ class TestValidateCommand:
             assert result.exit_code != 0
             assert "No model configured" in combined
 
-    def test_validate_judge_config_missing_rules_file(self):
-        """validate fails when judge rules_file does not exist."""
+    def test_validate_judge_config_missing_rules_md(self):
+        """validate fails when project rules.md is missing."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             Path("openbias.yaml").write_text(
@@ -147,7 +145,6 @@ class TestValidateCommand:
                 "    type: judge\n"
                 "    phase: post_call\n"
                 "    model: gpt-4o-mini\n"
-                "    rules_file: ./missing-rules.md\n"
                 ""
             )
 
@@ -163,7 +160,7 @@ class TestValidateCommand:
 
             combined = result.output + buf.getvalue()
             assert result.exit_code != 0
-            assert "Rules file not found" in combined
+            assert "requires project rules.md" in combined
 
 
 class TestInitCommand:
@@ -224,7 +221,6 @@ class TestServeCommand:
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules_file: ./rules.md\n"
             )
             # Mock start_proxy so we don't actually start a server
             with patch("openbias.proxy.server.start_proxy"):
@@ -244,7 +240,6 @@ class TestServeCommand:
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules_file: ./rules.md\n"
             )
             with patch("openbias.proxy.server.start_proxy"):
                 with patch("openbias.config.settings.Settings.validate"):
@@ -252,14 +247,14 @@ class TestServeCommand:
                         "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
                         new_callable=AsyncMock,
                     ) as mock_compile:
-                        mock_compile.return_value = {"rules_file": "./rules.md"}
+                        mock_compile.return_value = {"_compiled_rules": ["Be professional"]}
                         result = runner.invoke(main, ["serve"])
 
             assert result.exit_code == 0
             assert mock_compile.called
 
     def test_serve_compiles_rules_from_rules_md(self):
-        """serve with rules_file pointing to rules.md should compile at startup."""
+        """serve compiles evaluator config from project rules.md at startup."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             Path("rules.md").write_text("- Be helpful\n- No secrets\n")
@@ -269,7 +264,6 @@ class TestServeCommand:
                 "  - name: behavior\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules_file: ./rules.md\n"
             )
             with patch("openbias.proxy.server.start_proxy"):
                 with patch("openbias.config.settings.Settings.validate"):
@@ -277,7 +271,7 @@ class TestServeCommand:
                         "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
                         new_callable=AsyncMock,
                     ) as mock_compile:
-                        mock_compile.return_value = {"rules_file": "./rules.md"}
+                        mock_compile.return_value = {"_compiled_rules": ["Be helpful", "No secrets"]}
                         result = runner.invoke(main, ["serve"])
 
             assert result.exit_code == 0
@@ -289,19 +283,16 @@ class TestServeCommand:
         """serve compiles rules for each evaluator in sequence."""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            Path("rules-pre.md").write_text("- No harmful content\n")
-            Path("rules-post.md").write_text("- Be professional\n")
+            Path("rules.md").write_text("- No harmful content\n- Be professional\n")
             Path("openbias.yaml").write_text(
                 "model: gpt-4o-mini\n"
                 "evaluators:\n"
                 "  - name: pre-screen\n"
                 "    type: judge\n"
                 "    phase: pre_call\n"
-                "    rules_file: ./rules-pre.md\n"
                 "  - name: post-eval\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules_file: ./rules-post.md\n"
             )
             with patch("openbias.proxy.server.start_proxy"):
                 with patch("openbias.config.settings.Settings.validate"):
@@ -309,7 +300,7 @@ class TestServeCommand:
                         "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
                         new_callable=AsyncMock,
                     ) as mock_compile:
-                        mock_compile.return_value = {"rules_file": "./compiled.md"}
+                        mock_compile.return_value = {"_compiled_rules": ["No harmful content"]}
                         result = runner.invoke(main, ["serve"])
 
             assert result.exit_code == 0
@@ -326,7 +317,6 @@ class TestServeCommand:
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules_file: ./rules.md\n"
             )
             with patch("openbias.proxy.server.start_proxy"):
                 with patch("openbias.config.settings.Settings.validate"):
@@ -398,7 +388,6 @@ class TestTriggerCommand:
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules_file: ./rules.md\n"
                 ""
             )
 
@@ -451,7 +440,6 @@ class TestTriggerCommand:
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules_file: ./rules.md\n"
                 ""
             )
 
@@ -503,7 +491,6 @@ class TestTriggerCommand:
                 "  - name: safety\n"
                 "    type: judge\n"
                 "    phase: post_call\n"
-                "    rules_file: ./rules.md\n"
                 ""
             )
 
