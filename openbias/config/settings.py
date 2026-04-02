@@ -531,7 +531,6 @@ class Settings(BaseSettings):
                 "type": "judge",
                 "enabled": True,
                 "config": {},
-                "config_path": None,
             }
 
         evaluator = self.evaluators[0]
@@ -544,7 +543,6 @@ class Settings(BaseSettings):
             "type": evaluator.type,
             "enabled": True,
             "config": config,
-            "config_path": config.get("config_path"),
         }
 
     def get_model_list(self) -> list[dict]:
@@ -589,11 +587,6 @@ class Settings(BaseSettings):
                 for key in YamlConfigSource._DISALLOWED_EVALUATOR_KEYS:
                     if key in evaluator.config:
                         raise YamlConfigSource._rules_contract_error(key)
-
-            evaluator = self.evaluators[0]
-            config_path = evaluator.config.get("config_path")
-            if config_path and not Path(config_path).exists():
-                raise ValueError(f"Policy configuration file not found: {config_path}")
 
             # FSM engines don't require API keys
             if all(ev.type == "fsm" for ev in self.evaluators):

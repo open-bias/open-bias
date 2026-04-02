@@ -1,8 +1,6 @@
 
 import os
-from pathlib import Path
 import pytest
-import yaml
 from openbias.config.settings import Settings
 
 class TestConfigValidation:
@@ -16,27 +14,6 @@ class TestConfigValidation:
             
         with pytest.raises(Exception, match="while scanning a quoted scalar"):
             Settings(_config_path=str(config_path))
-
-    @pytest.mark.skip(reason="TODO (Task 2): validate() to be reimplemented via evaluators list")
-    def test_missing_policy_file_raises_error(self, tmp_path):
-        """Test that referencing a non-existent policy file raises ValueError during validation."""
-        config_path = tmp_path / "config.yaml"
-        # Correct structure for config_path
-        config = {
-            "engine": "nemo",
-            "nemo": {
-                "config_path": "non_existent.yaml"
-            }
-        }
-
-        with open(config_path, "w") as f:
-            yaml.dump(config, f)
-
-        # Disable .env loading to prevent pollution
-        settings = Settings(_config_path=str(config_path), _env_file=None)
-
-        with pytest.raises(ValueError, match="Policy configuration file not found"):
-            settings.validate()
 
     def test_missing_api_key_raises_error(self, tmp_path, monkeypatch):
         """Test that missing API key for default model raises ValueError."""
@@ -88,7 +65,6 @@ class TestConfigValidation:
         # Should not raise
         settings.validate()
 
-    @pytest.mark.skip(reason="TODO (Task 2): FSM engine bypass in validate() to be reimplemented via evaluators list")
     def test_fsm_engine_passes_without_api_keys(self, monkeypatch):
         """FSM engine is local-only and must not require any LLM API keys."""
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -96,7 +72,12 @@ class TestConfigValidation:
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
-        settings = Settings(_env_file=None)
+        settings = Settings(
+            evaluators=[
+                {"name": "workflow", "type": "fsm", "phase": "post_call"},
+            ],
+            _env_file=None,
+        )
 
         # Should not raise even with no keys or model
         settings.validate()

@@ -243,10 +243,12 @@ def start_proxy(settings: Settings | None = None) -> None:
     """
     resolved_settings = settings or Settings()
     policy_config = resolved_settings.get_policy_config()
+    engine_config = policy_config.get("config", {})
+    runtime_path = engine_config.get("config_path")
     logger.info(f"Default model: {resolved_settings.proxy.default_model}")
     logger.info(
         f"Policy engine: {policy_config.get('type')}"
-        f" (config_path={policy_config.get('config_path')})"
+        f" (config_path={runtime_path})"
     )
 
     proxy = Proxy(resolved_settings)

@@ -373,7 +373,7 @@ class TestGetPolicyConfig:
         assert result["type"] == "judge"
         assert result["enabled"] is True
         assert result["config"] == {}
-        assert result["config_path"] is None
+        assert "config_path" not in result
 
     def test_judge_evaluator_no_models_injects_proxy_model(self):
         """When judge evaluator has no models, inject from proxy.default_model."""
@@ -426,7 +426,7 @@ class TestGetPolicyConfig:
         assert result["type"] == "fsm"
         assert "models" not in result["config"]
         assert result["config"]["max_steps"] == 10
-        assert result["config_path"] is None
+        assert "config_path" not in result
 
 
 # =========================================================================
