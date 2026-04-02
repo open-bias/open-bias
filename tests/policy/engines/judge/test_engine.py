@@ -827,16 +827,31 @@ class TestValidateConfig:
         })
         assert any("does_not_exist" in e for e in errors)
 
-    def test_validate_config_with_rubric_shorthand(self):
+    def test_validate_config_with_rules_shorthand(self):
+        """Canonical `rules` key is mapped to inline_rules for validation."""
         errors = JudgePolicyEngine.validate_config({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "rubric": "agent_behavior",
+            "rules": ["Be professional", "No PII"],
         })
         assert errors == []
 
-    def test_validate_config_with_policies_shorthand(self):
+    def test_validate_config_with_rules_string(self):
+        """Single string `rules` is also accepted via canonical shorthand."""
         errors = JudgePolicyEngine.validate_config({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "rules": "Be professional and courteous",
+        })
+        assert errors == []
+
+    def test_deprecated_keys_ignored_by_validate_config(self):
+        """Deprecated keys (rubric, policies) are not processed by engine validate_config.
+
+        These are blocked at the YAML config layer, not the engine level.
+        Passing them to validate_config has no effect — they are simply ignored.
+        """
+        errors = JudgePolicyEngine.validate_config({
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "rubric": "agent_behavior",
             "policies": ["Be safe"],
         })
         assert errors == []
