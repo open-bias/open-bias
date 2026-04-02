@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from openbias.policy.engines.judge.engine import JudgePolicyEngine
@@ -9,10 +7,11 @@ from openbias.policy.engines.judge.models import JudgeScore, JudgeVerdict, Verdi
 from openbias.policy.protocols import EvaluationStatus
 
 
-def _config(rules_file: Path) -> dict:
+def _config(rules: list[str]) -> dict:
     return {
         "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-        "rules_file": str(rules_file),
+        "_compiled_rules": rules,
+        "_rules_source": "rules.md",
     }
 
 
@@ -37,36 +36,31 @@ def _verdict(action: VerdictAction, failed: list[str] | None = None) -> JudgeVer
 
 
 @pytest.mark.asyncio
-async def test_initialize_loads_rules_from_rules_file(tmp_path: Path):
-    rules_file = tmp_path / "rules.md"
-    rules_file.write_text("- Never reveal secrets\n- Stay on task\n", encoding="utf-8")
-
+async def test_initialize_loads_rules_from_compiled_rules():
     engine = JudgePolicyEngine()
-    await engine.initialize(_config(rules_file))
+    await engine.initialize(_config(["Never reveal secrets", "Stay on task"]))
 
     assert engine._rules == ["Never reveal secrets", "Stay on task"]
+    assert engine._rules_source == "rules.md"
 
 
 @pytest.mark.asyncio
-async def test_initialize_requires_rules_file():
+async def test_initialize_requires_compiled_rules_when_rules_file_missing():
     engine = JudgePolicyEngine()
-    with pytest.raises(ValueError, match="rules_file"):
+    with pytest.raises(ValueError, match="compiled rules"):
         await engine.initialize({"models": [{"name": "primary", "model": "gpt-4o-mini"}]})
 
 
-def test_validate_config_requires_rules_file_and_model():
+def test_validate_config_requires_compiled_rules_and_model():
     errors = JudgePolicyEngine.validate_config({})
     assert any("No model configured" in e for e in errors)
-    assert any("requires `rules_file`" in e for e in errors)
+    assert any("requires compiled rules" in e for e in errors)
 
 
 @pytest.mark.asyncio
-async def test_evaluate_response_maps_failed_rule_to_violation(tmp_path: Path):
-    rules_file = tmp_path / "rules.md"
-    rules_file.write_text("- Never reveal secrets\n- Stay on task\n", encoding="utf-8")
-
+async def test_evaluate_response_maps_failed_rule_to_violation():
     engine = JudgePolicyEngine()
-    await engine.initialize(_config(rules_file))
+    await engine.initialize(_config(["Never reveal secrets", "Stay on task"]))
 
     async def _mock_eval(*args, **kwargs):
         return _verdict(VerdictAction.INTERVENE, failed=["Never reveal secrets"])

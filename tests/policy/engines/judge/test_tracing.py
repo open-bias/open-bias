@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from openbias.policy.engines.judge.engine import JudgePolicyEngine
@@ -17,14 +15,13 @@ class _TracerSpy:
 
 
 @pytest.mark.asyncio
-async def test_trace_verdict_uses_rules_file_rubric_name(tmp_path: Path):
-    rules_file = tmp_path / "rules.md"
-    rules_file.write_text("- Rule A\n", encoding="utf-8")
+async def test_trace_verdict_uses_compiled_rules_rubric_name():
     engine = JudgePolicyEngine()
     await engine.initialize(
         {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
-            "rules_file": str(rules_file),
+            "_compiled_rules": ["Rule A"],
+            "_rules_source": "rules.md",
         }
     )
 
@@ -49,4 +46,4 @@ async def test_trace_verdict_uses_rules_file_rubric_name(tmp_path: Path):
     )
 
     assert tracer.calls
-    assert tracer.calls[0]["rubric_name"] == "rules_file"
+    assert tracer.calls[0]["rubric_name"] == "rules.md"
