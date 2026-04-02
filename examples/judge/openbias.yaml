@@ -1,4 +1,4 @@
-# Judge evaluator config — evaluates every response against rules_file.
+# Judge evaluator config — evaluates every response against project rules.md.
 #
 # Under the hood:
 # - The judge LLM (separate from your agent model) receives conversation history
@@ -12,4 +12,4 @@ fail_action: intervene        # intervene, block, or shadow on violation
 evaluators:
   - name: rules-judge
     type: judge
-    rules_file: ./rules.md
+    phase: post_call
