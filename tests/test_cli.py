@@ -347,7 +347,7 @@ class TestServeCommand:
                         "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
                         new_callable=AsyncMock,
                     ) as mock_compile:
-                        mock_compile.return_value = {"rules_file": "./rules.md"}
+                        mock_compile.return_value = {"_compiled_rules": ["Auto rule one", "Auto rule two"]}
                         result = runner.invoke(main, ["serve"])
 
             assert result.exit_code == 0

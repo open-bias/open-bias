@@ -47,14 +47,38 @@ async def test_initialize_loads_rules_from_compiled_rules():
 @pytest.mark.asyncio
 async def test_initialize_requires_compiled_rules_when_rules_file_missing():
     engine = JudgePolicyEngine()
-    with pytest.raises(ValueError, match="compiled rules"):
+    with pytest.raises(ValueError, match="_compiled_rules"):
         await engine.initialize({"models": [{"name": "primary", "model": "gpt-4o-mini"}]})
 
 
 def test_validate_config_requires_compiled_rules_and_model():
     errors = JudgePolicyEngine.validate_config({})
     assert any("No model configured" in e for e in errors)
-    assert any("requires compiled rules" in e for e in errors)
+    assert any("_compiled_rules" in e for e in errors)
+
+
+@pytest.mark.asyncio
+async def test_initialize_rejects_rules_file_fallback():
+    engine = JudgePolicyEngine()
+    with pytest.raises(ValueError, match="no longer accepts `rules_file`"):
+        await engine.initialize(
+            {
+                "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+                "_compiled_rules": ["Stay safe"],
+                "rules_file": "./rules.md",
+            }
+        )
+
+
+def test_validate_config_rejects_rules_file_fallback():
+    errors = JudgePolicyEngine.validate_config(
+        {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "_compiled_rules": ["Stay safe"],
+            "rules_file": "./rules.md",
+        }
+    )
+    assert any("no longer accepts `rules_file`" in e for e in errors)
 
 
 @pytest.mark.asyncio

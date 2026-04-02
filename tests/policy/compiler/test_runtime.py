@@ -34,6 +34,41 @@ async def test_judge_compiles_from_project_rules_md_only(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_judge_uses_engine_compiler_and_merges_result(tmp_path: Path):
+    """Judge follows shared runtime compiler flow via get_compiler()."""
+    (tmp_path / "rules.md").write_text("- Guard secrets\n- Stay on task\n", encoding="utf-8")
+    fake_result = CompilationResult(
+        success=True,
+        config={"_compiled_rules": ["Guard secrets", "Stay on task"], "_rules_source": "rules.md"},
+    )
+
+    mock_compiler = AsyncMock()
+    mock_compiler.compile = AsyncMock(return_value=fake_result)
+
+    mock_engine_cls = MagicMock()
+    mock_engine_cls.return_value.get_compiler.return_value = mock_compiler
+
+    with patch(
+        "openbias.policy.compiler.runtime.PolicyEngineRegistry.get",
+        return_value=mock_engine_cls,
+    ):
+        result = await compile_runtime_config_for_evaluator(
+            evaluator_name="behavior",
+            evaluator_type="judge",
+            evaluator_config={},
+            default_model="gpt-4o-mini",
+            base_dir=tmp_path,
+        )
+
+    assert result["_compiled_rules"] == ["Guard secrets", "Stay on task"]
+    assert result["_rules_source"] == "rules.md"
+    mock_compiler.compile.assert_awaited_once_with(
+        "Guard secrets\nStay on task",
+        context=None,
+    )
+
+
+@pytest.mark.asyncio
 async def test_judge_without_project_rules_md_fails(tmp_path: Path):
     """Judge fails fast when project rules.md is missing."""
     with pytest.raises(ValueError, match="requires project rules.md"):
