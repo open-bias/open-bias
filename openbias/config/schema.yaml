@@ -70,8 +70,7 @@ log_level: INFO            # default: INFO
 #   phase — when to run: pre_call | post_call (default: "post_call")
 #
 # All other keys are collected into the evaluator's `config` dict.
-# Canonical rule source keys are:
-#   rules: [...] | "single rule"   → inline rules content
+# Canonical rule source key is:
 #   rules_file: ./rules.md         → external markdown/plaintext rules source
 #
 
@@ -80,23 +79,19 @@ evaluators:
   # --- Judge evaluator (type: judge) ---
   #
   # Evaluates responses against rules using a separate LLM as judge.
+  # Judge uses turn-level binary evaluation only:
+  # if any rule fails, evaluation is marked as a violation.
   #
   - name: safety-screen
     type: judge
     phase: pre_call
-    # Canonical: inline rules
-    rules:
-      - "No harmful content"
-      - "No PII leaks"
-    # Additional judge config keys (passed through to config dict):
-    # rules_file: ./rules.md       # optional markdown/plaintext rules source
-    # custom_rubrics_path: ./rubrics/  # path to custom rubric YAML files
-    # verbose: true                # log raw judge prompt + response
+    # Required for judge:
+    rules_file: ./rules.md
 
   - name: behavior-eval
     type: judge
     phase: post_call
-    # Optional free-form external rules
+    # Required for judge:
     rules_file: ./rules.md
 
   # --- FSM evaluator (type: fsm) ---

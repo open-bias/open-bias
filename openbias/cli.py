@@ -379,23 +379,13 @@ def _validate_openbias_config(config_path: Path, raw: dict) -> None:
         model_name = models[0]["model"] if models else "(none)"
         fail_action = settings.fail_action
 
-        # Count rubrics and criteria
-        from openbias.policy.engines.judge.rubrics import RubricRegistry
+        # Count resolved rules from rules_file
+        from openbias.policy.rules.resolver import resolve_rules_payload
 
-        registry = RubricRegistry()
-        inline_rules = first_ev_config.get("inline_rules")
-        if inline_rules is not None:
-            temp = JudgePolicyEngine()
-            temp._registry = registry
-            temp._load_inline_rules(inline_rules)
-            registry = temp._registry
-
-        rubric_names = registry.list_rubrics()
-        total_criteria = 0
-        for name in rubric_names:
-            rubric = registry.get(name)
-            if rubric is not None:
-                total_criteria += len(rubric.criteria)
+        resolved_rules = resolve_rules_payload(
+            {"rules_file": first_ev_config.get("rules_file")},
+            auto_discover_rules_md=False,
+        )
 
         config_panel(
             "\u2713 Valid Configuration",
@@ -403,8 +393,7 @@ def _validate_openbias_config(config_path: Path, raw: dict) -> None:
                 "Engine": "judge",
                 "Model": model_name,
                 "Fail Action": fail_action,
-                "Rubrics": str(len(rubric_names)),
-                "Criteria": str(total_criteria),
+                "Rules": str(len(resolved_rules)),
             },
         )
     else:
