@@ -150,7 +150,8 @@ class LLMCompiler(LLMPolicyCompiler):
     """Compiler that converts normalized rules text to a WorkflowDefinition.
 
     Produces the same WorkflowDefinition schema used by the FSM engine,
-    allowing the LLM engine to accept rules/rules_file just like other engines.
+    which the runtime compiler injects into the LLM engine's internal
+    ``workflow`` config.
     """
 
     SYSTEM_PROMPT = (

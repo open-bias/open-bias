@@ -19,7 +19,6 @@ async def compile_runtime_config_for_evaluator(
 ) -> dict[str, Any]:
     """Compile canonical rules inputs into engine-native runtime config."""
     normalized_rules = resolve_rules_payload(
-        {},
         base_dir=base_dir,
         auto_discover_rules_md=True,
     )

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
 
 _BULLET_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)(.+)$")
 _HEADING_RE = re.compile(r"^\s*#{1,6}\s*(.+?)\s*$")
@@ -61,7 +60,6 @@ def _segment_freeform_text(raw_text: str) -> list[str]:
 
 
 def resolve_rules_payload(
-    evaluator_config: dict[str, Any],
     *,
     base_dir: Path | None = None,
     auto_discover_rules_md: bool = True,
