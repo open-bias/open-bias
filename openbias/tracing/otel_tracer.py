@@ -261,19 +261,6 @@ class Tracer:
         except Exception:
             return str(obj)
 
-    def _to_timestamp_ns(self, t: Any) -> int | None:
-        """Convert various time formats to nanoseconds for OTEL."""
-        if t is None:
-            return None
-        if isinstance(t, (int, float)):
-            return int(t * 1e9)
-        if hasattr(t, "timestamp"):  # datetime or similar
-            try:
-                return int(t.timestamp() * 1e9)
-            except Exception:
-                return None
-        return None
-
     @contextmanager
     def trace_block(
         self,
@@ -284,6 +271,8 @@ class Tracer:
         metadata: dict[str, Any] | None = None,
         parent_span: Any | None = None,
         links: list[Link] | None = None,
+        request_id: str | None = None,
+        phase_order: int | None = None,
     ):
         """
         Context manager to trace a block of code.
@@ -297,6 +286,8 @@ class Tracer:
             metadata: Additional metadata for the span
             parent_span: Optional explicit parent span to nest under
             links: Optional OTEL links to correlate async work
+            request_id: Optional request ID to attach for cross-span correlation
+            phase_order: Optional integer for deterministic phase ordering in UIs
         """
         if not self._enabled or not self._tracer:
             yield None
@@ -311,6 +302,10 @@ class Tracer:
             "openbias.session_id": session_id,
             **(attributes or {}),
         }
+        if request_id is not None:
+            span_attrs["openbias.request_id"] = request_id
+        if phase_order is not None:
+            span_attrs["openbias.phase.order"] = phase_order
 
         with self._tracer.start_as_current_span(
             name,
@@ -429,14 +424,17 @@ class Tracer:
         response_model: str | None = None,
         usage: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
-        latency_ms: float | None = None,
         parent_span: Any | None = None,
-        start_time: Any | None = None,
-        end_time: Any | None = None,
+        request_id: str | None = None,
+        phase_order: int | None = None,
     ) -> None:
         """
         Log an LLM call as an OTEL span with GenAI semantic conventions.
-        
+
+        Span start/end use wall-clock time (not backdated) so that
+        Langfuse renders pre → llm → post in execution order.
+        LLM latency is recorded in metadata by the caller.
+
         Uses OpenTelemetry GenAI semantic conventions for Langfuse compatibility:
         - gen_ai.* attributes for model/usage info
         - input.value / output.value for content
@@ -459,15 +457,15 @@ class Tracer:
             "gen_ai.request.model": model,
             "gen_ai.response.model": response_model or model,
         }
-
-        start_time_ns = self._to_timestamp_ns(start_time)
-        end_time_ns = self._to_timestamp_ns(end_time)
+        if request_id is not None:
+            span_attrs["openbias.request_id"] = request_id
+        if phase_order is not None:
+            span_attrs["openbias.phase.order"] = phase_order
 
         span = self._tracer.start_span(
             "llm-call",
             context=parent_ctx,
             attributes=span_attrs,
-            start_time=start_time_ns,
         )
 
         with trace.use_span(span, end_on_exit=False) as current_span:
@@ -510,7 +508,7 @@ class Tracer:
                 for key, value in metadata.items():
                     span.set_attribute(f"openbias.metadata.{key}", str(value))
 
-            span.end(end_time=end_time_ns)
+            span.end()
             logger.info(f"Logged LLM call for session {session_id} (model={model})")
 
     def _annotate_judge_details(

@@ -195,3 +195,116 @@ class TestAsyncEvalSpanNesting:
         )
 
         assert exporter.get_finished_spans() == []
+
+
+class TestPhaseSpanOrdering:
+    """Verify phase spans carry request_id and phase_order attributes for stable UI ordering."""
+
+    def test_phase_spans_have_sequential_order(self, real_tracer):
+        """pre_call(1) → llm-call(2) → post_call(3) ordering via phase_order attribute."""
+        tracer, exporter = real_tracer
+        session_id = "test-ordering"
+        request_id = "req-order-1"
+
+        # Simulate the three sync phases with request_id and phase_order
+        request_span = tracer.start_request_span(session_id, request_id)
+
+        with tracer.trace_block(
+            "interceptor_pre_call",
+            session_id,
+            parent_span=request_span,
+            request_id=request_id,
+            phase_order=1,
+        ):
+            pass
+
+        tracer.log_llm_call(
+            session_id=session_id,
+            model="test-model",
+            messages=[{"role": "user", "content": "hello"}],
+            parent_span=request_span,
+            request_id=request_id,
+            phase_order=2,
+        )
+
+        with tracer.trace_block(
+            "interceptor_post_call",
+            session_id,
+            parent_span=request_span,
+            request_id=request_id,
+            phase_order=3,
+        ):
+            pass
+
+        tracer.end_request_span(request_span)
+
+        spans = {s.name: s for s in exporter.get_finished_spans()}
+
+        # All three phase spans must exist
+        assert "interceptor_pre_call" in spans
+        assert "llm-call" in spans
+        assert "interceptor_post_call" in spans
+
+        # Verify phase_order attributes
+        assert spans["interceptor_pre_call"].attributes["openbias.phase.order"] == 1
+        assert spans["llm-call"].attributes["openbias.phase.order"] == 2
+        assert spans["interceptor_post_call"].attributes["openbias.phase.order"] == 3
+
+        # Verify request_id is consistent across all phase spans
+        for name in ("interceptor_pre_call", "llm-call", "interceptor_post_call"):
+            assert spans[name].attributes["openbias.request_id"] == request_id
+
+    def test_all_phase_spans_share_request_parent(self, real_tracer):
+        """All three phase spans must be children of the same request span."""
+        tracer, exporter = real_tracer
+        session_id = "test-parent"
+        request_id = "req-parent-1"
+
+        request_span = tracer.start_request_span(session_id, request_id)
+
+        with tracer.trace_block(
+            "interceptor_pre_call", session_id, parent_span=request_span,
+            request_id=request_id, phase_order=1,
+        ):
+            pass
+
+        tracer.log_llm_call(
+            session_id=session_id,
+            model="m",
+            messages=[],
+            parent_span=request_span,
+            request_id=request_id,
+            phase_order=2,
+        )
+
+        with tracer.trace_block(
+            "interceptor_post_call", session_id, parent_span=request_span,
+            request_id=request_id, phase_order=3,
+        ):
+            pass
+
+        tracer.end_request_span(request_span)
+
+        spans = {s.name: s for s in exporter.get_finished_spans()}
+        request = spans["openbias-request"]
+        request_span_id = request.context.span_id
+
+        for phase_name in ("interceptor_pre_call", "llm-call", "interceptor_post_call"):
+            span = spans[phase_name]
+            assert span.parent is not None, f"{phase_name} has no parent"
+            assert span.parent.span_id == request_span_id, (
+                f"{phase_name} parent mismatch: expected {request_span_id}, "
+                f"got {span.parent.span_id}"
+            )
+
+    def test_phase_order_absent_when_not_provided(self, real_tracer):
+        """trace_block without phase_order should not set the attribute."""
+        tracer, exporter = real_tracer
+        session_id = "test-no-order"
+
+        with tracer.trace_block("plain_span", session_id):
+            pass
+
+        spans = exporter.get_finished_spans()
+        assert len(spans) == 1
+        assert "openbias.phase.order" not in spans[0].attributes

@@ -1529,3 +1529,123 @@ class TestAsyncEvaluatorExecutionSpanFactory:
         )
 
 
+# ---------------------------------------------------------------------------
+# Span ordering & parent fallback tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_post_call_creates_request_span_when_contextvar_lost(
+    callback, mock_api_key
+):
+    """When request_span_var is None in post_call, a new request span is created as fallback."""
+    from openbias.core.interceptor.types import InterceptionResult
+
+    request_id = "req-fallback-1"
+    data = {
+        "messages": [{"role": "user", "content": "hi"}],
+        "model": "gpt-4",
+        "metadata": {
+            "session_id": "sess-fb",
+            "_openbias_request_id": request_id,
+            "_openbias_llm_start_time": 1000.0,
+        },
+    }
+    response = MagicMock()
+    response.choices = []
+
+    # Simulate lost ContextVar
+    request_span_var.set(None)
+
+    mock_tracer = MagicMock()
+    mock_fallback_span = MagicMock()
+    mock_tracer.start_request_span.return_value = mock_fallback_span
+
+    @contextmanager
+    def fake_trace_block(*args, **kwargs):
+        yield MagicMock()
+
+    mock_tracer.trace_block = MagicMock(side_effect=fake_trace_block)
+    callback._tracer = mock_tracer
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(allowed=True)
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+
+    await callback.async_post_call_success_hook(data, mock_api_key, response)
+
+    # Fallback span should have been created
+    mock_tracer.start_request_span.assert_called_once_with("sess-fb", request_id)
+
+    # The llm-call should use the fallback span as parent
+    mock_tracer.log_llm_call.assert_called_once()
+    llm_call_kwargs = mock_tracer.log_llm_call.call_args[1]
+    assert llm_call_kwargs["parent_span"] is mock_fallback_span
+    assert llm_call_kwargs["request_id"] == request_id
+    assert llm_call_kwargs["phase_order"] == 2
+
+
+@pytest.mark.asyncio
+async def test_phase_spans_pass_request_id_and_order(callback, mock_api_key, mock_cache):
+    """Pre-call and post-call trace blocks receive request_id and phase_order."""
+    from openbias.core.interceptor.types import InterceptionResult
+
+    data = {"messages": [{"role": "user", "content": "test"}], "model": "gpt-4"}
+    response = MagicMock()
+    response.choices = []
+
+    mock_tracer = MagicMock()
+    mock_request_span = MagicMock()
+    mock_tracer.start_request_span.return_value = mock_request_span
+
+    captured_trace_block_calls = []
+
+    @contextmanager
+    def capture_trace_block(*args, **kwargs):
+        captured_trace_block_calls.append({"args": args, "kwargs": kwargs})
+        yield MagicMock()
+
+    mock_tracer.trace_block = MagicMock(side_effect=capture_trace_block)
+    callback._tracer = mock_tracer
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_pre_call = AsyncMock(
+        return_value=InterceptionResult(allowed=True)
+    )
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(allowed=True)
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+
+    # Run pre_call
+    result = await callback.async_pre_call_hook(
+        mock_api_key, mock_cache, data, "completion"
+    )
+
+    # Extract request_id from metadata
+    request_id = result.get("metadata", {}).get("_openbias_request_id")
+    assert request_id  # Should be set
+
+    # Verify pre_call trace_block received request_id and phase_order=1
+    pre_call = captured_trace_block_calls[0]
+    assert pre_call["args"][0] == "interceptor_pre_call"
+    assert pre_call["kwargs"]["request_id"] == request_id
+    assert pre_call["kwargs"]["phase_order"] == 1
+
+    # Run post_call
+    captured_trace_block_calls.clear()
+    await callback.async_post_call_success_hook(result, mock_api_key, response)
+
+    # Verify llm-call received request_id and phase_order=2
+    mock_tracer.log_llm_call.assert_called_once()
+    llm_kwargs = mock_tracer.log_llm_call.call_args[1]
+    assert llm_kwargs["request_id"] == request_id
+    assert llm_kwargs["phase_order"] == 2
+
+    # Verify post_call trace_block received request_id and phase_order=3
+    post_call = captured_trace_block_calls[0]
+    assert post_call["args"][0] == "interceptor_post_call"
+    assert post_call["kwargs"]["request_id"] == request_id
+    assert post_call["kwargs"]["phase_order"] == 3

@@ -551,6 +551,8 @@ class Callback(CustomLogger):
                         "model": data.get("model", "unknown"),
                     },
                     parent_span=request_span,
+                    request_id=request_id,
+                    phase_order=1,
                 )
             else:
                 cm = nullcontext()
@@ -644,8 +646,13 @@ class Callback(CustomLogger):
         llm_end_time = time.time()
         llm_start_time = data.get("metadata", {}).get("_openbias_llm_start_time")
 
-        # Retrieve per-request grouping span created in pre_call
+        # Retrieve per-request grouping span created in pre_call.
+        # Fall back to creating a new request span if the ContextVar was lost
+        # (e.g. across async task boundaries), so phase spans still share a parent.
         request_span = request_span_var.get()
+        if request_span is None and self.tracer and request_id:
+            request_span = self.tracer.start_request_span(session_id, request_id)
+            request_span_var.set(request_span)
 
         interceptor = await self._get_interceptor()
 
@@ -659,6 +666,25 @@ class Callback(CustomLogger):
 
                 usage_info = extract_usage_info(response)
 
+                # Record LLM latency as metadata instead of backdating span
+                # timestamps, so span start/end follow hook execution order
+                # and Langfuse renders pre→llm→post correctly.
+                llm_latency_ms = (
+                    (llm_end_time - llm_start_time) * 1000
+                    if llm_start_time is not None
+                    else None
+                )
+                llm_metadata = {
+                    "has_interceptor": interceptor is not None,
+                    "hook": "post_call_success",
+                }
+                if llm_latency_ms is not None:
+                    llm_metadata["llm_latency_ms"] = round(llm_latency_ms, 2)
+                if llm_start_time is not None:
+                    llm_metadata["llm_start_time"] = llm_start_time
+                if llm_end_time is not None:
+                    llm_metadata["llm_end_time"] = llm_end_time
+
                 self.tracer.log_llm_call(
                     session_id=session_id,
                     model=data.get("model", "unknown"),
@@ -666,13 +692,10 @@ class Callback(CustomLogger):
                     response_content=response_content,
                     response_model=getattr(response, "model", None),
                     usage=usage_info,
-                    metadata={
-                        "has_interceptor": interceptor is not None,
-                        "hook": "post_call_success",
-                    },
-                    start_time=llm_start_time,
-                    end_time=llm_end_time,
+                    metadata=llm_metadata,
                     parent_span=request_span,
+                    request_id=request_id,
+                    phase_order=2,
                 )
                 data.setdefault("metadata", {})["_openbias_traced"] = True
 
@@ -693,6 +716,8 @@ class Callback(CustomLogger):
                             "model": data.get("model", "unknown"),
                         },
                         parent_span=request_span,
+                        request_id=request_id,
+                        phase_order=3,
                     )
                 else:
                     cm = nullcontext()
