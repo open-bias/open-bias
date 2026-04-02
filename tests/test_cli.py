@@ -641,6 +641,53 @@ class TestEvalCommand:
             mock_apply.assert_called_once()
             assert mock_apply.call_args.args[1] == "llm"
 
+    def test_eval_ignores_legacy_top_level_engine_for_mock_provider(self):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Stay polite\n")
+            Path("scenario.yaml").write_text("name: smoke\nconversation: []\n")
+            Path("openbias.yaml").write_text(
+                "model: gpt-4o-mini\n"
+                "engine: judge\n"
+                "evaluators:\n"
+                "  - name: synthesis\n"
+                "    type: llm\n"
+                "    phase: post_call\n"
+                "eval:\n"
+                "  scenarios:\n"
+                "    - scenario.yaml\n"
+                "  mock_provider:\n"
+                "    responses:\n"
+                "      - '{\"ok\": true}'\n"
+            )
+
+            mock_engine = AsyncMock()
+            mock_engine.shutdown = AsyncMock()
+
+            with patch(
+                "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
+                new_callable=AsyncMock,
+            ) as mock_compile:
+                mock_compile.return_value = {"steps": [], "llm_model": "gpt-4o-mini"}
+                with patch("openbias.cli._compile_rules"):
+                    with patch(
+                        "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
+                        new=AsyncMock(return_value=mock_engine),
+                    ) as mock_create:
+                        with patch(
+                            "openbias.eval.EvalRunner.run_suite",
+                            new=AsyncMock(return_value=[]),
+                        ):
+                            with patch("openbias.eval.print_report"):
+                                with patch("openbias.eval.mocks.apply_mock_provider") as mock_apply:
+                                    result = runner.invoke(main, ["eval", "--config", "openbias.yaml"])
+
+            assert result.exit_code == 0
+            mock_create.assert_awaited_once()
+            assert mock_create.await_args.args[0] == "llm"
+            mock_apply.assert_called_once()
+            assert mock_apply.call_args.args[1] == "llm"
+
 
 class TestHelpOutput:
     def test_main_help(self):

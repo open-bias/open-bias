@@ -6,6 +6,7 @@ Unlike the mock-based tests, this proves the OTEL SDK stores judge
 attributes/events directly on the evaluator span without extra judge-only spans.
 """
 
+import json
 import threading
 
 import pytest
@@ -152,6 +153,9 @@ class TestAsyncEvalSpanNesting:
         assert phase.attributes["openbias.judge.action"] == "intervene"
         assert phase.attributes["openbias.judge.composite_score"] == 0.72
         assert phase.attributes["openbias.judge.model"] == "judge-v2"
+        output_value = json.loads(phase.attributes["output.value"])
+        assert output_value["rules_source"] == "compiled_rules"
+        assert "rubric" not in phase.attributes["output.value"]
 
     def test_no_orphan_spans_outside_phase(self, real_tracer):
         """All spans share the same trace ID when properly nested."""
