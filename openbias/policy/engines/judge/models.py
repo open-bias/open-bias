@@ -1,9 +1,4 @@
-"""
-Type definitions for the LLM-as-a-Judge Policy Engine.
-
-Contains all enums and dataclasses used by the judge engine
-for rules-based evaluation, scoring, and verdict generation.
-"""
+"""Type definitions for the simplified judge engine."""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -11,96 +6,43 @@ from enum import Enum
 from typing import Any
 
 
-class EvaluationType(Enum):
-    """How the judge evaluates responses."""
-    POINTWISE = "pointwise"        # Score a single response
-    PAIRWISE = "pairwise"          # Compare two responses
-    REFERENCE = "reference"        # Score against a reference answer
-
-
 class EvaluationScope(Enum):
-    """What gets judged."""
-    TURN = "turn"                  # Latest assistant response only
-    CONVERSATION = "conversation"  # Entire conversation trajectory
+    """Judge engine currently evaluates only at turn scope."""
 
-
-class ScoreScale(Enum):
-    """Scoring scale for evaluation criteria."""
-    BINARY = "binary"              # 0 or 1
-    LIKERT_3 = "likert_3"          # 1-3
-    LIKERT_5 = "likert_5"          # 1-5
-
-    @property
-    def max_score(self) -> int:
-        return {
-            ScoreScale.BINARY: 1,
-            ScoreScale.LIKERT_3: 3,
-            ScoreScale.LIKERT_5: 5,
-        }[self]
-
-    @property
-    def min_score(self) -> int:
-        return 0 if self == ScoreScale.BINARY else 1
+    TURN = "turn"
 
 
 class VerdictAction(Enum):
     """Action to take based on judge verdict."""
+
     PASS = "pass"
     INTERVENE = "intervene"
     BLOCK = "block"
 
 
 @dataclass
-class RubricCriterion:
-    """Single scoring dimension within a ruleset."""
-    name: str
-    description: str
-    scale: ScoreScale = ScoreScale.LIKERT_5
-    weight: float = 1.0
-    fail_threshold: float | None = None
-    score_descriptions: dict[int, str] = field(default_factory=dict)
-
-
-@dataclass
-class Rubric:
-    """Collection of criteria for evaluation."""
-    name: str
-    description: str
-    criteria: list[RubricCriterion]
-    evaluation_type: EvaluationType = EvaluationType.POINTWISE
-    scope: EvaluationScope = EvaluationScope.TURN
-    pass_threshold: float = 0.6
-    prompt_overrides: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass
 class JudgeScore:
-    """Per-criterion result from a single judge."""
+    """Per-rule binary result from a single judge call."""
+
     criterion: str
     score: int
-    max_score: int
-    reasoning: str
+    max_score: int = 1
+    reasoning: str = ""
     evidence: list[str] = field(default_factory=list)
     confidence: float = 1.0
     corrective_actions: str | None = None
 
     @property
     def normalized(self) -> float:
-        """Normalize score to 0-1 range."""
-        if self.max_score == 0:
-            return 0.0
-        # For binary (0-1), normalize directly
-        # For likert (1-N), normalize (score-1)/(max-1)
-        if self.max_score == 1:
-            return float(self.score)
-        return (self.score - 1) / (self.max_score - 1) if self.max_score > 1 else 0.0
+        return float(self.score) if self.max_score else 0.0
 
 
 @dataclass
 class JudgeVerdict:
-    """Full verdict from a single judge evaluation."""
+    """Turn-level verdict for a set of binary rules."""
+
     scores: list[JudgeScore]
-    composite_score: float  # 0-1 normalized weighted average
+    composite_score: float
     action: VerdictAction
     summary: str
     judge_model: str
@@ -108,6 +50,7 @@ class JudgeVerdict:
     token_usage: int = 0
     scope: EvaluationScope = EvaluationScope.TURN
     metadata: dict[str, Any] = field(default_factory=dict)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "scores": [
@@ -135,7 +78,8 @@ class JudgeVerdict:
 
 @dataclass
 class JudgeSessionContext:
-    """Per-session state for the judge engine."""
+    """Per-session state for judge evaluations."""
+
     session_id: str
     evaluation_history: list[JudgeVerdict] = field(default_factory=list)
     score_trend: list[float] = field(default_factory=list)
@@ -144,18 +88,12 @@ class JudgeSessionContext:
     total_tokens_used: int = 0
     created_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
     last_updated_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
-    def record_verdict(self, verdict: JudgeVerdict) -> None:
-        """Record a verdict and update trends.
 
-        Note: turn_count is NOT incremented here — it is managed by the
-        engine's evaluate_response() to avoid double-counting when multiple
-        verdicts (turn + conversation) are recorded per evaluation.
-        """
+    def record_verdict(self, verdict: JudgeVerdict) -> None:
         self.evaluation_history.append(verdict)
         self.score_trend.append(verdict.composite_score)
         self.total_tokens_used += verdict.token_usage
         self.last_updated_at = datetime.now(tz=timezone.utc)
-
         if verdict.action != VerdictAction.PASS:
             action_key = verdict.action.value
             self.violation_counts[action_key] = self.violation_counts.get(action_key, 0) + 1
