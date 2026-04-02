@@ -124,7 +124,6 @@ class TestClassifierMapping:
                     "name": "workflow",
                     "type": "fsm",
                     "phase": "post_call",
-                    "rules_file": "/abs/workflow-rules.md",
                     "classifier": {
                         "model_name": "all-MiniLM-L12-v2",
                         "backend": "onnx",
