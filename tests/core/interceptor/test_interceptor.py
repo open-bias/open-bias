@@ -349,10 +349,11 @@ class TestSyncPostCall:
         assert result.modified_data is not None
         interventions = result.modified_data["_interventions"]
         assert len(interventions) == 1
-        assert interventions[0]["message"] == "Dangerous tool call detected"
+        assert "Dangerous tool call detected" in interventions[0]["message"]
+        assert interventions[0]["evaluator"] == "merged"
 
-    async def test_multiple_intervene_evaluators_accumulate(self):
-        """Multiple INTERVENE evaluators — all interventions are collected."""
+    async def test_multiple_intervene_evaluators_merge_into_single_intervention(self):
+        """Multiple INTERVENE evaluators are merged into one turn-level intervention."""
         e1 = _mock_engine(
             name="evaluator1",
             status=EvaluationStatus.VIOLATION,
@@ -373,7 +374,9 @@ class TestSyncPostCall:
 
         assert result.allowed is True
         interventions = result.modified_data["_interventions"]
-        assert len(interventions) == 2
+        assert len(interventions) == 1
+        assert "Issue 1" in interventions[0]["message"]
+        assert "Issue 2" in interventions[0]["message"]
 
     async def test_engine_exception_fails_open(self):
         """Exception in sync POST_CALL evaluator fails open."""
@@ -1158,7 +1161,7 @@ class TestSeparateEvaluatorLists:
         assert post_result.modified_data is not None
         interventions = post_result.modified_data["_interventions"]
         assert len(interventions) == 1
-        assert interventions[0]["evaluator"] == "post_evaluator"
+        assert interventions[0]["evaluator"] == "merged"
 
     async def test_pre_call_evaluator_not_used_in_post_call(self):
         """Pre-call evaluator's evaluate_response is never called during post_call."""
