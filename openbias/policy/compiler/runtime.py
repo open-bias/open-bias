@@ -30,8 +30,6 @@ async def compile_runtime_config_for_evaluator(
         )
 
     cleaned = dict(evaluator_config)
-    cleaned.pop("rules", None)
-    cleaned.pop("rules_file", None)
 
     compiler_class = PolicyCompilerRegistry.get(evaluator_type)
     if compiler_class is None:
