@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Protocol
+from dataclasses import dataclass
+from typing import Any, Protocol, TYPE_CHECKING
 
-from openbias.core.interceptor.types import InterceptionResult
+if TYPE_CHECKING:
+    from openbias.core.interceptor.types import InterceptionResult
 
 
 @dataclass

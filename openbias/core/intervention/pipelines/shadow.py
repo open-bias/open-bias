@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from openbias.core.interceptor.types import InterceptionResult
+from typing import TYPE_CHECKING
 
 from .base import PostCallPipelineContext, PreCallPipelineContext
+
+if TYPE_CHECKING:
+    from openbias.core.interceptor.types import InterceptionResult
 
 
 class ShadowPipeline:
