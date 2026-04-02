@@ -9,7 +9,7 @@
 </pre>
 </p>
 
-<p align="center"><em>Policy enforcement for AI agents. Define rules, monitor responses, intervene automatically.</em></p>
+<p align="center"><em>Rules enforcement for AI agents. Define rules, monitor responses, intervene automatically.</em></p>
 
 <p align="center">
   <a href="https://pypi.org/project/openbias"><img src="https://img.shields.io/pypi/v/openbias?color=blue" alt="PyPI"></a>
@@ -18,7 +18,7 @@
   <!-- <a href="https://github.com/open-bias/open-bias/actions"><img src="https://img.shields.io/github/actions/workflow/status/open-bias/open-bias/ci.yml" alt="CI"></a> -->
 </p>
 
-Open Bias is a policy enforcement layer for AI agents. It ships a proxy you point your LLM client at, defines rules, and evaluates every response before it reaches the user.
+Open Bias is a rules enforcement layer for AI agents. It ships a proxy you point your LLM client at, defines rules, and evaluates every response before it reaches the user.
 
 ```
 Your App  ──▶  Open Bias  ──▶  LLM Provider
@@ -109,14 +109,14 @@ Four evaluator types, same interface. Mix and match.
 
 | Engine | Mechanism | Critical-path latency |
 |--------|-----------|----------------------|
-| `judge` | Sidecar LLM scores responses against rubrics | **0ms** (async, deferred intervention) |
+| `judge` | Sidecar LLM scores responses against rules | **0ms** (async, deferred intervention) |
 | `fsm` | State machine with LTL-lite temporal constraints | **<1ms** tool call match, **~1ms** regex, **~50ms** embedding fallback |
 | `llm` | LLM-based state classification and drift detection | **100-500ms** |
 | `nemo` | NVIDIA NeMo Guardrails for content safety and dialog rails | **200-800ms** |
 
 ### Judge engine (default)
 
-Write rules in plain English. The judge LLM evaluates every response against built-in or custom rubrics (tone, safety, instruction following) and maps aggregate scores to actions.
+Write rules in plain English. The judge LLM evaluates every response against built-in or custom rules (tone, safety, instruction following) and maps aggregate scores to actions.
 
 ```yaml
 evaluators:
@@ -205,9 +205,9 @@ All hooks are wrapped in `safe_hook()` with configurable timeout (default 30s). 
 
 ## Status
 
-v0.3.0 -- alpha. The proxy layer, four policy engines (judge, FSM, LLM, NeMo), policy compiler, CLI tooling, and OpenTelemetry tracing all work. YAML-first configuration with auto-detection of models and API keys. API surface may change. Session state is in-memory only (not persistent across restarts).
+v0.3.0 -- alpha. The proxy layer, four evaluator engines (judge, FSM, LLM, NeMo), rules compiler, CLI tooling, and OpenTelemetry tracing all work. YAML-first configuration with auto-detection of models and API keys. API surface may change. Session state is in-memory only (not persistent across restarts).
 
-Missing: persistent session storage, dashboard UI, pre-built policy library, rate limiting. These are planned but not built.
+Missing: persistent session storage, dashboard UI, pre-built rules library, rate limiting. These are planned but not built.
 
 ## Documentation
 
