@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
-
-from openbias.core.interceptor.types import InterceptionResult
+from typing import TYPE_CHECKING
 
 from .base import PostCallPipelineContext, PreCallPipelineContext
+
+if TYPE_CHECKING:
+    from openbias.core.interceptor.types import InterceptionResult
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +21,17 @@ class IntervenePipeline:
             return None
 
         logger.info(
-            "Applying pre-call intervention from evaluator '%s'",
+            "Collecting pre-call intervention signal from evaluator '%s'",
             context.evaluator_name,
         )
-        applied = context.apply_intervention(
-            context.modified_data, context.message, context.default_strategy
+        context.all_metadata.setdefault("_pending_pre_call_interventions", []).append(
+            {
+                "evaluator": context.evaluator_name,
+                "message": context.message,
+                "metadata": context.mapped_metadata,
+                "source": context.mapped_metadata.get("_openbias_source", "sync_pre_call"),
+            }
         )
-        if applied is not None:
-            context.modified_data = applied
-            context.has_modifications = True
         return None
 
     def handle_post_call(self, context: PostCallPipelineContext) -> InterceptionResult | None:
@@ -37,15 +40,7 @@ class IntervenePipeline:
             context.evaluator_name,
             context.message,
         )
-        context.all_metadata.setdefault("interventions", []).append(
-            {
-                "evaluator": context.evaluator_name,
-                "message": context.message,
-            }
-        )
-        if context.modified_data is None:
-            context.modified_data = {}
-        context.modified_data.setdefault("_interventions", []).append(
+        context.all_metadata.setdefault("_pending_post_call_interventions", []).append(
             {
                 "evaluator": context.evaluator_name,
                 "message": context.message,
