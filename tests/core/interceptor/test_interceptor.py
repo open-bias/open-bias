@@ -460,6 +460,8 @@ class TestAsyncEvaluatorLifecycle:
         # Guidance is injected AFTER the last user message
         guidance_msg = result.modified_data["messages"][1]
         assert "Remember the workflow" in guidance_msg["content"]
+        # Async mode should inject advisory guidance, not raw repair scaffolding.
+        assert "[REPAIR-INSTRUCTION]" not in guidance_msg["content"]
 
     async def test_async_block_blocks_next_request(self):
         """Async evaluator returns VIOLATION with fail_action=block — next PRE_CALL blocks."""

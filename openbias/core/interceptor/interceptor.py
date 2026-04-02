@@ -462,12 +462,17 @@ class Interceptor:
             recent_messages=recent_messages,
         )
 
-        all_metadata["interventions"] = [{"evaluator": "merged", "message": payload.repair_instruction}]
+        if payload.mode == "async" and payload.user_visible_guidance:
+            intervention_message = payload.user_visible_guidance
+        else:
+            intervention_message = payload.repair_instruction
+
+        all_metadata["interventions"] = [{"evaluator": "merged", "message": intervention_message}]
         all_metadata["intervention_payload"] = asdict(payload)
 
         applied = self._apply_intervention(
             modified_data,
-            payload.repair_instruction,
+            intervention_message,
             self._default_strategy,
         )
         if applied is None:
