@@ -26,6 +26,7 @@ import pytest
 from openbias.core.interceptor import (
     EvaluationResult,
     EvaluationStatus,
+    InterceptionResult,
     ViolationRecord,
     Interceptor,
 )
@@ -1340,6 +1341,70 @@ class TestSpanFactory:
             SESSION, _request(), {"r": 1}, REQUEST_ID
         )
         assert post_result.allowed is True
+
+
+# ===========================================================================
+# Action pipeline routing tests
+# ===========================================================================
+
+
+class TestActionPipelineRouting:
+
+    async def test_pre_call_routes_intervene_to_action_pipeline(self):
+        """PRE_CALL VIOLATION routes through the configured intervene pipeline."""
+        evaluator = _mock_engine(
+            status=EvaluationStatus.VIOLATION,
+            violation_message="pipeline guidance",
+        )
+        interceptor = Interceptor(pre_call_evaluators=[evaluator], post_call_evaluators=[])
+
+        pipeline_result = {"messages": [{"role": "user", "content": "from pipeline"}]}
+        pipeline = MagicMock()
+        pipeline.handle_pre_call = MagicMock(
+            return_value=InterceptionResult(
+                allowed=True,
+                modified_data=pipeline_result,
+                internal_metadata={"source": "pipeline"},
+            )
+        )
+        interceptor._action_pipelines["intervene"] = pipeline
+
+        result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+
+        pipeline.handle_pre_call.assert_called_once()
+        assert result.allowed is True
+        assert result.modified_data == pipeline_result
+
+    async def test_post_call_routes_block_to_action_pipeline(self):
+        """POST_CALL VIOLATION routes through the configured block pipeline."""
+        evaluator = _mock_engine(
+            status=EvaluationStatus.VIOLATION,
+            violation_message="native message",
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[],
+            post_call_evaluators=[evaluator],
+            mode="sync",
+            fail_action="block",
+        )
+
+        pipeline = MagicMock()
+        pipeline.handle_post_call = MagicMock(
+            return_value=InterceptionResult(
+                allowed=False,
+                user_message="blocked by pipeline",
+                internal_metadata={"source": "pipeline"},
+            )
+        )
+        interceptor._action_pipelines["block"] = pipeline
+
+        result = await interceptor.run_post_call(
+            SESSION, _request(), {"answer": "bad"}, REQUEST_ID
+        )
+
+        pipeline.handle_post_call.assert_called_once()
+        assert result.allowed is False
+        assert result.user_message == "blocked by pipeline"
 
 
 # ===========================================================================

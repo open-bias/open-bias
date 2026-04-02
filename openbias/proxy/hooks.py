@@ -577,7 +577,7 @@ class Callback(CustomLogger):
 
                 # Handle result INSIDE trace block so interventions nest correctly
                 if not result.allowed:
-                    message = result.message or "Request blocked by policy"
+                    message = result.user_message or "Request blocked by policy"
                     logger.warning(
                         f"Request blocked for session {session_id}: {message}"
                     )
@@ -593,11 +593,11 @@ class Callback(CustomLogger):
                     data = result.modified_data
 
                     # Log intervention via OTEL (inside trace block for proper nesting)
-                    if self.tracer and result.metadata.get("results"):
+                    if self.tracer and result.internal_metadata.get("results"):
                         self.tracer.log_intervention(
                             session_id=session_id,
                             intervention_name="pre_call_intervention",
-                            context=result.metadata,
+                            context=result.internal_metadata,
                             parent_span=span,
                         )
 
@@ -731,12 +731,12 @@ class Callback(CustomLogger):
 
                     # Handle sync POST_CALL results INSIDE trace block for proper nesting
                     if not result.allowed:
-                        message = result.message or "Response blocked by policy"
+                        message = result.user_message or "Response blocked by policy"
                         logger.warning(
                             f"Response blocked for session {session_id}: {message}"
                         )
                         raise WorkflowViolationError(
-                            message, context=result.metadata
+                            message, context=result.internal_metadata
                         )
 
                     if result.modified_data and "_interventions" in result.modified_data:
@@ -755,11 +755,11 @@ class Callback(CustomLogger):
                                 f"'{intervention.get('evaluator')}' for session {session_id}"
                             )
 
-                        if self.tracer and result.metadata.get("results"):
+                        if self.tracer and result.internal_metadata.get("results"):
                             self.tracer.log_intervention(
                                 session_id=session_id,
                                 intervention_name="post_call_intervention",
-                                context=result.metadata,
+                                context=result.internal_metadata,
                                 parent_span=span,
                             )
 

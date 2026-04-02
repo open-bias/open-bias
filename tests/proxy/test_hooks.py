@@ -352,6 +352,31 @@ async def test_post_call_hook_block_raises_workflow_violation(
         await callback.async_post_call_success_hook(data, mock_api_key, response)
 
 
+async def test_post_call_hook_block_uses_normalized_result_fields(
+    callback, mock_api_key
+):
+    """Hook reads user_message/internal_metadata when provided by interceptor."""
+    from openbias.core.interceptor.types import InterceptionResult
+
+    data = {"messages": [{"role": "user", "content": "hello"}]}
+    response = MagicMock()
+    response.choices = []
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(
+            allowed=False,
+            user_message="normalized block message",
+            internal_metadata={"policy": "strict"},
+        )
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._interceptor_initialized = True
+
+    with pytest.raises(WorkflowViolationError, match="normalized block message"):
+        await callback.async_post_call_success_hook(data, mock_api_key, response)
+
+
 async def test_post_call_intervention_modifies_returned_response(
     callback, mock_api_key
 ):
