@@ -119,7 +119,7 @@ tests/
     ├── compiler/                  # Per-engine compiler tests
     └── engines/
         ├── fsm/                   # Classifier, constraints, state machine
-        ├── judge/                 # Evaluator, rubrics, bias, tool calls
+        ├── judge/                 # Evaluator, scoring, bias, tool calls
         ├── llm/                   # Drift, constraints, classification
         └── nemo/
 ```
@@ -374,13 +374,13 @@ Ensure the project has a `rules.md` file and that your evaluator is declared in 
 Install `sentence-transformers` and check disk space. The model downloads ~100MB on first use.
 
 **"Unknown intervention: ..."**
-The intervention name in a constraint must match a key in the `interventions` dict of your workflow YAML.
+The intervention name in a constraint must match a key in the internal workflow definition produced by compilation.
 
 **"Workflow has no initial state"**
-At least one state needs `is_initial: true`.
+Update `rules.md` so the compiled workflow has a clear starting step or state.
 
 **"Constraint references unknown state"**
-Check that `trigger` and `target` values in constraints match state names exactly.
+Check the corresponding rules in `rules.md`; every referenced trigger/target must compile to a real workflow state.
 
 **"Unknown policy engine type: '...'"**
 The `type` field on an evaluator entry in `openbias.yaml` must match a registered engine key (e.g. `judge`, `fsm`, `llm`, `nemo`). Ensure the engine module is imported in `openbias/policy/engines/__init__.py` so its `@register_engine` decorator runs.
@@ -388,7 +388,7 @@ The `type` field on an evaluator entry in `openbias.yaml` must match a registere
 ### NeMo-Specific
 
 **"API key not valid (400)"**
-Check that your model configuration in `config.yml` maps to a valid API key in your `.env` file.
+Check the model configured in `openbias.yaml` and ensure the matching API key is present in your environment. NeMo runtime artifacts are compiled internally from `rules.md`.
 
 **"TypeError: 'function' object is not subscriptable"**
 Pydantic v1/v2 conflict between LangChain and OpenBias. Pin compatible versions.

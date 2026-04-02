@@ -16,7 +16,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - Multi-evaluator pipeline with phase-based execution (pre_call / post_call)
-- YAML shorthand mappings for evaluator config (`model`, `rules`, `rules_file`)
+- YAML shorthand mappings for evaluator config (`model`) plus automatic compilation from project-local `rules.md`
 - Top-level `mode`, `strategy`, `session_ttl`, `max_sessions` settings
 
 ## 0.3.0
@@ -50,7 +50,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Model auto-detection**: Automatically resolves the best LLM model from whichever API key is present (`OPENAI_API_KEY` → `gpt-4o-mini`, `GEMINI_API_KEY` → `gemini/gemini-2.5-flash`, etc.).
 - **Model & API-key validation**: `openbias serve` and `openbias init` now validate that the required API key exists for the configured model before starting.
 - **YAML as single source of truth**: `openbias.yaml` is now the primary configuration surface. Removed the `OBIAS_*` environment-variable prefix; API keys are still read from env vars / `.env`.
-- **Path resolution**: Relative paths in `openbias.yaml` (e.g. `rules_file: ./rules.md`) are resolved relative to the config file location.
+- **Path resolution**: Project-local policy files and other relative paths are resolved relative to the config file location.
 - **Config validation at startup**: `openbias serve` checks that referenced rules files exist and that the required API key is present; exits with a clear error if not.
 - **API-key syncing**: Keys loaded from `.env` are synced into `os.environ` so downstream libraries (LiteLLM, LangChain) work without explicit `load_dotenv()`.
 - **Langfuse env-var aliases**: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` are read directly from the environment alongside YAML config.
@@ -59,7 +59,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **Default engine** changed from `nemo` to `judge` — works out of the box with inline rules; no external config directory required.
+- **Default engine** changed from `nemo` to `judge` — works out of the box with project-local `rules.md`; no external config directory required.
 - **Tracing disabled by default**: `tracing.enabled` now defaults to `false` and `exporter_type` defaults to `none` to avoid noisy OTLP connection errors on first run.
 - **`proxy.default_model`** defaults to `None` instead of eagerly auto-detecting; the model is resolved at startup via YAML or auto-detection.
 - **Intervention merge logic** refactored for consistency across FSM and LLM engines.
