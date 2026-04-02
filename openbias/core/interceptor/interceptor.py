@@ -9,7 +9,7 @@ import asyncio
 import copy
 import logging
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 from openbias.core.intervention.strategies import (
@@ -24,6 +24,10 @@ from openbias.core.intervention.pipelines import (
     PostCallPipelineContext,
     PreCallPipelineContext,
     ShadowPipeline,
+)
+from openbias.core.intervention.pipelines.aggregation import ViolationAggregationStage
+from openbias.core.intervention.pipelines.instruction_builder import (
+    DeterministicRepairInstructionBuilder,
 )
 from openbias.core.session import SessionStore
 from openbias.policy.protocols import (
@@ -136,6 +140,8 @@ class Interceptor:
             "block": BlockPipeline(),
             "intervene": IntervenePipeline(),
         }
+        self._aggregation_stage = ViolationAggregationStage()
+        self._instruction_builder = DeterministicRepairInstructionBuilder()
 
         # Temporary storage for collected-but-not-yet-confirmed async results
         self._last_collected: dict[str, list[asyncio.Task[_PendingResult]]] = {}
@@ -190,6 +196,7 @@ class Interceptor:
                     )
                     _async_span.set_attribute("openbias.async.phase", "applied")
                 mapped = self._map_evaluation(pending.result, session_id)
+                mapped.metadata["_openbias_source"] = "async_applied"
                 all_metadata["results"].append(
                     {"evaluator": pending.evaluator_name, "decision": mapped.decision}
                 )
@@ -229,6 +236,7 @@ class Interceptor:
                         context=ctx,
                     )
                     mapped = self._map_evaluation(eval_result, session_id)
+                    mapped.metadata["_openbias_source"] = "sync_pre_call"
                     if _eval_span is not None and hasattr(_eval_span, "set_attribute"):
                         _eval_span.set_attribute(
                             "openbias.evaluator.decision", mapped.decision
@@ -254,6 +262,13 @@ class Interceptor:
                     all_metadata["results"].append(
                         {"evaluator": evaluator.name, "decision": "error", "error": str(e)}
                     )
+
+        modified_data, finalized = self._finalize_pre_call_interventions(
+            modified_data=modified_data,
+            all_metadata=all_metadata,
+        )
+        if finalized:
+            has_modifications = True
 
         return InterceptionResult(
             allowed=True,
@@ -304,6 +319,7 @@ class Interceptor:
                         context=ctx,
                     )
                     mapped = self._map_evaluation(eval_result, session_id)
+                    mapped.metadata["_openbias_source"] = "sync_post_call"
                     if _eval_span is not None and hasattr(_eval_span, "set_attribute"):
                         _eval_span.set_attribute(
                             "openbias.evaluator.decision", mapped.decision
@@ -326,6 +342,11 @@ class Interceptor:
                     all_metadata["results"].append(
                         {"evaluator": evaluator.name, "decision": "error", "error": str(e)}
                     )
+
+        modified_data = self._finalize_post_call_interventions(
+            modified_data=modified_data,
+            all_metadata=all_metadata,
+        )
 
         # Step 2: Start async POST_CALL evaluators in background
         # Note: _parent_span may be ended before async tasks finish, so
@@ -418,6 +439,86 @@ class Interceptor:
         )
         terminal = pipeline.handle_post_call(context)
         return context.modified_data, terminal
+
+    def _finalize_pre_call_interventions(
+        self,
+        *,
+        modified_data: dict[str, Any],
+        all_metadata: dict[str, Any],
+    ) -> tuple[dict[str, Any], bool]:
+        records = all_metadata.pop("_pending_pre_call_interventions", [])
+        if not records:
+            return modified_data, False
+
+        mode: Literal["sync", "async"] = (
+            "async"
+            if all(record.get("source") == "async_applied" for record in records)
+            else "sync"
+        )
+        aggregated = self._aggregation_stage.aggregate(records=records, mode=mode)
+        recent_messages = self._extract_recent_message_text(modified_data)
+        payload = self._instruction_builder.build(
+            aggregated=aggregated,
+            recent_messages=recent_messages,
+        )
+
+        all_metadata["interventions"] = [{"evaluator": "merged", "message": payload.repair_instruction}]
+        all_metadata["intervention_payload"] = asdict(payload)
+
+        applied = self._apply_intervention(
+            modified_data,
+            payload.repair_instruction,
+            self._default_strategy,
+        )
+        if applied is None:
+            return modified_data, False
+        return applied, True
+
+    def _finalize_post_call_interventions(
+        self,
+        *,
+        modified_data: dict[str, Any] | None,
+        all_metadata: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        records = all_metadata.pop("_pending_post_call_interventions", [])
+        if not records:
+            return modified_data
+
+        aggregated = self._aggregation_stage.aggregate(records=records, mode="sync")
+        payload = self._instruction_builder.build(aggregated=aggregated, recent_messages=None)
+
+        if modified_data is None:
+            modified_data = {}
+        modified_data["_interventions"] = [
+            {
+                "evaluator": "merged",
+                "message": payload.repair_instruction,
+                "metadata": {
+                    "source_violations": payload.source_violations,
+                    "merged_violation_summary": payload.merged_violation_summary,
+                },
+                "payload": asdict(payload),
+            }
+        ]
+        all_metadata["interventions"] = [{"evaluator": "merged", "message": payload.repair_instruction}]
+        all_metadata["intervention_payload"] = asdict(payload)
+        return modified_data
+
+    @staticmethod
+    def _extract_recent_message_text(request_data: dict[str, Any]) -> list[str]:
+        messages = request_data.get("messages", [])
+        if not isinstance(messages, list):
+            return []
+        recent: list[str] = []
+        for message in messages[-6:]:
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content")
+            if isinstance(content, str):
+                text = content.strip()
+                if text:
+                    recent.append(text)
+        return recent
 
     def _map_evaluation(self, eval_result: EvaluationResult, session_id: str) -> _MappedResult:
         """Map an EvaluationResult to an enforcement decision.
