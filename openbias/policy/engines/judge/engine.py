@@ -7,6 +7,7 @@ policy engine infrastructure via PolicyEngine ABC.
 """
 
 import logging
+from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -29,11 +30,7 @@ from openbias.policy.engines.judge.models import (
 from openbias.core.utils import extract_response_content, extract_tool_calls
 from openbias.policy.engines.judge.client import JudgeClient
 from openbias.policy.engines.judge.evaluator import JudgeEvaluator
-from openbias.policy.engines.judge.rubrics import (
-    RubricRegistry,
-    create_rules_rubric,
-    _parse_rubric_dict,
-)
+from openbias.policy.rules.resolver import resolve_rules_payload
 
 logger = logging.getLogger(__name__)
 
@@ -58,15 +55,12 @@ class JudgePolicyEngine(PolicyEngine):
             max_sessions=self.DEFAULT_MAX_SESSIONS,
         )
         self._tracer: Any | None = None
-        self._registry = RubricRegistry()
-
-        # Config
-        self._default_rubric: str = "agent_behavior"
-        self._explicit_rubric: bool = False
+        self._rules: list[str] = []
+        self._rules_source: str = "rules_file"
 
     @property
     def name(self) -> str:
-        return f"judge:{self._default_rubric}"
+        return "judge"
 
     @property
     def engine_type(self) -> str:
@@ -88,10 +82,7 @@ class JudgePolicyEngine(PolicyEngine):
         Args:
             config: Configuration dict with:
                 - models: List of judge model configs [{name, model, temperature, ...}]
-                - default_rubric: Name of default ruleset for this evaluator instance
-                - rules: Inline rules payload (string/list)
-                - inline_rules: Compiled ruleset definitions or inline rules
-                - custom_rubrics_path: Path to custom ruleset YAML files
+                - rules_file: Path to markdown/text rules source
                 - session_ttl: Session TTL in seconds
                 - max_sessions: Maximum concurrent sessions
         """
@@ -117,15 +108,8 @@ class JudgePolicyEngine(PolicyEngine):
         # Build evaluator
         self._evaluator = JudgeEvaluator(
             client=self._client,
-            verbose=config.get("verbose", False),
+            verbose=False,
         )
-
-        # Canonical shorthand: `rules` maps to inline rules input.
-        if "rules" in config and "inline_rules" not in config:
-            config = {**config, "inline_rules": config["rules"]}
-
-        self._default_rubric = config.get("default_rubric", "agent_behavior")
-        self._explicit_rubric = "default_rubric" in config
 
         # Session memory management
         self._sessions.configure(
@@ -133,26 +117,18 @@ class JudgePolicyEngine(PolicyEngine):
             max_sessions=int(config["max_sessions"]) if "max_sessions" in config else None,
         )
 
-        # Load custom rubrics if configured
-        custom_path = config.get("custom_rubrics_path")
-        if custom_path:
-            self._registry.load_from_yaml(custom_path)
-
-        # Load inline rules if provided
-        inline_rules = config.get("inline_rules")
-        if inline_rules is not None:
-            self._load_inline_rules(inline_rules)
-
-        # Fail-loud: verify default ruleset exists
-        if not self._registry.get(self._default_rubric):
-            available = self._registry.list_rubrics()
-            raise ValueError(
-                f"Default ruleset '{self._default_rubric}' not found. "
-                f"Available: {available}"
-            )
+        rules_file = config.get("rules_file")
+        if not isinstance(rules_file, str) or not rules_file.strip():
+            raise ValueError("Judge engine requires `rules_file`.")
+        self._rules = resolve_rules_payload(
+            {"rules_file": rules_file},
+            auto_discover_rules_md=False,
+        )
+        if not self._rules:
+            raise ValueError("No rules found in `rules_file`.")
 
         self._initialized = True
-        logger.info(f"JudgePolicyEngine initialized: {self.name}")
+        logger.info("JudgePolicyEngine initialized with %d rules", len(self._rules))
 
     def set_tracer(self, tracer: Any) -> None:
         """Set an optional Tracer for OTEL tracing."""
@@ -171,10 +147,6 @@ class JudgePolicyEngine(PolicyEngine):
         The interceptor only calls this method when the evaluator is assigned
         to the pre_call phase, so no phase guard is needed here.
         """
-        rubric = self._registry.get(self._default_rubric)
-        if not rubric:
-            return EvaluationResult(status=EvaluationStatus.ALLOW)
-
         messages = request_data.get("messages", [])
         user_message = ""
         for msg in reversed(messages):
@@ -192,7 +164,7 @@ class JudgePolicyEngine(PolicyEngine):
         try:
             verdict = await self._evaluator.evaluate_turn(
                 model_name=primary_model,
-                rubric=rubric,
+                rules=self._rules,
                 response_content=user_message,
                 conversation=messages,
                 metadata=(context or {}).get("metadata", {}),
@@ -200,8 +172,8 @@ class JudgePolicyEngine(PolicyEngine):
                 fail_action=VerdictAction.INTERVENE,
             )
             parent_span = (context or {}).get("_parent_span")
-            self._trace_verdict(session_id, verdict, rubric.name, parent_span=parent_span)
-            return self._build_result([verdict], self._get_or_create_session(session_id), rubric_name=rubric.name)
+            self._trace_verdict(session_id, verdict, parent_span=parent_span)
+            return self._build_result([verdict], self._get_or_create_session(session_id))
         except Exception as e:
             logger.error(f"Pre-call evaluation failed: {e}")
             return EvaluationResult(status=EvaluationStatus.ALLOW)
@@ -233,46 +205,34 @@ class JudgePolicyEngine(PolicyEngine):
             logger.error("No judge models configured")
             return EvaluationResult(status=EvaluationStatus.ALLOW)
 
-        verdicts: list[JudgeVerdict] = []
-
-        # Run the configured rubric
-        rubric = self._registry.get(self._default_rubric)
-        if rubric:
-            try:
-                verdict = await self._evaluator.evaluate_turn(
-                    model_name=primary_model,
-                    rubric=rubric,
-                    response_content=response_content,
-                    conversation=conversation,
-                    metadata=metadata,
-                    session_id=session_id,
-                    tool_calls=tool_calls,
-                    session_context=session,
-                    tool_definitions=tool_definitions,
-                    fail_action=VerdictAction.INTERVENE,
-                )
-                self._trace_verdict(session_id, verdict, rubric.name, parent_span=parent_span)
-                verdicts.append(verdict)
-            except Exception as e:
-                logger.error(
-                    f"Turn evaluation failed for session {session_id} "
-                    f"({type(e).__name__}): {e}"
-                )
-        else:
-            logger.warning(f"Default ruleset not found: {self._default_rubric}")
-
-        # Build result
-        if not verdicts:
+        try:
+            verdict = await self._evaluator.evaluate_turn(
+                model_name=primary_model,
+                rules=self._rules,
+                response_content=response_content,
+                conversation=conversation,
+                metadata=metadata,
+                session_id=session_id,
+                tool_calls=tool_calls,
+                session_context=session,
+                tool_definitions=tool_definitions,
+                fail_action=VerdictAction.INTERVENE,
+            )
+            self._trace_verdict(session_id, verdict, parent_span=parent_span)
+        except Exception as e:
+            logger.error(
+                f"Turn evaluation failed for session {session_id} "
+                f"({type(e).__name__}): {e}"
+            )
             return EvaluationResult(status=EvaluationStatus.ALLOW)
 
         # Build result before recording verdicts so escalation checks
         # compare against prior session state, not the current turn's own data
-        result = self._build_result(verdicts, session, rubric_name=rubric.name)
+        result = self._build_result([verdict], session)
 
         # Record verdicts to session after result is built
         session.turn_count += 1
-        for v in verdicts:
-            session.record_verdict(v)
+        session.record_verdict(verdict)
 
         return result
 
@@ -293,16 +253,8 @@ class JudgePolicyEngine(PolicyEngine):
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> "PolicyCompiler | None":
-        """Return a JudgeCompiler instance."""
-        from openbias.policy.engines.judge.compiler import JudgeCompiler
-        kwargs: dict[str, Any] = {}
-        if model:
-            kwargs["model"] = model
-        if api_key:
-            kwargs["api_key"] = api_key
-        if base_url:
-            kwargs["base_url"] = base_url
-        return JudgeCompiler(**kwargs)
+        """Judge no longer supports compiler-based runtime configuration."""
+        return None
 
     @classmethod
     def validate_config(cls, config: dict[str, Any]) -> list[str]:
@@ -327,41 +279,15 @@ class JudgePolicyEngine(PolicyEngine):
                 if not isinstance(m, dict) or not m.get("model"):
                     errors.append(f"models[{i}]: missing 'model' field.")
 
-        # Apply canonical shorthand (same as initialize)
-        if "rules" in config and "inline_rules" not in config:
-            config = {**config, "inline_rules": config["rules"]}
-
-        # Build a temporary registry and load inline rules to check rulesets
-        registry = RubricRegistry()
-
-        custom_path = config.get("custom_rubrics_path")
-        if custom_path:
-            from pathlib import Path as _Path
-
-            p = _Path(custom_path)
-            if not p.exists():
-                errors.append(f"custom_rubrics_path '{custom_path}' does not exist.")
-            else:
-                registry.load_from_yaml(custom_path)
-
-        inline_rules = config.get("inline_rules")
-        if inline_rules is not None:
-            try:
-                # Validate inline rules by attempting to parse them
-                temp_engine = cls()
-                temp_engine._registry = registry
-                temp_engine._load_inline_rules(inline_rules)
-                registry = temp_engine._registry
-            except (ValueError, TypeError) as e:
-                errors.append(f"Invalid inline rules: {e}")
-
-        # Check default ruleset exists
-        default_rubric = config.get("default_rubric", "agent_behavior")
-        if not registry.get(default_rubric):
-            available = registry.list_rubrics()
-            errors.append(
-                f"Default ruleset '{default_rubric}' not found. Available: {available}"
-            )
+        rules_file = config.get("rules_file")
+        if not isinstance(rules_file, str) or not rules_file.strip():
+            errors.append("Judge engine requires `rules_file`.")
+        else:
+            path = Path(rules_file)
+            if path.suffix.lower() not in {".md", ".txt"}:
+                errors.append("`rules_file` must point to a .md or .txt file.")
+            if not path.exists():
+                errors.append(f"Rules file not found: {rules_file}")
 
         return errors
 
@@ -375,65 +301,10 @@ class JudgePolicyEngine(PolicyEngine):
     # Private helpers
     # =========================================================================
 
-    def _load_inline_rules(self, rules_data: Any) -> None:
-        """Load inline rules or ruleset definitions from config.
-
-        Supported shapes:
-        - str: multiline string split into rules
-        - list[str]: plain-text rules → auto-generated binary ruleset
-        - list[dict]: formal ruleset definitions
-
-        Raises ValueError for dict input or unrecognized formats.
-        """
-        if isinstance(rules_data, str):
-            # Multiline string → split into rules
-            rules = [line.strip() for line in rules_data.strip().splitlines() if line.strip()]
-            if rules:
-                rubric = create_rules_rubric(rules)
-                self._registry.register(rubric)
-                if not self._explicit_rubric:
-                    self._default_rubric = rubric.name
-                logger.info(f"Loaded {len(rules)} inline rules as '{rubric.name}'")
-            return
-
-        if isinstance(rules_data, list):
-            if not rules_data:
-                return
-            # List of strings → plain-text rules
-            if all(isinstance(item, str) for item in rules_data):
-                rubric = create_rules_rubric(rules_data)
-                self._registry.register(rubric)
-                if not self._explicit_rubric:
-                    self._default_rubric = rubric.name
-                logger.info(f"Loaded {len(rules_data)} inline rules as '{rubric.name}'")
-                return
-            # List of dicts → formal ruleset definitions
-            for idx, item in enumerate(rules_data):
-                if isinstance(item, dict):
-                    try:
-                        rubric = _parse_rubric_dict(item)
-                        self._registry.register(rubric)
-                        # First ruleset becomes default (when not explicitly set)
-                        if idx == 0 and not self._explicit_rubric:
-                            self._default_rubric = rubric.name
-                        logger.info(f"Loaded inline ruleset '{rubric.name}'")
-                    except Exception as e:
-                        logger.error(f"Failed to parse inline ruleset: {e}")
-            return
-
-        if isinstance(rules_data, dict):
-            raise ValueError(
-                "Dict-format inline rules are no longer supported. "
-                "Use a list of rule strings or a list of ruleset dicts instead."
-            )
-
-        raise ValueError(f"Unrecognized inline_rules format: {type(rules_data)}")
-
     def _trace_verdict(
         self,
         session_id: str,
         verdict: JudgeVerdict,
-        rubric_name: str,
         parent_span: Any | None = None,
     ) -> None:
         """Log a verdict to the OTEL tracer if available."""
@@ -442,7 +313,7 @@ class JudgePolicyEngine(PolicyEngine):
         try:
             self._tracer.log_judge_evaluation(
                 session_id=session_id,
-                rubric_name=rubric_name,
+                rubric_name=self._rules_source,
                 scope=verdict.scope.value,
                 composite_score=verdict.composite_score,
                 action=verdict.action.value,
@@ -481,7 +352,6 @@ class JudgePolicyEngine(PolicyEngine):
         self,
         verdicts: list[JudgeVerdict],
         session: JudgeSessionContext,
-        rubric_name: str = "unknown",
     ) -> EvaluationResult:
         """Build EvaluationResult from judge verdicts.
 
@@ -519,7 +389,7 @@ class JudgePolicyEngine(PolicyEngine):
         metadata: dict[str, Any] = {
             "judge": {
                 "verdicts": [
-                    {**v.to_dict(), "rubric_name": rubric_name}
+                    {**v.to_dict(), "rubric_name": self._rules_source}
                     for v in verdicts
                 ],
                 "session_turn": session.turn_count + 1,
