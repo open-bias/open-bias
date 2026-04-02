@@ -119,7 +119,7 @@ class TestInitialization:
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "default_rubric": "nonexistent_rubric",
         }
-        with pytest.raises(ValueError, match="Default rubric 'nonexistent_rubric' not found"):
+        with pytest.raises(ValueError, match="Default ruleset 'nonexistent_rubric' not found"):
             await engine.initialize(config)
 
 
@@ -602,18 +602,18 @@ class TestInlinePolicy:
         assert "No financial advice" in rubric.prompt_overrides["additional_instructions"]
 
     async def test_initialize_with_inline_dict_rules_raises(self, engine):
-        """Dict-format inline policy should raise ValueError."""
+        """Dict-format inline rules should raise ValueError."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_rules": {
                 "rules": ["Never lie", "Stay on topic"],
             },
         }
-        with pytest.raises(ValueError, match="Dict-format inline policy is no longer supported"):
+        with pytest.raises(ValueError, match="Dict-format inline rules are no longer supported"):
             await engine.initialize(config)
 
     async def test_initialize_with_inline_rubrics_dict_raises(self, engine):
-        """Dict-format inline policy with rubrics should raise ValueError."""
+        """Dict-format inline rules with rubrics should raise ValueError."""
         config = {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "inline_rules": {
@@ -628,7 +628,7 @@ class TestInlinePolicy:
                 }],
             },
         }
-        with pytest.raises(ValueError, match="Dict-format inline policy is no longer supported"):
+        with pytest.raises(ValueError, match="Dict-format inline rules are no longer supported"):
             await engine.initialize(config)
 
     async def test_inline_rules_does_not_break_custom_rubrics_path(self, engine):
