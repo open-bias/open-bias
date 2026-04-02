@@ -36,7 +36,7 @@ This uses a single judge evaluator with inline rules, auto-detected model, defau
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `mode` | string | `async` | Evaluation mode: `sync` (blocking) or `async` (non-blocking, default) |
-| `fail_action` | string | `intervene` | What happens on policy violation: `intervene` (modify next request), `block` (reject request), or `shadow` (log only). **Note:** `block` is automatically normalized to `intervene` when `mode: async`, since async evaluation cannot block a response that has already been sent. |
+| `fail_action` | string | `intervene` | What happens on a rules violation: `intervene` (modify next request), `block` (reject request), or `shadow` (log only). **Note:** `block` is automatically normalized to `intervene` when `mode: async`, since async evaluation cannot block a response that has already been sent. |
 | `strategy` | string | `user_message_inject` | Intervention strategy: `system_prompt_append` or `user_message_inject` |
 | `session_ttl` | int | -- | Session time-to-live in seconds |
 | `max_sessions` | int | -- | Maximum concurrent sessions |
@@ -50,7 +50,7 @@ Model auto-detection priority: `OPENAI_API_KEY` -> `gpt-4o-mini`, `GOOGLE_API_KE
 
 ## Evaluator Pipeline
 
-The `evaluators:` key defines an ordered list of evaluators that run against each request or response. Each evaluator is an independent policy check; all evaluators run regardless of whether earlier ones flag a violation.
+The `evaluators:` key defines an ordered list of evaluators that run against each request or response. Each evaluator is an independent rules check; all evaluators run regardless of whether earlier ones flag a violation.
 
 ### Standard Fields
 

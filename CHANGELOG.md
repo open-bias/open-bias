@@ -16,7 +16,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - Multi-evaluator pipeline with phase-based execution (pre_call / post_call)
-- YAML shorthand mappings for evaluator config (`model`, `policies`, `rubric`, `policy`)
+- YAML shorthand mappings for evaluator config (`model`, `rules`, `rules_file`)
 - Top-level `mode`, `strategy`, `session_ttl`, `max_sessions` settings
 
 ## 0.3.0
@@ -33,7 +33,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Shadow `fail_action` mode — log violations without blocking
 - Trace content redaction
 - Session TTL, LRU eviction, and per-session async task caps
-- Eager policy engine initialization at startup
+- Eager evaluator engine initialization at startup
 - Tool call awareness in judge evaluations
 - Session ID validation to prevent log/OTEL injection
 
@@ -50,8 +50,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Model auto-detection**: Automatically resolves the best LLM model from whichever API key is present (`OPENAI_API_KEY` → `gpt-4o-mini`, `GEMINI_API_KEY` → `gemini/gemini-2.5-flash`, etc.).
 - **Model & API-key validation**: `openbias serve` and `openbias init` now validate that the required API key exists for the configured model before starting.
 - **YAML as single source of truth**: `openbias.yaml` is now the primary configuration surface. Removed the `OBIAS_*` environment-variable prefix; API keys are still read from env vars / `.env`.
-- **Path resolution**: Relative paths in `openbias.yaml` (e.g. `policy: ./workflow.yaml`) are resolved relative to the config file location.
-- **Config validation at startup**: `openbias serve` checks that referenced policy files exist and that the required API key is present; exits with a clear error if not.
+- **Path resolution**: Relative paths in `openbias.yaml` (e.g. `rules_file: ./rules.md`) are resolved relative to the config file location.
+- **Config validation at startup**: `openbias serve` checks that referenced rules files exist and that the required API key is present; exits with a clear error if not.
 - **API-key syncing**: Keys loaded from `.env` are synced into `os.environ` so downstream libraries (LiteLLM, LangChain) work without explicit `load_dotenv()`.
 - **Langfuse env-var aliases**: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` are read directly from the environment alongside YAML config.
 - **Automatic rules compilation**: `openbias serve`, `trigger`, and `eval` automatically compile rules into engine-native config at startup. No separate compile step needed.
@@ -63,7 +63,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Tracing disabled by default**: `tracing.enabled` now defaults to `false` and `exporter_type` defaults to `none` to avoid noisy OTLP connection errors on first run.
 - **`proxy.default_model`** defaults to `None` instead of eagerly auto-detecting; the model is resolved at startup via YAML or auto-detection.
 - **Intervention merge logic** refactored for consistency across FSM and LLM engines.
-- **Policy compiler** refactored into per-engine modules (`fsm`, `llm`, `judge`, `nemo`).
+- **Rules compiler** refactored into per-engine modules (`fsm`, `llm`, `judge`, `nemo`).
 - **Docs updated**: `developing.md`, `examples/README.md`, and `README.md` updated to reflect YAML-first configuration.
 
 ### Fixed
@@ -79,14 +79,14 @@ Initial release.
 ### Added
 
 - Transparent LLM proxy built on LiteLLM. Point any OpenAI-compatible client at it with a one-line `base_url` change.
-- **Judge engine**: scores responses against plain-English rubrics using a sidecar LLM. Binary pass/fail evaluation with configurable fail action. Async by default -- zero latency on the critical path.
+- **Judge engine**: scores responses against plain-English rules using a sidecar LLM. Binary pass/fail evaluation with configurable fail action. Async by default -- zero latency on the critical path.
 - **FSM engine**: enforces agent behavior as a finite state machine. Three-tier classification cascade (tool call matching, regex, embedding similarity). LTL-lite temporal constraint evaluation.
 - **LLM engine**: classifies conversation state and detects drift using LLM-based reasoning.
 - **NeMo engine**: integrates NVIDIA NeMo Guardrails for content safety and dialog rails.
 - **Composite engine**: runs multiple engines in parallel, merges results (most restrictive wins).
-- **Policy compiler**: translates natural language rules to engine-specific config automatically during serve startup.
+- **Rules compiler**: translates natural language rules to engine-specific config automatically during serve startup.
 - **CLI**: `openbias init`, `openbias serve`, `openbias trigger`, `openbias eval`, `openbias validate`, `openbias info`.
-- **OpenTelemetry tracing**: spans for every proxy call, policy evaluation, and intervention. Console, OTLP, and Langfuse backends.
+- **OpenTelemetry tracing**: spans for every proxy call, rules evaluation, and intervention. Console, OTLP, and Langfuse backends.
 - Fail-open design: hook failures pass the request through unmodified. Only intentional blocks propagate.
 - Deferred intervention: violations detected async are applied as prompt injections on the next turn.
 - Session ID extraction from headers, query params, or request body.
@@ -95,5 +95,5 @@ Initial release.
 
 - Session state is in-memory only. Not persistent across restarts.
 - No dashboard UI.
-- No pre-built policy library.
+- No pre-built rules library.
 - No rate limiting.

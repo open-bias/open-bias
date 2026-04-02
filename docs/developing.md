@@ -368,7 +368,7 @@ The state machine uses `asyncio.Lock` per session. Sessions are stored in memory
 ## Troubleshooting
 
 **"No workflow configured - running in pass-through mode"**
-Ensure your `openbias.yaml` has the correct `policy:` path or inline rules.
+Ensure your `openbias.yaml` has the correct `rules_file:` path or inline `rules:`.
 
 **"Failed to load embedding model"**
 Install `sentence-transformers` and check disk space. The model downloads ~100MB on first use.

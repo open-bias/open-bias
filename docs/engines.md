@@ -211,7 +211,7 @@ Deep dive: [openbias/policy/engines/llm/README.md](../openbias/policy/engines/ll
 
 **Evaluator type**: `nemo`
 
-Wraps NVIDIA's [NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails) as a policy engine. Runs requests through input rails (pre-call) and responses through output rails (post-call) for jailbreak detection, PII filtering, toxicity checks, and programmable dialog flows via Colang.
+Wraps NVIDIA's [NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails) as an evaluator engine. Runs requests through input rails (pre-call) and responses through output rails (post-call) for jailbreak detection, PII filtering, toxicity checks, and programmable dialog flows via Colang.
 
 ### When to use it
 
