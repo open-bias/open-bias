@@ -163,7 +163,7 @@ Deep dive: [openbias/policy/engines/fsm/README.md](../openbias/policy/engines/fs
 
 **Evaluator type**: `llm`
 
-Uses a lightweight sidecar LLM for state classification, drift detection, and soft constraint evaluation. Reads the same workflow YAML as the FSM engine, so you can swap between them without rewriting rules. Trades determinism for the ability to handle ambiguous, conversational workflows where tool calls and regex are insufficient.
+Uses a lightweight sidecar LLM for state classification, drift detection, and soft constraint evaluation. Supports `rules`/`rules_file` with serve-time compilation (like FSM, NeMo, and Judge engines), or a pre-authored workflow YAML via `config_path`. Trades determinism for the ability to handle ambiguous, conversational workflows where tool calls and regex are insufficient.
 
 ### When to use it
 
@@ -192,6 +192,16 @@ Uses a lightweight sidecar LLM for state classification, drift detection, and so
 | Ambiguity handling | Falls back to embeddings | Reasons about context |
 
 ### Minimal config
+
+```yaml
+evaluators:
+  - name: llm-guard
+    type: llm
+    model: anthropic/claude-sonnet-4-5
+    rules_file: ./rules.md
+```
+
+`openbias serve` compiles these rules into a WorkflowDefinition automatically at startup. You can also provide a pre-authored workflow YAML directly:
 
 ```yaml
 evaluators:

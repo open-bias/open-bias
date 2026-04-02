@@ -112,7 +112,7 @@ evaluators:
     type: llm
     phase: post_call
     model: anthropic/claude-sonnet-4-5
-    config_path: ./workflow.yaml
+    rules_file: ./rules.md
     temperature: 0.0
     max_tokens: 1024
     # timeout: 10.0
@@ -123,10 +123,22 @@ evaluators:
     # max_constraints_per_batch: 5
 ```
 
+You can also use a pre-authored workflow YAML via `config_path` instead of `rules`/`rules_file`:
+
+```yaml
+evaluators:
+  - name: llm-guard
+    type: llm
+    model: anthropic/claude-sonnet-4-5
+    config_path: ./workflow.yaml
+```
+
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `model` | string | global `model` | LLM model for state classification (shorthand for `config.models`). |
-| `config_path` | string | -- | Path to workflow YAML file (required). |
+| `rules` | string or list | -- | Inline rule text for LLM workflow compilation. |
+| `rules_file` | string | -- | Path to markdown/plaintext rules file. |
+| `config_path` | string | -- | Path to pre-authored workflow YAML file (alternative to `rules`/`rules_file`). |
 | `temperature` | float | `0.0` | LLM temperature |
 | `max_tokens` | int | `1024` | Maximum tokens per LLM call |
 | `timeout` | float | `10.0` | Request timeout in seconds |
