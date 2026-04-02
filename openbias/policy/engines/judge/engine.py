@@ -82,7 +82,8 @@ class JudgePolicyEngine(PolicyEngine):
         Args:
             config: Configuration dict with:
                 - models: List of judge model configs [{name, model, temperature, ...}]
-                - rules_file: Path to markdown/text rules source
+                - _compiled_rules: Precompiled canonical rules list (preferred)
+                - rules_file: Legacy path to markdown/text rules source
                 - session_ttl: Session TTL in seconds
                 - max_sessions: Maximum concurrent sessions
         """
@@ -117,15 +118,29 @@ class JudgePolicyEngine(PolicyEngine):
             max_sessions=int(config["max_sessions"]) if "max_sessions" in config else None,
         )
 
-        rules_file = config.get("rules_file")
-        if not isinstance(rules_file, str) or not rules_file.strip():
-            raise ValueError("Judge engine requires `rules_file`.")
-        self._rules = resolve_rules_payload(
-            {"rules_file": rules_file},
-            auto_discover_rules_md=False,
-        )
+        compiled_rules = config.get("_compiled_rules")
+        if compiled_rules is not None:
+            if not isinstance(compiled_rules, list) or not all(
+                isinstance(rule, str) and rule.strip() for rule in compiled_rules
+            ):
+                raise ValueError(
+                    "Judge engine `_compiled_rules` must be a non-empty list of strings."
+                )
+            self._rules = [rule.strip() for rule in compiled_rules if rule.strip()]
+            self._rules_source = str(config.get("_rules_source") or "compiled_rules")
+        else:
+            rules_file = config.get("rules_file")
+            if not isinstance(rules_file, str) or not rules_file.strip():
+                raise ValueError(
+                    "Judge engine requires compiled rules from runtime compilation."
+                )
+            self._rules = resolve_rules_payload(
+                {"rules_file": rules_file},
+                auto_discover_rules_md=False,
+            )
+            self._rules_source = "rules_file"
         if not self._rules:
-            raise ValueError("No rules found in `rules_file`.")
+            raise ValueError("No rules found for judge evaluator.")
 
         self._initialized = True
         logger.info("JudgePolicyEngine initialized with %d rules", len(self._rules))
@@ -279,15 +294,26 @@ class JudgePolicyEngine(PolicyEngine):
                 if not isinstance(m, dict) or not m.get("model"):
                     errors.append(f"models[{i}]: missing 'model' field.")
 
-        rules_file = config.get("rules_file")
-        if not isinstance(rules_file, str) or not rules_file.strip():
-            errors.append("Judge engine requires `rules_file`.")
+        compiled_rules = config.get("_compiled_rules")
+        if compiled_rules is not None:
+            if not isinstance(compiled_rules, list) or not all(
+                isinstance(rule, str) and rule.strip() for rule in compiled_rules
+            ):
+                errors.append(
+                    "Judge engine `_compiled_rules` must be a non-empty list of strings."
+                )
         else:
-            path = Path(rules_file)
-            if path.suffix.lower() not in {".md", ".txt"}:
-                errors.append("`rules_file` must point to a .md or .txt file.")
-            if not path.exists():
-                errors.append(f"Rules file not found: {rules_file}")
+            rules_file = config.get("rules_file")
+            if not isinstance(rules_file, str) or not rules_file.strip():
+                errors.append(
+                    "Judge engine requires compiled rules from runtime compilation."
+                )
+            else:
+                path = Path(rules_file)
+                if path.suffix.lower() not in {".md", ".txt"}:
+                    errors.append("`rules_file` must point to a .md or .txt file.")
+                if not path.exists():
+                    errors.append(f"Rules file not found: {rules_file}")
 
         return errors
 
