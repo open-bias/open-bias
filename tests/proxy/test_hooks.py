@@ -461,6 +461,68 @@ async def test_post_call_intervention_replaces_response_content(
     assert result is response
 
 
+async def test_post_call_intervention_cleanup_strips_repair_scaffolding(
+    callback, mock_api_key
+):
+    """Sync intervention cleanup removes internal scaffolding from visible output."""
+    from openbias.core.interceptor.types import InterceptionResult
+    from litellm import ModelResponse
+
+    response = ModelResponse(
+        choices=[
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": (
+                        "Safe content.\n"
+                        "[REPAIR-INSTRUCTION]internal[/REPAIR-INSTRUCTION]\n"
+                        "[System Note]: internal note\n"
+                        "[WORKFLOW GUIDANCE]: hidden"
+                    ),
+                }
+            }
+        ],
+        model="test-model",
+    )
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(
+            allowed=True,
+            modified_data={
+                "_interventions": [
+                    {
+                        "evaluator": "merged",
+                        "payload": {
+                            "mode": "sync",
+                            "cleanup_rules": [
+                                "[REPAIR-INSTRUCTION]",
+                                "[System Note]",
+                                "[WORKFLOW GUIDANCE]",
+                            ],
+                        },
+                    }
+                ]
+            },
+        )
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._interceptor_initialized = True
+
+    result = await callback.async_post_call_success_hook(
+        {"messages": [{"role": "user", "content": "hello"}]},
+        mock_api_key,
+        response,
+    )
+
+    content = result.choices[0].message.content
+    assert "Safe content." in content
+    assert "[REPAIR-INSTRUCTION]" not in content
+    assert "[System Note]" not in content
+    assert "[WORKFLOW GUIDANCE]" not in content
+    assert result is response
+
+
 async def test_pre_call_skips_intervention_span_when_results_empty(
     callback, mock_api_key, mock_cache
 ):

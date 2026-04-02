@@ -42,6 +42,7 @@ from litellm.proxy._types import UserAPIKeyAuth
 from openbias.config.settings import Settings
 from openbias.core.utils import extract_response_content, extract_usage_info
 from openbias.core.interceptor import Interceptor
+from openbias.core.intervention.pipelines.cleanup import ResponseCleanupStage
 from openbias.core.intervention.strategies import WorkflowViolationError
 from openbias.logging import session_id_var, request_id_var
 from openbias.policy.protocols import PolicyEngine
@@ -227,6 +228,7 @@ class Callback(CustomLogger):
 
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or Settings()
+        self._response_cleanup = ResponseCleanupStage()
 
         # Interceptor (lazy initialized)
         self._interceptor: Interceptor | None = None
@@ -745,10 +747,30 @@ class Callback(CustomLogger):
                         )
 
                         for intervention in result.modified_data["_interventions"]:
+                            cleanup_modified_messages = None
+                            payload = intervention.get("payload") or {}
+                            cleanup_rules = payload.get("cleanup_rules", [])
+                            if (
+                                payload.get("mode") == "sync"
+                                and cleanup_rules
+                                and not intervention.get("modified_messages")
+                            ):
+                                current_content = extract_response_content(response) or ""
+                                cleaned_content = self._response_cleanup.clean_text(
+                                    current_content,
+                                    cleanup_rules,
+                                )
+                                cleanup_modified_messages = [
+                                    {"role": "assistant", "content": cleaned_content}
+                                ]
+
                             response = ResponseModificationStrategy.apply_to_response(
                                 response,
                                 message=intervention.get("message"),
-                                modified_messages=intervention.get("modified_messages"),
+                                modified_messages=(
+                                    intervention.get("modified_messages")
+                                    or cleanup_modified_messages
+                                ),
                             )
                             logger.info(
                                 f"Applied POST_CALL intervention from "
