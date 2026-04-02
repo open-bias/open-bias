@@ -39,14 +39,13 @@ def _make_judge_response(score: int, reasoning: str = "", summary: str = "") -> 
 
 
 @pytest.fixture
-async def engine(tmp_path):
-    rules_file = tmp_path / "rules.md"
-    rules_file.write_text("\n".join(f"- {rule}" for rule in INLINE_RULES), encoding="utf-8")
+async def engine():
     eng = await PolicyEngineRegistry.create_and_initialize(
         "judge",
         {
-            "rules_file": str(rules_file),
             "models": [{"model": "mock-model"}],
+            "_compiled_rules": INLINE_RULES,
+            "_rules_source": "rules.md",
         },
     )
     yield eng
@@ -192,15 +191,14 @@ async def test_multi_turn_drift(engine, runner):
 
 
 @pytest.fixture
-async def recovery_engine(tmp_path):
+async def recovery_engine():
     """Dedicated engine with conversation eval disabled for recovery test."""
-    rules_file = tmp_path / "rules.md"
-    rules_file.write_text("\n".join(f"- {rule}" for rule in INLINE_RULES), encoding="utf-8")
     eng = await PolicyEngineRegistry.create_and_initialize(
         "judge",
         {
-            "rules_file": str(rules_file),
             "models": [{"model": "mock-model"}],
+            "_compiled_rules": INLINE_RULES,
+            "_rules_source": "rules.md",
         },
     )
     yield eng

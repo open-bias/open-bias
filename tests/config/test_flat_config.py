@@ -417,7 +417,7 @@ class TestGetPolicyConfig:
                     "name": "workflow",
                     "type": "fsm",
                     "phase": "post_call",
-                    "config": {"rules_file": "/abs/workflow-rules.md"},
+                    "config": {"max_steps": 10},
                 },
             ],
             proxy={"default_model": "gpt-4o-mini"},
@@ -425,6 +425,7 @@ class TestGetPolicyConfig:
         result = settings.get_policy_config()
         assert result["type"] == "fsm"
         assert "models" not in result["config"]
+        assert result["config"]["max_steps"] == 10
         assert result["config_path"] is None
 
 

@@ -236,7 +236,7 @@ async def test_shared_runtime_flow_uses_project_rules_md_for_all_engines(
     evaluator_type: str,
     compiled_config: dict,
 ):
-    """Every registered engine compiles from project rules.md and strips legacy rule inputs."""
+    """Every registered engine compiles from project rules.md only."""
     (tmp_path / "rules.md").write_text("- Rule one\n- Rule two\n", encoding="utf-8")
     fake_result = CompilationResult(success=True, config=compiled_config)
 
@@ -288,8 +288,10 @@ async def test_shared_runtime_flow_uses_project_rules_md_for_all_engines(
 
 
 @pytest.mark.asyncio
-async def test_runtime_preserves_unvalidated_evaluator_config_keys(tmp_path: Path):
-    """Runtime compilation should not special-case legacy authored keys."""
+async def test_runtime_preserves_allowed_runtime_knobs_without_legacy_rule_inputs(
+    tmp_path: Path,
+):
+    """Valid runtime config keeps allowed knobs and never reintroduces legacy rule inputs."""
     (tmp_path / "rules.md").write_text("Rule one", encoding="utf-8")
     fake_result = CompilationResult(
         success=True,
@@ -305,13 +307,14 @@ async def test_runtime_preserves_unvalidated_evaluator_config_keys(tmp_path: Pat
         result = await compile_runtime_config_for_evaluator(
             evaluator_name="behavior",
             evaluator_type="judge",
-            evaluator_config={"rules": ["legacy"], "rules_file": "./legacy.md"},
+            evaluator_config={"session_ttl": 60},
             default_model="gpt-4o-mini",
             base_dir=tmp_path,
         )
 
-    assert result["rules"] == ["legacy"]
-    assert result["rules_file"] == "./legacy.md"
+    assert result["session_ttl"] == 60
+    assert "rules" not in result
+    assert "rules_file" not in result
     assert result["_compiled_rules"] == ["Rule one"]
 
 

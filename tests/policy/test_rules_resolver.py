@@ -36,19 +36,19 @@ def test_rules_md_segments_markdown_and_deduplicates(tmp_path: Path):
     ]
 
 
-def test_legacy_rules_inputs_are_ignored_in_favor_of_project_rules_md(tmp_path: Path):
+def test_resolver_uses_project_rules_md_even_with_unrelated_config(tmp_path: Path):
     (tmp_path / "rules.md").write_text("Project rule", encoding="utf-8")
     resolved = resolve_rules_payload(
-        {"rules": ["Inline rule"], "rules_file": str(tmp_path / "custom.md")},
+        {"temperature": 0.1, "models": [{"model": "gpt-4o-mini"}]},
         base_dir=tmp_path,
     )
     assert resolved == ["Project rule"]
 
 
-def test_auto_discover_can_be_disabled_even_with_legacy_keys_present(tmp_path: Path):
+def test_auto_discover_can_be_disabled(tmp_path: Path):
     (tmp_path / "rules.md").write_text("Project rule", encoding="utf-8")
     resolved = resolve_rules_payload(
-        {"rules": ["Inline rule"], "rules_file": str(tmp_path / "custom.md")},
+        {"temperature": 0.1},
         base_dir=tmp_path,
         auto_discover_rules_md=False,
     )
