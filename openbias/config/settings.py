@@ -7,6 +7,10 @@ Configuration can be provided via:
 3. .env file
 4. Direct instantiation
 
+Evaluator policy is always authored in project-local ``rules.md``.
+Do not configure evaluator-level ``rules``, ``rules_file``, ``workflow``,
+or ``config_path`` in ``openbias.yaml``.
+
 Priority (highest wins): openbias.yaml > API keys > defaults
 
 The simplified openbias.yaml format:
@@ -117,7 +121,11 @@ class ClassifierConfig(BaseModel):
 
 
 class EvaluatorConfig(BaseModel):
-    """Configuration for a single evaluator in the pipeline."""
+    """Configuration for a single evaluator in the pipeline.
+
+    User-authored policy comes from project-local ``rules.md``. Any values in
+    ``config`` are runtime knobs, not alternate evaluator policy sources.
+    """
     name: str
     type: str = "judge"
     phase: Literal["pre_call", "post_call"] = "post_call"
@@ -234,14 +242,16 @@ class YamlConfigSource(PydanticBaseSettingsSource):
     @staticmethod
     def _legacy_key_error(key: str) -> ValueError:
         return ValueError(
-            f"Legacy key `{key}` is no longer supported. Use evaluator entries and project rules.md."
+            f"Legacy key `{key}` is no longer supported. Use `evaluators` plus "
+            "project-local `rules.md` as the only user-authored evaluator policy input."
         )
 
     @staticmethod
     def _rules_contract_error(key: str) -> ValueError:
         return ValueError(
-            f"Evaluator key `{key}` is not allowed. All evaluators use project rules.md "
-            "and engine-native config is internal only."
+            f"Evaluator key `{key}` is not allowed. All evaluators compile from "
+            "project-local `rules.md`; engine-native runtime config is internal "
+            "and not user-authored."
         )
 
     def _map_common_fields(self, data: dict[str, Any], result: dict[str, Any]) -> None:

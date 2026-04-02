@@ -69,9 +69,10 @@ log_level: INFO            # default: INFO
 #   type  — engine type: judge | fsm | llm | nemo (default: "judge")
 #   phase — when to run: pre_call | post_call (default: "post_call")
 #
-# All evaluators compile from project-local `rules.md`.
+# All evaluators compile from project-local `rules.md` in the current project.
+# That file is the only user-authored evaluator policy input.
 # Do not set evaluator-level `rules`, `rules_file`, `workflow`, `config_path`,
-# or inline NeMo `config`; engine-native config is internal only.
+# or inline NeMo `config`; engine-native runtime config is internal only.
 #
 
 evaluators:

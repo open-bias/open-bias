@@ -70,8 +70,8 @@ def _ensure_rules_md(engine_type: str) -> None:
             """
         )
 
-    rules_path.write_text(content)
-    success("Created starter rules file: rules.md")
+    rules_path.write_text(content, encoding="utf-8")
+    success("Created project-local evaluator policy file: rules.md")
 
 def run_interactive_init() -> None:
     """Run the interactive initialization wizard."""
@@ -114,7 +114,8 @@ def run_interactive_init() -> None:
     # 3. Engine-Specific Configuration
     # -----------------------------------------------------------------------
     heading(f"Configure {engine_type.upper()} Engine", step=3)
-    dim("All evaluators compile from project rules.md.")
+    dim("All evaluators compile from project-local rules.md.")
+    dim("rules.md is the only user-authored evaluator policy input.")
     _ensure_rules_md(engine_type)
 
     config_data: dict = {}
@@ -226,7 +227,7 @@ def run_interactive_init() -> None:
     success(f"Configuration saved to {config_path}")
     next_steps([
         "openbias serve",
-        "Edit rules.md for your project policy",
+        "Edit project-local rules.md for your evaluator policy",
     ])
 
 def run_quick_init() -> None:
@@ -262,7 +263,10 @@ def run_quick_init() -> None:
     yaml_preview(yaml_content, title="openbias.yaml")
     success(f"Configuration saved to {config_path}")
 
-    next_steps(["openbias serve"])
+    next_steps([
+        "Edit project-local rules.md for your evaluator policy",
+        "openbias serve",
+    ])
 
 def run_init(
     quick: bool = False,

@@ -179,6 +179,29 @@ class TestInitCommand:
                 assert result.exit_code == 0
                 mock_run.assert_called_once_with(quick=True)
 
+    def test_init_quick_emphasizes_project_local_rules_md(self):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            buf = StringIO()
+            from openbias.cli_ui import console
+
+            old_file = console.file
+            console.file = buf
+            try:
+                result = runner.invoke(main, ["init", "--quick"])
+            finally:
+                console.file = old_file
+
+            combined = result.output + buf.getvalue()
+            assert result.exit_code == 0
+            assert "project-local evaluator policy file: rules.md" in combined
+            assert "Edit project-local rules.md for your evaluator policy" in combined
+            assert Path("rules.md").exists()
+
+            generated_yaml = Path("openbias.yaml").read_text()
+            assert "rules_file" not in generated_yaml
+            assert "config_path" not in generated_yaml
+
     def test_init_non_tty_without_from(self):
         """Without --from and without TTY, should show error."""
         runner = CliRunner()

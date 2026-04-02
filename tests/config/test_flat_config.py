@@ -208,6 +208,24 @@ class TestEvaluatorYamlMapping:
         with pytest.raises(ValueError, match="Evaluator key `rules_file` is not allowed"):
             source._map_evaluators(source._yaml_data)
 
+    def test_disallowed_evaluator_keys_explain_rules_md_contract(self):
+        source = self._build_source({
+            "evaluators": [
+                {
+                    "name": "behavior",
+                    "type": "judge",
+                    "phase": "post_call",
+                    "config_path": "./compiled/runtime.yaml",
+                },
+            ],
+        })
+        with pytest.raises(ValueError) as exc_info:
+            source._map_evaluators(source._yaml_data)
+
+        message = str(exc_info.value)
+        assert "project-local `rules.md`" in message
+        assert "not user-authored" in message
+
     def test_judge_extra_keys_in_config(self):
         """Extra keys on a judge evaluator go into config dict."""
         source = self._build_source({
