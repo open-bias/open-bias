@@ -37,7 +37,7 @@ The NeMo engine is intentionally compact — most of the heavy lifting is done b
 
 ### How It Works
 
-1. **Initialize**: Load a `RailsConfig` (from directory or dict) and create `LLMRails`
+1. **Initialize**: Load the compiled `RailsConfig` and create `LLMRails`
 2. **Evaluate request**: Pass messages through NeMo's `generate_async` → check if response is blocked
 3. **Evaluate response**: Append assistant message to conversation → run through output rails → check
 4. **Detect blocks**: Compare NeMo's output against known blocked-response markers
@@ -79,7 +79,7 @@ await engine.initialize({
 | `rails` | `list` | `["input", "output"]` | Which rails to enable |
 | `fail_closed` | `bool` | `False` | If `True`, block on evaluation errors; if `False`, fail open |
 
-### NeMo Config Directory Structure
+### Internal Runtime Layout
 
 ```
 nemo_config/
@@ -92,6 +92,8 @@ nemo_config/
 └── actions/
     └── custom.py       # Custom Python actions
 ```
+
+This directory shape represents compiled NeMo runtime artifacts. End users should continue to author policy in project `rules.md` rather than wiring directory paths into `openbias.yaml`.
 
 ---
 
@@ -232,7 +234,7 @@ await engine.shutdown()
 
 | Method | Description |
 |--------|-------------|
-| `initialize(config)` | Load NeMo config, create `LLMRails`, register actions |
+| `initialize(config)` | Load compiled NeMo runtime config, create `LLMRails`, register actions |
 | `evaluate_request(session_id, request_data, context)` | Run input rails |
 | `evaluate_response(session_id, response_data, request_data, context)` | Run output rails |
 | `get_session_state(session_id)` | Get session debug context |

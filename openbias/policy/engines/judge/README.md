@@ -1,6 +1,6 @@
 # LLM-as-a-Judge Policy Engine
 
-> A pluggable evaluation engine for judging agent behavior against configurable rubrics using LLMs.
+> A pluggable evaluation engine for judging agent behavior against criteria compiled from project `rules.md`.
 
 ## Overview
 
@@ -9,7 +9,7 @@ The Judge engine provides a "just tell me if this response is okay" primitive fo
 It supports:
 - **Turn-level evaluation**: Judging the latest response (fast, cheap).
 - **Conversation-level evaluation**: Judging the entire interaction trajectory for drift, goal progression, and cumulative policy violations.
-- **Pointwise evaluation**: Scores a single response against rubric criteria.
+- **Pointwise evaluation**: Scores a single response against compiled criteria.
 
 ## Architecture
 
@@ -19,7 +19,7 @@ It supports:
 judge/
 ├── engine.py            # JudgePolicyEngine — top-level PolicyEngine impl
 ├── evaluator.py         # Core single-judge evaluation logic
-├── rubrics.py           # RubricRegistry + built-in rubrics
+├── rubrics.py           # Internal criteria registry + built-in evaluators
 ├── client.py            # JudgeClient — manages judge LLM interactions
 ├── models.py            # Data types: Rubric, JudgeScore, JudgeVerdict
 ├── prompts.py           # Prompt templates for evaluation
@@ -34,7 +34,7 @@ judge/
 | `JudgePolicyEngine` | Adapts the judge logic to the standard `PolicyEngine` interface. |
 | `JudgeClient` | Wraps `LLMClient` to handle specific judge model interactions (e.g., JSON mode). |
 | `Evaluator` | Implements the core evaluation loops: `evaluate_turn`, `evaluate_conversation`, `evaluate_pairwise`. |
-| `RubricRegistry` | Manages available rubrics (built-ins like `safety`, `agent_behavior` + custom YAMLs). |
+| `RubricRegistry` | Manages internal evaluation criteria and built-in judge behaviors. |
 | `bias` (module) | Position randomization functions for pairwise comparisons to prevent positional bias. |
 
 ## Core Concepts
@@ -54,13 +54,13 @@ The engine distinguishes between **what** is being judged:
   - **Use Case**: Detecting gradual drift, inconsistency, goal abandonment, or cumulative safety risks.
   - **Frequency**: Runs periodically (e.g., every N turns or at session end) to save costs.
 
-### Rubrics and Criteria
+### Criteria and Scales
 
-A **Rubric** defines *how* to judge. It contains a list of **Criteria**.
+The authored policy in `rules.md` is compiled into judge criteria before engine initialization.
 
-- **Rubrics**: Named collections of criteria (e.g., `safety`, `helpfulness`, `agent_behavior`).
-- **Criteria**: Individual dimensions to score (e.g., "Instruction Following", "No PII Leaked").
-- **Scales**: Scoring systems (e.g., `binary` (pass/fail), `likert_5` (1-5)).
+- **Criteria**: Individual dimensions to score (for example instruction following, safety, or no PII leakage).
+- **Scopes**: Turn-level checks score the latest response; conversation-level checks score the trajectory.
+- **Scales**: Scoring systems such as `binary` (pass/fail) or `likert_5` (1-5).
 
 ### Verdicts
 
@@ -72,8 +72,9 @@ The result of an evaluation is a `JudgeVerdict`:
 ## Configuration
 
 In `openbias.yaml`, user-facing evaluator config should only declare evaluator
-identity (for example `name`, `type`, and `phase`). Rule content is always
-loaded from project `rules.md` and compiled internally before engine init.
+identity (for example `name`, `type`, and `phase`) plus runtime fields like the
+judge model. Policy content is always loaded from project `rules.md` and
+compiled internally before engine init.
 
 ### Initialization
 
@@ -89,9 +90,9 @@ await engine.initialize({
             "temperature": 0.0
         }
     ],
-    "default_rubric": "agent_behavior",
     # Note: sync/async mode and phase routing are set at the top level
-    # via the evaluator config in openbias.yaml
+    # via the evaluator config in openbias.yaml.
+    # Compiled judge criteria are injected by the runtime compiler.
 })
 ```
 
@@ -100,29 +101,27 @@ await engine.initialize({
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `models` | `list` | -- | List of model configs. Must be provided or set via `judge.model` in YAML. |
-| `default_rubric` | `str` | `agent_behavior` | Rubric to use if none specified in request. |
-| `custom_rubrics_path` | `str` | `None` | Path to directory containing custom rubric YAMLs. |
 
 ## Evaluation Flow
 
 ### 1. Pre-Call (Optional)
 To run the judge engine at pre-call phase, configure a separate evaluator entry
 with `phase: pre_call` in your `openbias.yaml`. The engine will evaluate the
-user's prompt against its configured rubric and can `BLOCK` the request before
+user's prompt against the compiled judge criteria and can `BLOCK` the request before
 it reaches the agent.
 
 ### 2. Post-Call (Main)
 Inside `evaluate_response()`:
 1.  **Extract Context**: Gets the agent's response and full conversation history.
 2.  **Turn Evaluation**:
-    -   Runs enabled **turn-scope** rubrics (e.g., `agent_behavior`) using `evaluator.evaluate_turn()`.
+    -   Runs enabled **turn-scope** checks using `evaluator.evaluate_turn()`.
     -   The judge sees the history but scores only the latest response.
 3.  **Conversation Evaluation**:
     -   Checks if triggered (interval reached, session end, or turn warning).
-    -   Runs **conversation-scope** rubrics (e.g., `conversation_rules`) using `evaluator.evaluate_conversation()`.
+    -   Runs **conversation-scope** checks using `evaluator.evaluate_conversation()`.
     -   The judge evaluates the *entire trajectory* for patterns.
 4.  **Aggregation**:
-    -   Combines verdicts from all run rubrics.
+    -   Combines verdicts from all active checks.
     -   Takes the **most restrictive** action (e.g., if Turn says `PASS` but Conversation says `INTERVENE`, result is `INTERVENE`).
 5.  **Mapping**:
     -   Converts `VerdictAction` to Open Bias `EvaluationResult`.
@@ -135,13 +134,15 @@ Inside `evaluate_response()`:
 | `intervene` | `INTERVENE` | Interceptor injects judge feedback into system prompt. |
 | `block` | `BLOCK` | Interceptor returns `allowed=False`, raises `WorkflowViolationError`. |
 
-## Built-in Rubrics
+## Internal Evaluation Families
 
-| Rubric | Scope | Type | Description |
+The judge runtime groups compiled checks into a few internal families:
+
+| Family | Scope | Type | Description |
 |--------|-------|------|-------------|
-| `safety` | turn | pointwise/binary | Checks for harm, PII, unauthorized actions. |
-| `agent_behavior` | turn | pointwise/5-pt | **Default**. Checks instructions, tool use, hallucinations. |
-| `conversation_rules` | conversation | pointwise/5-pt | Checks goal progression, consistency, drift. |
+| Safety | turn | pointwise/binary | Checks for harm, PII, unauthorized actions. |
+| Agent behavior | turn | pointwise/5-pt | Checks instructions, tool use, hallucinations. |
+| Conversation trajectory | conversation | pointwise/5-pt | Checks goal progression, consistency, drift. |
 
 ## Modes: Sync vs Async
 
@@ -160,19 +161,10 @@ The engine logic is identical in both modes; the difference is when it is invoke
 
 ## Extension Points
 
-### Custom Rubrics
-Create a YAML file in your `custom_rubrics_path`:
-```yaml
-name: "brand_voice"
-description: "Checks for adherence to brand guidelines"
-scope: "turn"
-evaluation_type: "pointwise"
-criteria:
-  - name: "tone"
-    description: "Is the tone professional yet friendly?"
-    scale: "likert_5"
-    weight: 1.0
-```
+### Custom Judge Logic
+Extend the internal criteria registry if you need new built-in judge behaviors.
+User-authored projects should continue to express policy in `rules.md` rather
+than evaluator-specific rubric files.
 
 ### Custom Prompts
 Modify `prompts.py` to change the system instructions given to the judge LLM. Templates use standard Python `str.format()` syntax.

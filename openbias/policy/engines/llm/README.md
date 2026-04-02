@@ -10,7 +10,7 @@ The LLM engine is Open Bias' **intelligence-based** policy engine. Instead of re
 - **LLM-powered** — Uses a sidecar LLM for nuanced classification and evaluation
 - **Confidence-tiered** — Three-tier confidence system (CONFIDENT / UNCERTAIN / LOST)
 - **Drift detection** — Combines temporal and semantic drift signals
-- **Same workflow schema** — Reuses `WorkflowDefinition` from FSM engine; swap engines without rewriting policies
+- **Same internal workflow schema** — Reuses `WorkflowDefinition` from FSM engine after compilation from `rules.md`
 - **Evidence memory** — Accumulates constraint evaluation evidence across turns
 
 ```
@@ -81,6 +81,7 @@ await engine.initialize({
     "temporal_weight": 0.55,               # Weight for temporal vs semantic drift (default)
     "cooldown_turns": 2,                   # Turns between interventions (default)
     "max_constraints_per_batch": 5,        # Max constraints per LLM call (default)
+    # Compiled workflow data is injected by the runtime compiler.
 })
 ```
 
@@ -280,7 +281,7 @@ result = await client.complete_json(
 
 | Method | Description |
 |--------|-------------|
-| `initialize(config)` | Load workflow, create LLM client and all sub-components |
+| `initialize(config)` | Load compiled workflow runtime config, create LLM client and all sub-components |
 | `evaluate_request(session_id, request_data, context)` | Apply pending interventions |
 | `evaluate_response(session_id, response_data, request_data, context)` | Full pipeline: classify → drift → constraints → intervene |
 | `classify_response(session_id, response_data, current_state)` | Classify without side effects |
@@ -310,7 +311,7 @@ result = await client.complete_json(
 | Latency overhead | ~0ms (local) | ~100-500ms (LLM API calls) |
 | Cost | Free | Per-token LLM cost |
 | Handles ambiguity | No (falls back to embeddings) | Yes (confidence + reasoning) |
-| Workflow schema | `WorkflowDefinition` YAML | **Same** `WorkflowDefinition` YAML |
+| Workflow schema | Internal `WorkflowDefinition` | Same internal `WorkflowDefinition` |
 | Best for | Well-defined tool-based workflows | Conversational/nuanced workflows |
 
 ---

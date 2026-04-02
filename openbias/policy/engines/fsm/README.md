@@ -4,7 +4,7 @@
 
 ## Overview
 
-The FSM engine is Open Bias' **deterministic** policy engine. It models allowed agent behavior as a finite state machine defined in YAML, then classifies each LLM response to a workflow state, evaluates temporal constraints, and triggers interventions when deviations are detected.
+The FSM engine is Open Bias' **deterministic** policy engine. It models allowed agent behavior as a finite state machine compiled internally from project `rules.md`, then classifies each LLM response to a workflow state, evaluates temporal constraints, and triggers interventions when deviations are detected.
 
 **Key characteristics:**
 - **Zero LLM overhead** — Classification uses tool-call matching, regex, and local embeddings (no external API calls)
@@ -30,7 +30,7 @@ Response ──► evaluate_response() ──► Classify ──► Check Constr
 fsm/
 ├── engine.py           # FSMPolicyEngine — main entry point
 ├── classifier.py       # StateClassifier — response → state classification
-├── compiler.py         # FSMCompiler — natural language → workflow YAML
+├── compiler.py         # FSMCompiler — natural language → workflow definition
 └── workflow/
     ├── schema.py       # WorkflowDefinition, State, Transition, Constraint (Pydantic)
     ├── parser.py       # WorkflowParser — YAML/JSON → WorkflowDefinition
@@ -56,7 +56,7 @@ In `openbias.yaml`, user-facing evaluator config should only include evaluator
 identity (`name`, `type`, `phase`). The runtime compiler derives FSM workflow
 data from project `rules.md` and passes internal workflow config to the engine.
 
-### Workflow YAML Schema
+### Internal Workflow Shape
 
 ```yaml
 name: customer-support
@@ -123,6 +123,8 @@ constraints:
     target: resolution
     description: Session must eventually reach resolution
 ```
+
+This YAML illustrates the internal workflow structure produced by the compiler. End users should author policy in `rules.md`, not supply workflow YAML in `openbias.yaml`.
 
 ### Constraint Types (LTL-Lite)
 
@@ -230,7 +232,7 @@ next_states = await engine.get_valid_next_states("session-123")
 
 ## Policy Compiler
 
-The `FSMCompiler` converts natural language policy descriptions into `WorkflowDefinition` YAML:
+The `FSMCompiler` converts natural language policy descriptions into an internal `WorkflowDefinition`:
 
 ```python
 from openbias.policy.engines.fsm import FSMCompiler
@@ -243,7 +245,7 @@ result = await compiler.compile(
 )
 
 if result.success:
-    compiler.export(result, Path("workflow.yaml"))
+    workflow = result.workflow
 ```
 
 ---
@@ -254,7 +256,7 @@ if result.success:
 
 | Method | Description |
 |--------|-------------|
-| `initialize(config)` | Load workflow from path or dict |
+| `initialize(config)` | Load compiled workflow runtime config |
 | `evaluate_request(session_id, request_data, context)` | Check pending interventions |
 | `evaluate_response(session_id, response_data, request_data, context)` | Classify + constrain + transition |
 | `classify_response(session_id, response_data, current_state)` | Classify without side effects |
@@ -286,7 +288,7 @@ Extend `StateClassifier` and add new methods to the cascade in the `classify()` 
 4. Add message formatting in `_format_violation_message()`
 
 ### Custom Constraint Messages
-Define intervention messages directly on constraints in your workflow YAML:
+Intervention messages live on the compiled workflow definition:
 
 ```yaml
 constraints:
