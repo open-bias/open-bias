@@ -195,7 +195,7 @@ class TestParseRules:
         states = self._state_names(["greet"])
         constraints, _ = _parse_rules(["never do bad things"], states)
 
-        assert constraints[0].message.startswith("Policy: ")
+        assert constraints[0].message.startswith("Rule: ")
 
     def test_unrecognized_rule_skipped(self):
         states = self._state_names(["greet"])
