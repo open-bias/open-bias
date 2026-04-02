@@ -47,6 +47,16 @@ openbias serve
 python prompt_injection.py
 ```
 
+### Enforcement modes
+
+Use these copy-paste configs in `examples/judge/` for explicit behavior:
+
+- `openbias.shadow.yaml`: `fail_action: shadow` (monitor-only, allow unchanged)
+- `openbias.block.sync.yaml`: `mode: sync` + `fail_action: block` (immediate deny path)
+- `openbias.yaml`: default `fail_action: intervene` (steer/repair flow)
+
+Important: when `mode: async`, `fail_action: block` is normalized to `intervene`, because async evaluation cannot block a response that was already sent.
+
 ---
 
 ## Workflow Enforcement — deterministic FSM with LTL constraints
