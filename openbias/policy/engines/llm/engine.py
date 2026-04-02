@@ -405,8 +405,17 @@ class LLMPolicyEngine(StatefulPolicyEngine):
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> "PolicyCompiler | None":
-        """LLM engine has no dedicated compiler."""
-        return None
+        """Return an LLMCompiler instance for rules-first compilation."""
+        from openbias.policy.engines.llm.compiler import LLMCompiler
+
+        kwargs: dict[str, Any] = {}
+        if model:
+            kwargs["model"] = model
+        if api_key:
+            kwargs["api_key"] = api_key
+        if base_url:
+            kwargs["base_url"] = base_url
+        return LLMCompiler(**kwargs)
 
     def _get_expected_tools(self, state_name: str) -> list[str]:
         """Get expected tool calls for a state."""

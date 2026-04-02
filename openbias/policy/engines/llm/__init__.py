@@ -36,6 +36,7 @@ from openbias.policy.engines.llm.state_classifier import LLMStateClassifier
 from openbias.policy.engines.llm.drift_detector import DriftDetector
 from openbias.policy.engines.llm.constraint_evaluator import LLMConstraintEvaluator
 from openbias.policy.engines.llm.intervention import InterventionHandler
+from openbias.policy.engines.llm.compiler import LLMCompiler
 
 __all__ = [
     # Main engine
@@ -56,4 +57,5 @@ __all__ = [
     "DriftDetector",
     "LLMConstraintEvaluator",
     "InterventionHandler",
+    "LLMCompiler",
 ]

@@ -74,6 +74,10 @@ async def compile_runtime_config_for_evaluator(
         cleaned["workflow"] = result.config
         return cleaned
 
+    if evaluator_type == "llm":
+        cleaned["workflow"] = result.config
+        return cleaned
+
     if evaluator_type == "nemo":
         runtime_dir = base_dir / ".openbias_runtime" / "nemo" / evaluator_name
         compiler.export(result, runtime_dir)
