@@ -24,7 +24,7 @@ from typing import Any
 import yaml
 
 from openbias.policy.compiler.base import LLMPolicyCompiler
-from openbias.policy.compiler.protocol import CompilationResult
+from openbias.policy.compiler.protocol import CompilationResult, PolicyCompiler
 from openbias.policy.compiler.registry import register_compiler
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,41 @@ VALID_SCALES = {"binary", "likert_3", "likert_5"}
 VALID_ACTIONS = {"pass", "intervene", "block"}
 VALID_SCOPES = {"turn", "conversation"}
 VALID_EVAL_TYPES = {"pointwise", "pairwise", "reference"}
+
+
+class JudgeRuntimeCompiler(PolicyCompiler):
+    """Runtime compiler for judge evaluators used by `openbias serve`.
+
+    This keeps judge on the same runtime flow as other engines:
+    rules.md -> compiler -> engine-native internal evaluator config.
+    """
+
+    @property
+    def engine_type(self) -> str:
+        return "judge"
+
+    async def compile(
+        self,
+        rules_text: str,
+        context: dict[str, Any] | None = None,
+    ) -> CompilationResult:
+        del context
+        compiled_rules = [line.strip() for line in rules_text.splitlines() if line.strip()]
+        if not compiled_rules:
+            return CompilationResult.failure(
+                errors=["Judge runtime compilation produced no rules."],
+            )
+        return CompilationResult(
+            success=True,
+            config={
+                "_compiled_rules": compiled_rules,
+                "_rules_source": "rules.md",
+            },
+        )
+
+    def export(self, result: CompilationResult, output_path: Path) -> None:
+        del result, output_path
+        return None
 
 # Schema description for LLM prompt
 JUDGE_RUBRIC_SCHEMA = """
