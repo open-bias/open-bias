@@ -20,13 +20,25 @@ from openbias.policy.compiler.runtime import compile_runtime_config_for_evaluato
 async def test_judge_compiles_from_project_rules_md_only(tmp_path: Path):
     """Judge receives internal compiled rules from project rules.md."""
     (tmp_path / "rules.md").write_text("- Be helpful\n- No secrets\n", encoding="utf-8")
-    result = await compile_runtime_config_for_evaluator(
-        evaluator_name="behavior",
-        evaluator_type="judge",
-        evaluator_config={"rules": ["ignored"], "rules_file": "./ignored.md"},
-        default_model="gpt-4o-mini",
-        base_dir=tmp_path,
+    fake_result = CompilationResult(
+        success=True,
+        config={"_compiled_rules": ["Be helpful", "No secrets"], "_rules_source": "rules.md"},
     )
+    mock_compiler = AsyncMock()
+    mock_compiler.compile = AsyncMock(return_value=fake_result)
+
+    with patch(
+        "openbias.policy.compiler.runtime.PolicyCompilerRegistry.get",
+        return_value=lambda: mock_compiler,
+    ):
+        result = await compile_runtime_config_for_evaluator(
+            evaluator_name="behavior",
+            evaluator_type="judge",
+            evaluator_config={"rules": ["ignored"], "rules_file": "./ignored.md"},
+            default_model="gpt-4o-mini",
+            base_dir=tmp_path,
+        )
+
     assert result["_compiled_rules"] == ["Be helpful", "No secrets"]
     assert result["_rules_source"] == "rules.md"
     assert "rules" not in result
@@ -205,3 +217,94 @@ async def test_fallback_to_compiler_registry(tmp_path: Path):
         )
 
     assert result["workflow"] == {"compiled": True}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("evaluator_type", "compiled_config"),
+    [
+        (
+            "judge",
+            {"_compiled_rules": ["Rule one", "Rule two"], "_rules_source": "rules.md"},
+        ),
+        ("fsm", {"states": [{"name": "start"}]}),
+        ("llm", {"steps": [{"name": "guard"}]}),
+        ("nemo", {"rails": {"input": {}}}),
+    ],
+)
+async def test_shared_runtime_flow_uses_project_rules_md_for_all_engines(
+    tmp_path: Path,
+    evaluator_type: str,
+    compiled_config: dict,
+):
+    """Every registered engine compiles from project rules.md and strips legacy rule inputs."""
+    (tmp_path / "rules.md").write_text("- Rule one\n- Rule two\n", encoding="utf-8")
+    fake_result = CompilationResult(success=True, config=compiled_config)
+
+    mock_compiler = AsyncMock()
+    mock_compiler.compile = AsyncMock(return_value=fake_result)
+    mock_compiler.export = MagicMock()
+
+    with patch(
+        "openbias.policy.compiler.runtime.PolicyCompilerRegistry.get",
+        return_value=lambda: mock_compiler,
+    ):
+        result = await compile_runtime_config_for_evaluator(
+            evaluator_name="shared-evaluator",
+            evaluator_type=evaluator_type,
+            evaluator_config={
+                "rules": ["ignored"],
+                "rules_file": "./ignored.md",
+                "temperature": 0.2,
+            },
+            default_model="gpt-4o-mini",
+            base_dir=tmp_path,
+        )
+
+    mock_compiler.compile.assert_awaited_once_with(
+        "Rule one\nRule two",
+        context=(
+            {
+                "simple_config": {
+                    "name": "shared-evaluator",
+                    "steps": ["Rule one", "Rule two"],
+                    "rules": ["Rule one", "Rule two"],
+                }
+            }
+            if evaluator_type == "fsm"
+            else None
+        ),
+    )
+    assert result["temperature"] == 0.2
+    assert "rules" not in result
+    assert "rules_file" not in result
+
+    if evaluator_type == "judge":
+        assert result["_compiled_rules"] == ["Rule one", "Rule two"]
+        assert result["_rules_source"] == "rules.md"
+    elif evaluator_type in {"fsm", "llm"}:
+        assert result["workflow"] == compiled_config
+    else:
+        assert result["config_path"] == str(
+            tmp_path / ".openbias_runtime" / "nemo" / "shared-evaluator"
+        )
+        mock_compiler.export.assert_called_once_with(
+            fake_result,
+            tmp_path / ".openbias_runtime" / "nemo" / "shared-evaluator",
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("evaluator_type", ["judge", "fsm", "llm", "nemo"])
+async def test_all_runtime_engines_require_project_rules_md(
+    tmp_path: Path, evaluator_type: str
+):
+    """Missing rules.md should fail before any engine-specific compile step runs."""
+    with pytest.raises(ValueError, match="requires project rules.md"):
+        await compile_runtime_config_for_evaluator(
+            evaluator_name="missing-rules",
+            evaluator_type=evaluator_type,
+            evaluator_config={},
+            default_model="gpt-4o-mini",
+            base_dir=tmp_path,
+        )

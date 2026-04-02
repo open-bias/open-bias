@@ -585,6 +585,11 @@ class Settings(BaseSettings):
     def validate(self) -> None:
         """Validate configuration logic."""
         if self.evaluators:
+            for evaluator in self.evaluators:
+                for key in YamlConfigSource._DISALLOWED_EVALUATOR_KEYS:
+                    if key in evaluator.config:
+                        raise YamlConfigSource._rules_contract_error(key)
+
             evaluator = self.evaluators[0]
             config_path = evaluator.config.get("config_path")
             if config_path and not Path(config_path).exists():

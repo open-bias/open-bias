@@ -115,3 +115,53 @@ class TestConfigValidation:
 
         with pytest.raises(ValueError, match="OPENAI_API_KEY not found"):
             settings.validate()
+
+    @pytest.mark.parametrize(
+        ("disallowed_key", "value"),
+        [
+            ("rules", ["Do not leak secrets"]),
+            ("rules_file", "./rules.md"),
+            ("workflow", {"states": []}),
+        ],
+    )
+    def test_validate_rejects_user_authored_policy_keys_in_evaluator_config(
+        self, disallowed_key, value
+    ):
+        """Direct Settings config must enforce the same rules.md-only contract as YAML."""
+        settings = Settings(
+            evaluators=[
+                {
+                    "name": "behavior",
+                    "type": "judge",
+                    "phase": "post_call",
+                    "config": {disallowed_key: value},
+                }
+            ],
+            proxy={"default_model": "gpt-4o-mini"},
+            openai_api_key="sk-test-123",
+            _env_file=None,
+        )
+
+        with pytest.raises(ValueError, match=rf"`{disallowed_key}` is not allowed"):
+            settings.validate()
+
+    def test_validate_rejects_user_authored_runtime_config_path(self, tmp_path):
+        """Validation should reject engine-native runtime artifacts as user config."""
+        runtime_dir = tmp_path / "compiled-nemo"
+        runtime_dir.mkdir()
+        settings = Settings(
+            evaluators=[
+                {
+                    "name": "rails",
+                    "type": "nemo",
+                    "phase": "post_call",
+                    "config": {"config_path": str(runtime_dir)},
+                }
+            ],
+            proxy={"default_model": "gpt-4o-mini"},
+            openai_api_key="sk-test-123",
+            _env_file=None,
+        )
+
+        with pytest.raises(ValueError, match="project-local `rules.md`"):
+            settings.validate()
