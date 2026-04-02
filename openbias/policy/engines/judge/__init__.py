@@ -1,8 +1,7 @@
 """
 LLM-as-a-Judge Policy Engine.
 
-Evaluates agent responses and conversation trajectories against
-configurable rules using LLM judges.
+Evaluates agent responses against configurable rules using LLM judges.
 
 Usage:
     The engine is auto-registered as "judge" when this package is imported.
@@ -14,12 +13,8 @@ from openbias.policy.engines.judge.engine import JudgePolicyEngine
 
 # Re-export model types
 from openbias.policy.engines.judge.models import (
-    EvaluationType,
     EvaluationScope,
-    ScoreScale,
     VerdictAction,
-    RubricCriterion,
-    Rubric,
     JudgeScore,
     JudgeVerdict,
     JudgeSessionContext,
@@ -28,22 +23,14 @@ from openbias.policy.engines.judge.models import (
 # Re-export components
 from openbias.policy.engines.judge.client import JudgeClient
 from openbias.policy.engines.judge.evaluator import JudgeEvaluator
-from openbias.policy.engines.judge.rubrics import RubricRegistry
-from openbias.policy.engines.judge.bias import randomize_positions
 
 __all__ = [
     "JudgePolicyEngine",
-    "EvaluationType",
     "EvaluationScope",
-    "ScoreScale",
     "VerdictAction",
-    "RubricCriterion",
-    "Rubric",
     "JudgeScore",
     "JudgeVerdict",
     "JudgeSessionContext",
     "JudgeClient",
     "JudgeEvaluator",
-    "RubricRegistry",
-    "randomize_positions",
 ]
