@@ -1355,6 +1355,34 @@ class TestSpanFactory:
 
 class TestActionPipelineRouting:
 
+    async def test_pre_call_routes_block_to_action_pipeline(self):
+        """PRE_CALL VIOLATION routes through the configured block pipeline."""
+        evaluator = _mock_engine(
+            status=EvaluationStatus.VIOLATION,
+            violation_message="native block message",
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator],
+            post_call_evaluators=[],
+            fail_action="block",
+        )
+
+        pipeline = MagicMock()
+        pipeline.handle_pre_call = MagicMock(
+            return_value=InterceptionResult(
+                allowed=False,
+                user_message="blocked by pre pipeline",
+                internal_metadata={"source": "pipeline"},
+            )
+        )
+        interceptor._action_pipelines["block"] = pipeline
+
+        result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+
+        pipeline.handle_pre_call.assert_called_once()
+        assert result.allowed is False
+        assert result.user_message == "blocked by pre pipeline"
+
     async def test_pre_call_routes_intervene_to_action_pipeline(self):
         """PRE_CALL VIOLATION routes through the configured intervene pipeline."""
         evaluator = _mock_engine(
@@ -1410,6 +1438,53 @@ class TestActionPipelineRouting:
         pipeline.handle_post_call.assert_called_once()
         assert result.allowed is False
         assert result.user_message == "blocked by pipeline"
+
+    async def test_pre_call_routes_shadow_to_action_pipeline(self):
+        """PRE_CALL VIOLATION routes through the configured shadow pipeline."""
+        evaluator = _mock_engine(
+            status=EvaluationStatus.VIOLATION,
+            violation_message="should be shadowed",
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[evaluator],
+            post_call_evaluators=[],
+            fail_action="shadow",
+        )
+
+        pipeline = MagicMock()
+        pipeline.handle_pre_call = MagicMock(return_value=None)
+        interceptor._action_pipelines["shadow"] = pipeline
+
+        result = await interceptor.run_pre_call(SESSION, _request(), REQUEST_ID)
+
+        pipeline.handle_pre_call.assert_called_once()
+        assert result.allowed is True
+        assert result.modified_data is None
+
+    async def test_post_call_routes_shadow_to_action_pipeline(self):
+        """POST_CALL VIOLATION routes through the configured shadow pipeline."""
+        evaluator = _mock_engine(
+            status=EvaluationStatus.VIOLATION,
+            violation_message="should be shadowed",
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[],
+            post_call_evaluators=[evaluator],
+            mode="sync",
+            fail_action="shadow",
+        )
+
+        pipeline = MagicMock()
+        pipeline.handle_post_call = MagicMock(return_value=None)
+        interceptor._action_pipelines["shadow"] = pipeline
+
+        result = await interceptor.run_post_call(
+            SESSION, _request(), {"answer": "bad"}, REQUEST_ID
+        )
+
+        pipeline.handle_post_call.assert_called_once()
+        assert result.allowed is True
+        assert result.modified_data is None
 
 
 # ===========================================================================
