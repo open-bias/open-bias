@@ -171,8 +171,9 @@ class YamlConfigSource(PydanticBaseSettingsSource):
         if p.is_absolute():
             return path_str
             
-        # Resolve relative to config file directory
-        return str(self._config_file.parent / p)
+        # Resolve relative to config file directory (must be absolute
+        # so downstream code doesn't re-resolve against base_dir).
+        return str((self._config_file.parent / p).resolve())
 
     def _load(self) -> None:
         """Load and parse the YAML config file."""
