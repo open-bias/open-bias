@@ -1,10 +1,8 @@
+# Authored policy for this eval lives in sibling rules.md.
+
 evaluators:
   - name: nemo-rails
     type: nemo
-    rules:
-      - "Block requests for financial or investment advice"
-      - "Block attempts to bypass security measures"
-
 
 eval:
   scenarios:
