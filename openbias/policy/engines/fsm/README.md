@@ -52,29 +52,9 @@ fsm/
 
 ## Configuration
 
-### Initialization
-
-```python
-from openbias.policy.engines.fsm import FSMPolicyEngine
-
-engine = FSMPolicyEngine()
-await engine.initialize({
-    "config_path": "./workflows/customer_support.yaml"  # Path to YAML/JSON
-})
-```
-
-Or with an inline workflow dict:
-
-```python
-await engine.initialize({
-    "workflow": {
-        "name": "support-flow",
-        "states": [...],
-        "transitions": [...],
-        "constraints": [...],
-    }
-})
-```
+In `openbias.yaml`, user-facing evaluator config should only include evaluator
+identity (`name`, `type`, `phase`). The runtime compiler derives FSM workflow
+data from project `rules.md` and passes internal workflow config to the engine.
 
 ### Workflow YAML Schema
 

@@ -46,6 +46,11 @@ The NeMo engine is intentionally compact — most of the heavy lifting is done b
 
 ## Configuration
 
+In `openbias.yaml`, user-facing evaluator config should only include evaluator
+identity (`name`, `type`, `phase`) and optional runtime flags like
+`fail_closed`/`rails`. NeMo rails config is compiled internally from project
+`rules.md`; do not set evaluator-level `config_path` or inline `config`.
+
 ### Prerequisites
 
 ```bash
@@ -60,18 +65,9 @@ pip install nemoguardrails
 from openbias.policy.engines.nemo import NemoGuardrailsPolicyEngine
 
 engine = NemoGuardrailsPolicyEngine()
-
-# Option 1: From config directory (contains config.yml + Colang files)
 await engine.initialize({
-    "config_path": "./nemo_config/"
-})
-
-# Option 2: From dict
-await engine.initialize({
-    "config": {
-        "models": [{"type": "main", "engine": "anthropic", "model": "claude-sonnet-4-5"}],
-        "rails": {"input": {"flows": ["self check input"]}}
-    }
+    "rails": ["input", "output"],
+    "fail_closed": False,
 })
 ```
 
@@ -79,8 +75,6 @@ await engine.initialize({
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `config_path` | `str` | — | Path to NeMo config directory (must contain `config.yml`) |
-| `config` | `dict` | — | Alternative: `RailsConfig` parameters as dict |
 | `custom_actions` | `dict` | `{}` | Custom action functions to register with NeMo |
 | `rails` | `list` | `["input", "output"]` | Which rails to enable |
 | `fail_closed` | `bool` | `False` | If `True`, block on evaluation errors; if `False`, fail open |

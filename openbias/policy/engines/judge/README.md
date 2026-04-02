@@ -71,6 +71,10 @@ The result of an evaluation is a `JudgeVerdict`:
 
 ## Configuration
 
+In `openbias.yaml`, user-facing evaluator config should only declare evaluator
+identity (for example `name`, `type`, and `phase`). Rule content is always
+loaded from project `rules.md` and compiled internally before engine init.
+
 ### Initialization
 
 ```python

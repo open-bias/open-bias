@@ -59,6 +59,12 @@ llm/
 
 ## Configuration
 
+In `openbias.yaml`, user-facing evaluator config should only include evaluator
+identity (`name`, `type`, `phase`) plus optional model/runtime tuning fields
+such as `llm_model`, `temperature`, and thresholds. Workflow inputs are
+compiled internally from project `rules.md`; do not set `workflow` or
+`config_path` in user config.
+
 ### Initialization
 
 ```python
@@ -66,7 +72,6 @@ from openbias.policy.engines.llm import LLMPolicyEngine
 
 engine = LLMPolicyEngine()
 await engine.initialize({
-    "config_path": "workflow.yaml",       # Same YAML as FSM engine
     "llm_model": "anthropic/claude-sonnet-4-5",           # Sidecar LLM (default)
     "temperature": 0.0,                    # Deterministic outputs (default)
     "max_tokens": 1024,                    # Max response tokens (default)
@@ -83,8 +88,6 @@ await engine.initialize({
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `config_path` | `str` | — | Path to workflow YAML/JSON (same schema as FSM) |
-| `workflow` | `dict` | — | Alternative: workflow definition as dict |
 | `llm_model` | `str` | `"anthropic/claude-sonnet-4-5"` | Model for classification and constraint evaluation |
 | `temperature` | `float` | `0.0` | LLM temperature (0.0 = deterministic) |
 | `max_tokens` | `int` | `1024` | Max tokens per LLM response |
