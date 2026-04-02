@@ -9,7 +9,7 @@ Do you need deterministic, auditable enforcement?
   ├─ Yes → Is behavior defined by tool calls and sequencing?
   │         ├─ Yes → FSM engine (zero LLM cost, ~0ms)
   │         └─ No  → LLM engine (handles ambiguous workflows)
-  └─ No  → Is the concern content quality / safety / policy compliance?
+  └─ No  → Is the concern content quality / safety / rules compliance?
             ├─ Yes → Judge engine (async default, 0ms critical-path)
             └─ No  → Do you already have NeMo Guardrails configs?
                       ├─ Yes → NeMo engine
@@ -20,49 +20,49 @@ Do you need deterministic, auditable enforcement?
 
 | Property | Judge | FSM | LLM | NeMo |
 |----------|-------|-----|-----|------|
-| What it does | Scores responses against rubrics using a separate LLM | Enforces state machine workflows with temporal constraints | Classifies state and detects drift using a sidecar LLM | Runs NVIDIA NeMo Guardrails input/output rails |
+| What it does | Scores responses against rules using a separate LLM | Enforces state machine workflows with temporal constraints | Classifies state and detects drift using a sidecar LLM | Runs NVIDIA NeMo Guardrails input/output rails |
 | Deterministic | No | Yes | No | No |
 | Requires LLM calls | Yes (judge model) | No (tool calls, regex, local embeddings) | Yes (classification + constraint eval) | Yes (NeMo's LLM) |
 | Stateful | Per-turn + periodic conversation eval | Full FSM with state history | Full with drift tracking and evidence memory | Minimal (NeMo manages internally) |
 | Latency overhead | **0ms critical-path** (async default); 200-800ms total in background | ~0ms (local computation) | 100-500ms (LLM API calls) | 200-800ms (NeMo LLM calls) |
 | External deps | None beyond litellm | sentence-transformers (optional, for embedding fallback) | litellm, sentence-transformers | nemoguardrails |
-| Best for | Content quality, safety screening, policy compliance | Well-defined tool-based workflows with ordering requirements | Conversational workflows where classification is ambiguous | Jailbreak detection, PII filtering, content moderation |
+| Best for | Content quality, safety screening, rules compliance | Well-defined tool-based workflows with ordering requirements | Conversational workflows where classification is ambiguous | Jailbreak detection, PII filtering, content moderation |
 
 ## Judge Engine
 
 **Evaluator type**: `judge`
 
-Uses an LLM to evaluate every agent response against configurable rubrics. The judge sees the conversation history and scores the response on multiple criteria (tone, safety, instruction following, etc.), then maps the aggregate score to an action: pass, warn, intervene, or block.
+Uses an LLM to evaluate every agent response against configurable rules. The judge sees the conversation history and scores the response on multiple criteria (tone, safety, instruction following, etc.), then maps the aggregate score to an action: pass, warn, intervene, or block.
 
 ### When to use it
 
 - Enforcing content quality standards (professional tone, accuracy, helpfulness)
 - Safety screening (PII leakage, harmful content, unauthorized actions)
-- Policy compliance where rules are qualitative rather than structural
+- Rules compliance where criteria are qualitative rather than structural
 - Cases where you want human-readable reasoning for every decision
 
 ### How it works
 
 1. After the agent responds, the judge LLM receives the conversation history and the response
-2. It scores the response on each criterion in the active rubric (binary pass/fail or 5-point Likert)
-3. Binary rubrics: any criterion failure triggers the configured `fail_action` (block, intervene, or shadow)
-4. Likert rubrics: scores are normalized and aggregated; the aggregate maps to an action based on thresholds
-5. Optionally, a conversation-level rubric runs every N turns to catch gradual drift
+2. It scores the response on each criterion in the active rules (binary pass/fail or 5-point Likert)
+3. Binary rules: any criterion failure triggers the configured `fail_action` (block, intervene, or shadow)
+4. Likert rules: scores are normalized and aggregated; the aggregate maps to an action based on thresholds
+5. Optionally, a conversation-level rule set runs every N turns to catch gradual drift
 
 ### Evaluation scopes
 
 - **Turn scope**: Scores the latest response only. Runs every turn. Checks instruction following, safety, tool use correctness.
 - **Conversation scope**: Scores the full conversation trajectory. Runs periodically (default: every 5 turns). Catches drift, inconsistency, goal abandonment.
 
-### Built-in rubrics
+### Built-in rule sets
 
-| Rubric | Scope | Scale | What it checks |
-|--------|-------|-------|----------------|
+| Rule set | Scope | Scale | What it checks |
+|----------|-------|-------|----------------|
 | `agent_behavior` | turn | 5-point | Instruction following, tool use, hallucinations (default) |
 | `safety` | turn | binary | Harm, PII, unauthorized actions |
 | `conversation_rules` | conversation | 5-point | Goal progression, consistency, drift |
 
-Custom rubrics are defined as YAML files. See the [judge engine README](../openbias/policy/engines/judge/README.md) for the rubric schema.
+Custom rule sets are defined as YAML files. See the [judge engine README](../openbias/policy/engines/judge/README.md) for the schema.
 
 ### Sync vs async modes
 

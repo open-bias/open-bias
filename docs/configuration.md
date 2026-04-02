@@ -75,7 +75,7 @@ Legacy user-facing keys like `policy`, `policies`, and `rubric` are no longer su
 
 ## Judge Engine
 
-The judge engine evaluates responses against policy rules using a separate LLM as judge.
+The judge engine evaluates responses against rules using a separate LLM as judge.
 
 ```yaml
 evaluators:
@@ -86,8 +86,8 @@ evaluators:
     rules:
       - "No financial advice"
       - "Be professional"
-    # default_rubric: agent_behavior
-    # custom_rubrics_path: ./rubrics/
+    # default_rules: agent_behavior
+    # custom_rules_path: ./rules/
     # verbose: true
 ```
 
@@ -96,11 +96,11 @@ evaluators:
 | `model` | string | global `model` | LLM model for evaluation (shorthand for `config.models`). Overrides the global model setting. |
 | `rules` | string or list | -- | Inline rule text for judge compilation. |
 | `rules_file` | string | -- | Path to markdown/plaintext rules file. |
-| `default_rubric` | string | `agent_behavior` | Default rubric for per-turn evaluation. |
-| `custom_rubrics_path` | string | -- | Path to directory containing custom rubric YAML files |
+| `default_rules` | string | `agent_behavior` | Default rule set for per-turn evaluation. |
+| `custom_rules_path` | string | -- | Path to directory containing custom rule set YAML files |
 | `verbose` | bool | `false` | Log the raw judge prompt and response |
 
-Pre-call evaluation is controlled by setting `phase: pre_call` on the evaluator entry. For conversation-scope evaluation, configure a separate evaluator with a conversation rubric.
+Pre-call evaluation is controlled by setting `phase: pre_call` on the evaluator entry. For conversation-scope evaluation, configure a separate evaluator with a conversation rule set.
 
 ## LLM Engine
 
@@ -126,7 +126,7 @@ evaluators:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `model` | string | global `model` | LLM model for state classification (shorthand for `config.models`). |
-| `config_path` | string | -- | Path to workflow YAML file (required). Unlike FSM/NeMo, the `policy` shorthand is not available for the LLM engine. |
+| `config_path` | string | -- | Path to workflow YAML file (required). |
 | `temperature` | float | `0.0` | LLM temperature |
 | `max_tokens` | int | `1024` | Maximum tokens per LLM call |
 | `timeout` | float | `10.0` | Request timeout in seconds |
@@ -138,7 +138,7 @@ evaluators:
 
 ## FSM Engine
 
-The FSM engine enforces deterministic workflow rules using a finite state machine defined in a YAML policy file.
+The FSM engine enforces deterministic workflow rules using a finite state machine compiled from rules.
 
 ```yaml
 evaluators:
@@ -271,7 +271,7 @@ The evaluators under test are determined by the top-level `evaluators` list.
 
 The `openbias serve` command validates configuration at startup:
 
-- Checks that referenced policy files exist on disk
+- Checks that referenced rules files exist on disk
 - Verifies that the required API key is present for the configured model (skipped for `fsm`, which is local-only)
 - Applies defaults before evaluator-specific overrides
 - Eagerly initializes all evaluators in the pipeline, failing fast on bad configuration instead of deferring errors to the first request
@@ -302,7 +302,7 @@ evaluators:
     type: judge
     phase: post_call
     rules_file: ./rules.md
-    custom_rubrics_path: ./rubrics/
+    custom_rules_path: ./rules/
 
   - name: workflow-guard
     type: fsm
