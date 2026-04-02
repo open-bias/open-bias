@@ -34,8 +34,8 @@ async def test_judge_compiles_from_project_rules_md_only(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_judge_uses_engine_compiler_and_merges_result(tmp_path: Path):
-    """Judge follows shared runtime compiler flow via get_compiler()."""
+async def test_judge_uses_registered_compiler_and_merges_result(tmp_path: Path):
+    """Judge follows the shared runtime compiler registry flow."""
     (tmp_path / "rules.md").write_text("- Guard secrets\n- Stay on task\n", encoding="utf-8")
     fake_result = CompilationResult(
         success=True,
@@ -45,12 +45,9 @@ async def test_judge_uses_engine_compiler_and_merges_result(tmp_path: Path):
     mock_compiler = AsyncMock()
     mock_compiler.compile = AsyncMock(return_value=fake_result)
 
-    mock_engine_cls = MagicMock()
-    mock_engine_cls.return_value.get_compiler.return_value = mock_compiler
-
     with patch(
-        "openbias.policy.compiler.runtime.PolicyEngineRegistry.get",
-        return_value=mock_engine_cls,
+        "openbias.policy.compiler.runtime.PolicyCompilerRegistry.get",
+        return_value=lambda: mock_compiler,
     ):
         result = await compile_runtime_config_for_evaluator(
             evaluator_name="behavior",
@@ -96,12 +93,9 @@ async def test_fsm_compiles_with_workflow_context(tmp_path: Path):
     mock_compiler = AsyncMock()
     mock_compiler.compile = AsyncMock(return_value=fake_result)
 
-    mock_engine_cls = MagicMock()
-    mock_engine_cls.return_value.get_compiler.return_value = mock_compiler
-
     with patch(
-        "openbias.policy.compiler.runtime.PolicyEngineRegistry.get",
-        return_value=mock_engine_cls,
+        "openbias.policy.compiler.runtime.PolicyCompilerRegistry.get",
+        return_value=lambda: mock_compiler,
     ):
         result = await compile_runtime_config_for_evaluator(
             evaluator_name="workflow",
@@ -133,12 +127,9 @@ async def test_nemo_compiles_and_exports(tmp_path: Path):
     mock_compiler.compile = AsyncMock(return_value=fake_result)
     mock_compiler.export = MagicMock()
 
-    mock_engine_cls = MagicMock()
-    mock_engine_cls.return_value.get_compiler.return_value = mock_compiler
-
     with patch(
-        "openbias.policy.compiler.runtime.PolicyEngineRegistry.get",
-        return_value=mock_engine_cls,
+        "openbias.policy.compiler.runtime.PolicyCompilerRegistry.get",
+        return_value=lambda: mock_compiler,
     ):
         result = await compile_runtime_config_for_evaluator(
             evaluator_name="nemo-rails",
@@ -163,9 +154,6 @@ async def test_compilation_failure_raises(tmp_path: Path):
     """A failed compilation raises ValueError with the evaluator name."""
     (tmp_path / "rules.md").write_text("Be safe", encoding="utf-8")
     with patch(
-        "openbias.policy.compiler.runtime.PolicyEngineRegistry.get",
-        return_value=None,
-    ), patch(
         "openbias.policy.compiler.runtime.PolicyCompilerRegistry.get",
         return_value=None,
     ), pytest.raises(ValueError, match="No compiler registered"):
@@ -183,9 +171,6 @@ async def test_no_registered_compiler_raises(tmp_path: Path):
     """Raises when no compiler is registered for the evaluator type."""
     (tmp_path / "rules.md").write_text("Some rule", encoding="utf-8")
     with patch(
-        "openbias.policy.compiler.runtime.PolicyEngineRegistry.get",
-        return_value=None,
-    ), patch(
         "openbias.policy.compiler.runtime.PolicyCompilerRegistry.get",
         return_value=None,
     ):
@@ -208,9 +193,6 @@ async def test_fallback_to_compiler_registry(tmp_path: Path):
     mock_compiler.compile = AsyncMock(return_value=fake_result)
 
     with patch(
-        "openbias.policy.compiler.runtime.PolicyEngineRegistry.get",
-        return_value=None,
-    ), patch(
         "openbias.policy.compiler.runtime.PolicyCompilerRegistry.get",
         return_value=lambda: mock_compiler,
     ):

@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from openbias.policy.compiler import PolicyCompilerRegistry
-from openbias.policy.registry import PolicyEngineRegistry
 from openbias.policy.rules import resolve_rules_payload
 
 
@@ -34,19 +33,14 @@ async def compile_runtime_config_for_evaluator(
     cleaned.pop("rules", None)
     cleaned.pop("rules_file", None)
 
-    engine_cls = PolicyEngineRegistry.get(evaluator_type)
-    compiler = None
-    if engine_cls is not None:
-        compiler = engine_cls().get_compiler(model=default_model)
-    if compiler is None:
-        compiler_class = PolicyCompilerRegistry.get(evaluator_type)
-        if compiler_class is None:
-            raise ValueError(
-                f"No compiler registered for evaluator type '{evaluator_type}'."
-            )
-        compiler = compiler_class()
-        if default_model and hasattr(compiler, "model"):
-            compiler.model = default_model
+    compiler_class = PolicyCompilerRegistry.get(evaluator_type)
+    if compiler_class is None:
+        raise ValueError(
+            f"No compiler registered for evaluator type '{evaluator_type}'."
+        )
+    compiler = compiler_class()
+    if default_model and hasattr(compiler, "model"):
+        compiler.model = default_model
 
     compilation_context: dict[str, Any] | None = None
     if evaluator_type == "fsm":

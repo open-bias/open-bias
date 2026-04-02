@@ -58,6 +58,11 @@ try:
 except ImportError:
     NemoCompiler = None  # type: ignore
 
+try:
+    from openbias.policy.engines.judge.compiler import JudgeRuntimeCompiler
+except ImportError:
+    JudgeRuntimeCompiler = None  # type: ignore
+
 __all__ = [
     # Protocol
     "PolicyCompiler",
@@ -71,4 +76,5 @@ __all__ = [
     # Compilers (may be None if engine not available)
     "FSMCompiler",
     "NemoCompiler",
+    "JudgeRuntimeCompiler",
 ]
