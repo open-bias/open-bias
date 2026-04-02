@@ -3,6 +3,7 @@
 from .base import ActionPipeline, PostCallPipelineContext, PreCallPipelineContext
 from .aggregation import ViolationAggregationStage
 from .block import BlockPipeline
+from .cleanup import ResponseCleanupStage
 from .intervene import IntervenePipeline
 from .instruction_builder import DeterministicRepairInstructionBuilder
 from .shadow import ShadowPipeline
@@ -17,6 +18,7 @@ __all__ = [
     "ViolationAggregationStage",
     "DeterministicRepairInstructionBuilder",
     "BlockPipeline",
+    "ResponseCleanupStage",
     "IntervenePipeline",
     "ShadowPipeline",
 ]
