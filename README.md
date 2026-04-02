@@ -68,7 +68,7 @@ response = client.chat.completions.create(
 
 Every call now runs through your evaluators. The judge evaluator (default type) scores each response against your rules using a sidecar LLM, and intervenes (warn, modify, or block) when violations are detected. Model, port, and tracing are all auto-configured with smart defaults.
 
-For long or complex rule sets, place free-form text in `rules.md` and reference it with `rules_file` (or rely on auto-discovery). `openbias serve` compiles rules to engine-native runtime config during startup.
+Place your project policy in `rules.md`. `openbias serve` discovers that file automatically and compiles it to engine-native runtime config during startup.
 
 ## How It Works
 
@@ -138,7 +138,6 @@ Wraps [NVIDIA NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails) for co
 evaluators:
   - name: nemo-rails
     type: nemo
-    rules_file: ./rules.md
 ```
 
 Full engine documentation: [docs/engines.md](docs/engines.md)

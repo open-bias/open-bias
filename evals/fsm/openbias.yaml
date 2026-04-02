@@ -1,7 +1,6 @@
 evaluators:
   - name: fsm-workflow
     type: fsm
-    rules_file: ../../examples/fsm_workflow/customer_support.yaml
 
 
 eval:

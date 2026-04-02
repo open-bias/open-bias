@@ -148,7 +148,6 @@ Intervention templates in the workflow YAML support strategy prefixes:
 evaluators:
   - name: workflow-guard
     type: fsm
-    rules_file: ./rules.md
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#fsm-engine)
@@ -163,7 +162,7 @@ Deep dive: [openbias/policy/engines/fsm/README.md](../openbias/policy/engines/fs
 
 **Evaluator type**: `llm`
 
-Uses a lightweight sidecar LLM for state classification, drift detection, and soft constraint evaluation. Supports `rules`/`rules_file` with serve-time compilation (like FSM, NeMo, and Judge engines), or a pre-authored workflow YAML via `config_path`. Trades determinism for the ability to handle ambiguous, conversational workflows where tool calls and regex are insufficient.
+Uses a lightweight sidecar LLM for state classification, drift detection, and soft constraint evaluation. Like the other engines, it compiles from project-local `rules.md` at startup, then runs against the generated runtime workflow internally. It trades determinism for the ability to handle ambiguous, conversational workflows where tool calls and regex are insufficient.
 
 ### When to use it
 
@@ -198,18 +197,9 @@ evaluators:
   - name: llm-guard
     type: llm
     model: anthropic/claude-sonnet-4-5
-    rules_file: ./rules.md
 ```
 
-`openbias serve` compiles these rules into a WorkflowDefinition automatically at startup. You can also provide a pre-authored workflow YAML directly:
-
-```yaml
-evaluators:
-  - name: llm-guard
-    type: llm
-    model: anthropic/claude-sonnet-4-5
-    config_path: ./workflow.yaml
-```
+`openbias serve` compiles project `rules.md` into a `WorkflowDefinition` automatically at startup.
 
 Full configuration reference: [docs/configuration.md](configuration.md#llm-engine)
 
@@ -259,7 +249,6 @@ The engine registers two custom NeMo actions for use in Colang flows:
 evaluators:
   - name: nemo-rails
     type: nemo
-    rules_file: ./rules.md
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#nemo-guardrails-engine)

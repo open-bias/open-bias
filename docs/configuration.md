@@ -62,14 +62,9 @@ Every evaluator entry supports these three fields:
 | `type` | string | `judge` | Engine type: `judge`, `fsm`, `llm`, or `nemo` |
 | `phase` | string | `post_call` | When to run: `pre_call` (before the LLM responds) or `post_call` (after) |
 
-### Canonical Rule Inputs
+### Canonical Rule Source
 
-Rule sources are standardized across engines:
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `rules` | string or list[string] | Inline rules text |
-| `rules_file` | string | Path to a `.md` or `.txt` rules file |
+All evaluators compile from the project-local `rules.md` file. Keep rule text there rather than setting evaluator-specific `rules`, `rules_file`, `workflow`, or `config_path` keys in `openbias.yaml`.
 
 Legacy user-facing keys like `policy`, `policies`, and `rubric` are no longer supported.
 
@@ -83,9 +78,6 @@ evaluators:
     type: judge
     phase: post_call
     model: anthropic/claude-sonnet-4-5
-    rules:
-      - "No financial advice"
-      - "Be professional"
     # default_rules: agent_behavior
     # custom_rules_path: ./rules/
     # verbose: true
@@ -94,8 +86,6 @@ evaluators:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `model` | string | global `model` | LLM model for evaluation (shorthand for `config.models`). Overrides the global model setting. |
-| `rules` | string or list | -- | Inline rule text for judge compilation. |
-| `rules_file` | string | -- | Path to markdown/plaintext rules file. |
 | `default_rules` | string | `agent_behavior` | Default rule set for per-turn evaluation. |
 | `custom_rules_path` | string | -- | Path to directory containing custom rule set YAML files |
 | `verbose` | bool | `false` | Log the raw judge prompt and response |
@@ -112,7 +102,6 @@ evaluators:
     type: llm
     phase: post_call
     model: anthropic/claude-sonnet-4-5
-    rules_file: ./rules.md
     temperature: 0.0
     max_tokens: 1024
     # timeout: 10.0
@@ -123,22 +112,9 @@ evaluators:
     # max_constraints_per_batch: 5
 ```
 
-You can also use a pre-authored workflow YAML via `config_path` instead of `rules`/`rules_file`:
-
-```yaml
-evaluators:
-  - name: llm-guard
-    type: llm
-    model: anthropic/claude-sonnet-4-5
-    config_path: ./workflow.yaml
-```
-
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `model` | string | global `model` | LLM model for state classification (shorthand for `config.models`). |
-| `rules` | string or list | -- | Inline rule text for LLM workflow compilation. |
-| `rules_file` | string | -- | Path to markdown/plaintext rules file. |
-| `config_path` | string | -- | Path to pre-authored workflow YAML file (alternative to `rules`/`rules_file`). |
 | `temperature` | float | `0.0` | LLM temperature |
 | `max_tokens` | int | `1024` | Maximum tokens per LLM call |
 | `timeout` | float | `10.0` | Request timeout in seconds |
@@ -157,7 +133,6 @@ evaluators:
   - name: workflow-guard
     type: fsm
     phase: post_call
-    rules_file: ./rules.md
     # classifier:
     #   model_name: all-MiniLM-L6-v2
     #   backend: pytorch
@@ -168,7 +143,6 @@ evaluators:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `rules` / `rules_file` | string/list | -- | Rule source used to compile runtime FSM workflow config during `serve`. |
 | `classifier.model_name` | string | `all-MiniLM-L6-v2` | Sentence-transformers model for embedding-based state classification |
 | `classifier.backend` | string | `pytorch` | Inference backend: `pytorch` or `onnx` |
 | `classifier.similarity_threshold` | float | `0.7` | Minimum cosine similarity for a state match |
@@ -184,7 +158,6 @@ evaluators:
   - name: nemo-rails
     type: nemo
     phase: post_call
-    rules_file: ./rules.md
     # fail_closed: false
     # rails:
     #   - input
@@ -193,7 +166,6 @@ evaluators:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `rules` / `rules_file` | string/list | -- | Rule source used to compile runtime NeMo rails config during `serve`. |
 | `fail_closed` | bool | `false` | If `true`, block on NeMo evaluation errors. If `false` (default), warn and allow. |
 | `rails` | list | all configured | Which rails to enable. Omit to use all rails from the NeMo config. |
 
@@ -306,14 +278,10 @@ evaluators:
     type: judge
     phase: pre_call
     model: anthropic/claude-sonnet-4-5
-    rules:
-      - "No harmful content"
-      - "No PII leaks"
 
   - name: behavior-eval
     type: judge
     phase: post_call
-    rules_file: ./rules.md
     custom_rules_path: ./rules/
 
   - name: workflow-guard
