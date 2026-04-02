@@ -34,11 +34,6 @@ async def compile_runtime_config_for_evaluator(
     cleaned.pop("rules", None)
     cleaned.pop("rules_file", None)
 
-    if evaluator_type == "judge":
-        cleaned["_compiled_rules"] = normalized_rules
-        cleaned["_rules_source"] = "rules.md"
-        return cleaned
-
     engine_cls = PolicyEngineRegistry.get(evaluator_type)
     compiler = None
     if engine_cls is not None:
@@ -83,6 +78,10 @@ async def compile_runtime_config_for_evaluator(
         runtime_dir = base_dir / ".openbias_runtime" / "nemo" / evaluator_name
         compiler.export(result, runtime_dir)
         cleaned["config_path"] = str(runtime_dir)
+        return cleaned
+
+    if isinstance(result.config, dict):
+        cleaned.update(result.config)
         return cleaned
 
     return cleaned
