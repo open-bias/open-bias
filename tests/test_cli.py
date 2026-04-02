@@ -259,6 +259,113 @@ class TestServeCommand:
             assert result.exit_code == 0
             assert mock_compile.called
 
+    def test_serve_compiles_rules_from_rules_md(self):
+        """serve with rules_file pointing to rules.md should compile at startup."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be helpful\n- No secrets\n")
+            Path("openbias.yaml").write_text(
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: behavior\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+                "    rules_file: ./rules.md\n"
+            )
+            with patch("openbias.proxy.server.start_proxy"):
+                with patch("openbias.config.settings.Settings.validate"):
+                    with patch(
+                        "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
+                        new_callable=AsyncMock,
+                    ) as mock_compile:
+                        mock_compile.return_value = {"inline_rules": ["Be helpful", "No secrets"]}
+                        result = runner.invoke(main, ["serve"])
+
+            assert result.exit_code == 0
+            mock_compile.assert_called_once()
+            call_kwargs = mock_compile.call_args
+            assert call_kwargs.kwargs["evaluator_name"] == "behavior"
+
+    def test_serve_compiles_multiple_evaluators(self):
+        """serve compiles rules for each evaluator in sequence."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("openbias.yaml").write_text(
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: pre-screen\n"
+                "    type: judge\n"
+                "    phase: pre_call\n"
+                "    rules:\n"
+                "      - 'No harmful content'\n"
+                "  - name: post-eval\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+                "    rules:\n"
+                "      - 'Be professional'\n"
+            )
+            with patch("openbias.proxy.server.start_proxy"):
+                with patch("openbias.config.settings.Settings.validate"):
+                    with patch(
+                        "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
+                        new_callable=AsyncMock,
+                    ) as mock_compile:
+                        mock_compile.return_value = {"inline_rules": ["compiled"]}
+                        result = runner.invoke(main, ["serve"])
+
+            assert result.exit_code == 0
+            assert mock_compile.call_count == 2
+
+    def test_serve_compilation_failure_exits(self):
+        """serve exits with error when rules compilation fails."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("openbias.yaml").write_text(
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: safety\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+                "    rules:\n"
+                "      - 'Be professional'\n"
+            )
+            with patch("openbias.proxy.server.start_proxy"):
+                with patch("openbias.config.settings.Settings.validate"):
+                    with patch(
+                        "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
+                        new_callable=AsyncMock,
+                        side_effect=ValueError("Failed to compile rules"),
+                    ):
+                        result = runner.invoke(main, ["serve"])
+
+            assert result.exit_code != 0
+
+    def test_serve_auto_discovers_rules_md(self):
+        """serve auto-discovers rules.md when no explicit rules are set."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("rules.md").write_text("Auto rule one\n\nAuto rule two\n")
+            Path("openbias.yaml").write_text(
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: safety\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+            )
+            with patch("openbias.proxy.server.start_proxy"):
+                with patch("openbias.config.settings.Settings.validate"):
+                    with patch(
+                        "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
+                        new_callable=AsyncMock,
+                    ) as mock_compile:
+                        mock_compile.return_value = {"inline_rules": ["Auto rule one", "Auto rule two"]}
+                        result = runner.invoke(main, ["serve"])
+
+            assert result.exit_code == 0
+            # Compilation was called because rules.md was auto-discovered
+            assert mock_compile.called
+
+
 class TestTriggerCommand:
     def test_trigger_help(self):
         result, output = _invoke(["trigger", "--help"])
