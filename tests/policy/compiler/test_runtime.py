@@ -17,51 +17,26 @@ from openbias.policy.compiler.runtime import compile_runtime_config_for_evaluato
 
 
 @pytest.mark.asyncio
-async def test_judge_rejects_inline_rules(tmp_path: Path):
-    """Judge requires rules_file and rejects inline rules."""
-    with pytest.raises(ValueError, match="no longer supports inline `rules`"):
-        await compile_runtime_config_for_evaluator(
-            evaluator_name="safety",
-            evaluator_type="judge",
-            evaluator_config={"rules": ["Be professional", "No PII"]},
-            default_model="gpt-4o-mini",
-            base_dir=tmp_path,
-        )
-
-
-@pytest.mark.asyncio
-async def test_judge_compiles_from_rules_file(tmp_path: Path):
-    """Judge keeps rules_file config after validation."""
-    rules_file = tmp_path / "rules.md"
-    rules_file.write_text("- Be helpful\n- No secrets\n")
+async def test_judge_compiles_from_project_rules_md_only(tmp_path: Path):
+    """Judge receives internal compiled rules from project rules.md."""
+    (tmp_path / "rules.md").write_text("- Be helpful\n- No secrets\n", encoding="utf-8")
     result = await compile_runtime_config_for_evaluator(
         evaluator_name="behavior",
         evaluator_type="judge",
-        evaluator_config={"rules_file": str(rules_file)},
+        evaluator_config={"rules": ["ignored"], "rules_file": "./ignored.md"},
         default_model="gpt-4o-mini",
         base_dir=tmp_path,
     )
-    assert result["rules_file"] == str(rules_file)
+    assert result["_compiled_rules"] == ["Be helpful", "No secrets"]
+    assert result["_rules_source"] == "rules.md"
+    assert "rules" not in result
+    assert "rules_file" not in result
 
 
 @pytest.mark.asyncio
-async def test_judge_auto_discovers_rules_md(tmp_path: Path):
-    """When no explicit rules are set, rules.md becomes rules_file."""
-    (tmp_path / "rules.md").write_text("Auto-discovered rule")
-    result = await compile_runtime_config_for_evaluator(
-        evaluator_name="safety",
-        evaluator_type="judge",
-        evaluator_config={},
-        default_model="gpt-4o-mini",
-        base_dir=tmp_path,
-    )
-    assert result["rules_file"] == str(tmp_path / "rules.md")
-
-
-@pytest.mark.asyncio
-async def test_judge_without_rules_file_or_autodiscovery_fails(tmp_path: Path):
-    """Judge fails fast when rules_file is missing and no rules.md exists."""
-    with pytest.raises(ValueError, match="requires `rules_file`"):
+async def test_judge_without_project_rules_md_fails(tmp_path: Path):
+    """Judge fails fast when project rules.md is missing."""
+    with pytest.raises(ValueError, match="requires project rules.md"):
         await compile_runtime_config_for_evaluator(
             evaluator_name="safety",
             evaluator_type="judge",
@@ -79,6 +54,7 @@ async def test_judge_without_rules_file_or_autodiscovery_fails(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_fsm_compiles_with_workflow_context(tmp_path: Path):
     """FSM compilation passes simple_config context and stores workflow result."""
+    (tmp_path / "rules.md").write_text("Step 1: greet user", encoding="utf-8")
     fake_workflow = {"name": "test", "states": []}
     fake_result = CompilationResult(success=True, config=fake_workflow)
 
@@ -95,7 +71,7 @@ async def test_fsm_compiles_with_workflow_context(tmp_path: Path):
         result = await compile_runtime_config_for_evaluator(
             evaluator_name="workflow",
             evaluator_type="fsm",
-            evaluator_config={"rules": ["Step 1: greet user", "Step 2: collect info"]},
+            evaluator_config={},
             default_model="gpt-4o-mini",
             base_dir=tmp_path,
         )
@@ -115,6 +91,7 @@ async def test_fsm_compiles_with_workflow_context(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_nemo_compiles_and_exports(tmp_path: Path):
     """NeMo compilation exports to runtime dir and stores config_path."""
+    (tmp_path / "rules.md").write_text("Always be safe", encoding="utf-8")
     fake_result = CompilationResult(success=True, config={"rails": {}})
 
     mock_compiler = AsyncMock()
@@ -131,7 +108,7 @@ async def test_nemo_compiles_and_exports(tmp_path: Path):
         result = await compile_runtime_config_for_evaluator(
             evaluator_name="nemo-rails",
             evaluator_type="nemo",
-            evaluator_config={"rules": ["Always be safe"]},
+            evaluator_config={},
             default_model="gpt-4o-mini",
             base_dir=tmp_path,
         )
@@ -149,11 +126,18 @@ async def test_nemo_compiles_and_exports(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_compilation_failure_raises(tmp_path: Path):
     """A failed compilation raises ValueError with the evaluator name."""
-    with pytest.raises(ValueError, match="no longer supports inline `rules`"):
+    (tmp_path / "rules.md").write_text("Be safe", encoding="utf-8")
+    with patch(
+        "openbias.policy.compiler.runtime.PolicyEngineRegistry.get",
+        return_value=None,
+    ), patch(
+        "openbias.policy.compiler.runtime.PolicyCompilerRegistry.get",
+        return_value=None,
+    ), pytest.raises(ValueError, match="No compiler registered"):
         await compile_runtime_config_for_evaluator(
             evaluator_name="safety",
-            evaluator_type="judge",
-            evaluator_config={"rules": ["Be safe"]},
+            evaluator_type="unsupported",
+            evaluator_config={},
             default_model="gpt-4o-mini",
             base_dir=tmp_path,
         )
@@ -162,6 +146,7 @@ async def test_compilation_failure_raises(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_no_registered_compiler_raises(tmp_path: Path):
     """Raises when no compiler is registered for the evaluator type."""
+    (tmp_path / "rules.md").write_text("Some rule", encoding="utf-8")
     with patch(
         "openbias.policy.compiler.runtime.PolicyEngineRegistry.get",
         return_value=None,
@@ -173,7 +158,7 @@ async def test_no_registered_compiler_raises(tmp_path: Path):
             await compile_runtime_config_for_evaluator(
                 evaluator_name="unknown",
                 evaluator_type="unsupported",
-                evaluator_config={"rules": ["Some rule"]},
+                evaluator_config={},
                 default_model="gpt-4o-mini",
                 base_dir=tmp_path,
             )
@@ -181,12 +166,25 @@ async def test_no_registered_compiler_raises(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_fallback_to_compiler_registry(tmp_path: Path):
-    """Judge no longer uses compiler registry fallback."""
-    with pytest.raises(ValueError, match="no longer supports inline `rules`"):
-        await compile_runtime_config_for_evaluator(
+    """Compiler registry fallback still works with project rules.md."""
+    (tmp_path / "rules.md").write_text("Be safe", encoding="utf-8")
+    fake_result = CompilationResult(success=True, config={"compiled": True})
+    mock_compiler = AsyncMock()
+    mock_compiler.compile = AsyncMock(return_value=fake_result)
+
+    with patch(
+        "openbias.policy.compiler.runtime.PolicyEngineRegistry.get",
+        return_value=None,
+    ), patch(
+        "openbias.policy.compiler.runtime.PolicyCompilerRegistry.get",
+        return_value=lambda: mock_compiler,
+    ):
+        result = await compile_runtime_config_for_evaluator(
             evaluator_name="safety",
-            evaluator_type="judge",
-            evaluator_config={"rules": ["Be safe"]},
+            evaluator_type="llm",
+            evaluator_config={},
             default_model="gpt-4o-mini",
             base_dir=tmp_path,
         )
+
+    assert result["workflow"] == {"compiled": True}
