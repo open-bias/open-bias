@@ -34,15 +34,14 @@ async def test_judge_compiles_from_project_rules_md_only(tmp_path: Path):
         result = await compile_runtime_config_for_evaluator(
             evaluator_name="behavior",
             evaluator_type="judge",
-            evaluator_config={"rules": ["ignored"], "rules_file": "./ignored.md"},
+            evaluator_config={"temperature": 0.2},
             default_model="gpt-4o-mini",
             base_dir=tmp_path,
         )
 
     assert result["_compiled_rules"] == ["Be helpful", "No secrets"]
     assert result["_rules_source"] == "rules.md"
-    assert "rules" not in result
-    assert "rules_file" not in result
+    assert result["temperature"] == 0.2
 
 
 @pytest.mark.asyncio
@@ -252,11 +251,7 @@ async def test_shared_runtime_flow_uses_project_rules_md_for_all_engines(
         result = await compile_runtime_config_for_evaluator(
             evaluator_name="shared-evaluator",
             evaluator_type=evaluator_type,
-            evaluator_config={
-                "rules": ["ignored"],
-                "rules_file": "./ignored.md",
-                "temperature": 0.2,
-            },
+            evaluator_config={"temperature": 0.2},
             default_model="gpt-4o-mini",
             base_dir=tmp_path,
         )
@@ -276,8 +271,6 @@ async def test_shared_runtime_flow_uses_project_rules_md_for_all_engines(
         ),
     )
     assert result["temperature"] == 0.2
-    assert "rules" not in result
-    assert "rules_file" not in result
 
     if evaluator_type == "judge":
         assert result["_compiled_rules"] == ["Rule one", "Rule two"]
@@ -292,6 +285,34 @@ async def test_shared_runtime_flow_uses_project_rules_md_for_all_engines(
             fake_result,
             tmp_path / ".openbias_runtime" / "nemo" / "shared-evaluator",
         )
+
+
+@pytest.mark.asyncio
+async def test_runtime_preserves_unvalidated_evaluator_config_keys(tmp_path: Path):
+    """Runtime compilation should not special-case legacy authored keys."""
+    (tmp_path / "rules.md").write_text("Rule one", encoding="utf-8")
+    fake_result = CompilationResult(
+        success=True,
+        config={"_compiled_rules": ["Rule one"], "_rules_source": "rules.md"},
+    )
+    mock_compiler = AsyncMock()
+    mock_compiler.compile = AsyncMock(return_value=fake_result)
+
+    with patch(
+        "openbias.policy.compiler.runtime.PolicyCompilerRegistry.get",
+        return_value=lambda: mock_compiler,
+    ):
+        result = await compile_runtime_config_for_evaluator(
+            evaluator_name="behavior",
+            evaluator_type="judge",
+            evaluator_config={"rules": ["legacy"], "rules_file": "./legacy.md"},
+            default_model="gpt-4o-mini",
+            base_dir=tmp_path,
+        )
+
+    assert result["rules"] == ["legacy"]
+    assert result["rules_file"] == "./legacy.md"
+    assert result["_compiled_rules"] == ["Rule one"]
 
 
 @pytest.mark.asyncio
