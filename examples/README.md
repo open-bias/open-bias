@@ -9,11 +9,11 @@ Your App  ──►  Open Bias (:4000)  ──►  LLM Provider
                      │
               pre_call_hook    → apply deferred interventions (μs)
               LLM call         → forwarded unmodified via LiteLLM
-              post_call_hook   → policy engine evaluates async
+              post_call_hook   → evaluator engine evaluates async
                                  violations queued for next turn
 ```
 
-Every example below triggers this pipeline. The interesting part is what the policy engine does in step 3.
+Every example below triggers this pipeline. The interesting part is what the evaluator engine does in step 3.
 
 ---
 
@@ -21,7 +21,7 @@ Every example below triggers this pipeline. The interesting part is what the pol
 
 [`examples/quickstart/`](quickstart/)
 
-The smallest possible demo. ~30 lines of client code, 3 policy rules. Shows the judge engine evaluating responses in the background with zero critical-path latency. Start here.
+The smallest possible demo. ~30 lines of client code, 3 rules. Shows the judge engine evaluating responses in the background with zero critical-path latency. Start here.
 
 ```bash
 cd examples/quickstart
@@ -38,7 +38,7 @@ python quickstart.py         # terminal 2
 
 A coding assistant that gets hit with a prompt injection attack. The judge engine evaluates the response asynchronously (zero latency on your call), catches the violation, and injects a system prompt amendment on the next turn. Watch the agent reassert its boundaries.
 
-**What's happening under the hood**: The judge LLM scores responses on built-in rubrics (safety, instruction_following, tone) and maps the verdict to an action (pass/intervene/block/shadow).
+**What's happening under the hood**: The judge LLM scores responses on built-in rules (safety, instruction_following, tone) and maps the verdict to an action (pass/intervene/block/shadow).
 
 ```bash
 cd examples/judge
@@ -70,7 +70,7 @@ python workflow_enforcement.py
 
 [`examples/nemo_guardrails/`](nemo_guardrails/)
 
-Wraps NVIDIA NeMo Guardrails as a policy engine. Input rails run pre-call (jailbreak detection, PII filtering), output rails run post-call (toxicity, topical control). Fail-open by default — if NeMo throws, the request passes through with a warning.
+Wraps NVIDIA NeMo Guardrails as an evaluator engine. Input rails run pre-call (jailbreak detection, PII filtering), output rails run post-call (toxicity, topical control). Fail-open by default — if NeMo throws, the request passes through with a warning.
 
 ```bash
 pip install 'openbias[nemo]'   # extra dependency

@@ -2,10 +2,10 @@
 #
 # Under the hood:
 #   - The judge LLM (separate from your agent's LLM) receives the conversation
-#     history + the latest response, then scores it on built-in rubrics
+#     history + the latest response, then scores it on built-in rule sets
 #     (safety, agent_behavior).
-#   - Binary rubrics: any criterion failure triggers the configured fail_action.
-#   - Likert rubrics: scores are normalized and aggregated into a weighted average.
+#   - Binary rules: any criterion failure triggers the configured fail_action.
+#   - Likert rules: scores are normalized and aggregated into a weighted average.
 #
 # The judge runs async by default — zero latency on the critical path.
 

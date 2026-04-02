@@ -1,7 +1,7 @@
 """
 Open Bias — Content Safety Rails (NeMo Engine)
 
-Demonstrates NVIDIA NeMo Guardrails as a policy engine. NeMo provides
+Demonstrates NVIDIA NeMo Guardrails as an evaluator engine. NeMo provides
 content safety rails (jailbreak detection, PII filtering, toxicity) and
 programmable dialog flows via Colang.
 
