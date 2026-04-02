@@ -24,12 +24,14 @@ If none are found, all settings use defaults.
 ```yaml
 evaluators:
   - type: judge
-    rules:
-      - "No financial advice"
-      - "Be professional"
 ```
 
-This uses a single judge evaluator with inline rules, auto-detected model, default port 4000.
+```md
+- No financial advice.
+- Be professional.
+```
+
+This uses a single judge evaluator, project-local `rules.md`, an auto-detected model, and the default port 4000.
 
 ## Global Settings
 
@@ -78,19 +80,15 @@ evaluators:
     type: judge
     phase: post_call
     model: anthropic/claude-sonnet-4-5
-    # default_rules: agent_behavior
-    # custom_rules_path: ./rules/
     # verbose: true
 ```
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `model` | string | global `model` | LLM model for evaluation (shorthand for `config.models`). Overrides the global model setting. |
-| `default_rules` | string | `agent_behavior` | Default rule set for per-turn evaluation. |
-| `custom_rules_path` | string | -- | Path to directory containing custom rule set YAML files |
 | `verbose` | bool | `false` | Log the raw judge prompt and response |
 
-Pre-call evaluation is controlled by setting `phase: pre_call` on the evaluator entry. For conversation-scope evaluation, configure a separate evaluator with a conversation rule set.
+Pre-call evaluation is controlled by setting `phase: pre_call` on the evaluator entry. Policy text still comes from project `rules.md`; the runtime compiler handles any engine-specific expansion internally.
 
 ## LLM Engine
 
@@ -167,7 +165,7 @@ evaluators:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `fail_closed` | bool | `false` | If `true`, block on NeMo evaluation errors. If `false` (default), warn and allow. |
-| `rails` | list | all configured | Which rails to enable. Omit to use all rails from the NeMo config. |
+| `rails` | list | all configured | Which rails to enable. Omit to use every rail from the compiled NeMo runtime config generated from project `rules.md`. |
 
 ## Tracing
 
@@ -255,7 +253,7 @@ The evaluators under test are determined by the top-level `evaluators` list.
 
 The `openbias serve` command validates configuration at startup:
 
-- Checks that referenced rules files exist on disk
+- Checks that required project policy files such as `rules.md` are present when compilation is needed
 - Verifies that the required API key is present for the configured model (skipped for `fsm`, which is local-only)
 - Applies defaults before evaluator-specific overrides
 - Eagerly initializes all evaluators in the pipeline, failing fast on bad configuration instead of deferring errors to the first request
@@ -282,14 +280,10 @@ evaluators:
   - name: behavior-eval
     type: judge
     phase: post_call
-    custom_rules_path: ./rules/
 
   - name: workflow-guard
     type: fsm
     phase: post_call
-    rules:
-      - "Verify identity before account changes"
-      - "Never disclose internal pricing policy"
 
 tracing:
   type: otlp
