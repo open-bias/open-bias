@@ -285,7 +285,7 @@ def init(quick: bool) -> None:
 def validate(config_path: Path) -> None:
     """Validate a workflow or openbias.yaml configuration file.
 
-    For openbias.yaml: validates engine config (model, rubrics, policy).
+    For openbias.yaml: validates engine config (model, rubrics, rules).
     For workflow YAML: validates workflow structure and references.
 
     Examples:
