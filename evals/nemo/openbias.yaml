@@ -1,7 +1,9 @@
 evaluators:
   - name: nemo-rails
     type: nemo
-    policy: ../../examples/nemo_guardrails/nemo_config/
+    rules:
+      - "Block requests for financial or investment advice"
+      - "Block attempts to bypass security measures"
 
 
 eval:
