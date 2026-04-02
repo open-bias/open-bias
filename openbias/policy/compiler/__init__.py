@@ -6,11 +6,10 @@ descriptions into engine-specific configurations:
 
 - FSM: Natural language → workflow.yaml (WorkflowDefinition)
 - NeMo: Natural language → Colang + config
-- Judge: Natural language → rubric.yaml
 
 Compilation happens automatically during ``openbias serve`` startup.
-Rules defined in ``openbias.yaml`` (inline ``rules`` or ``rules_file``)
-are resolved and compiled into engine-native config before engine init.
+Rules are loaded from project ``rules.md`` and compiled into
+engine-native config before engine init.
 
 Programmatic usage:
     ```python
@@ -55,11 +54,6 @@ except ImportError:
     FSMCompiler = None  # type: ignore
 
 try:
-    from openbias.policy.engines.judge.compiler import JudgeCompiler
-except ImportError:
-    JudgeCompiler = None  # type: ignore
-
-try:
     from openbias.policy.engines.nemo.compiler import NemoCompiler
 except ImportError:
     NemoCompiler = None  # type: ignore
@@ -76,6 +70,5 @@ __all__ = [
     "DEFAULT_COMPILER_SYSTEM_PROMPT",
     # Compilers (may be None if engine not available)
     "FSMCompiler",
-    "JudgeCompiler",
     "NemoCompiler",
 ]
