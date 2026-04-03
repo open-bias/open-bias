@@ -1,7 +1,7 @@
 """
 Intervention strategies for workflow correction.
 
-Strategies define HOW to modify LLM requests or responses when deviation is detected:
+Strategies define HOW to modify LLM requests when deviation is detected:
 
 1. SYSTEM_PROMPT_APPEND: Add correction to system message (request)
    - Least disruptive, preserves conversation flow
@@ -10,10 +10,6 @@ Strategies define HOW to modify LLM requests or responses when deviation is dete
 2. USER_MESSAGE_INJECT: Add user message with guidance (request)
    - More visible to the model
    - Good for important corrections
-
-3. RESPONSE_MODIFICATION: Modify the current LLM response (response)
-   - Strips tool calls, replaces content, or appends warnings
-   - Used by sync POST_CALL evaluators for real-time enforcement
 
 """
 
@@ -29,7 +25,6 @@ class StrategyType(Enum):
 
     SYSTEM_PROMPT_APPEND = "system_prompt_append"
     USER_MESSAGE_INJECT = "user_message_inject"
-    RESPONSE_MODIFICATION = "response_modification"
 
 
 def format_message(template: str, context: dict[str, Any]) -> str:

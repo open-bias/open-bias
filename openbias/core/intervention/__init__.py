@@ -12,7 +12,6 @@ are detected:
 """
 
 from openbias.core.intervention.strategies import (
-    ResponseModificationStrategy,
     StrategyType,
     SystemPromptAppendStrategy,
     UserMessageInjectStrategy,
@@ -25,6 +24,5 @@ __all__ = [
     "format_message",
     "SystemPromptAppendStrategy",
     "UserMessageInjectStrategy",
-    "ResponseModificationStrategy",
     "WorkflowViolationError",
 ]

@@ -747,7 +747,7 @@ class Interceptor:
 
         Returns:
             New request data dict with the intervention applied, or None if
-            the strategy cannot be applied at request time (e.g. response_modification).
+            the strategy is unknown.
         """
         result = dict(request_data)
         messages = result.get("messages", [])
@@ -759,11 +759,8 @@ class Interceptor:
         elif effective_strategy == "system_prompt_append":
             result["messages"] = SystemPromptAppendStrategy.merge(messages, message)
             return result
-        elif effective_strategy == "response_modification":
-            logger.warning(
-                "response_modification is a response-time strategy and cannot be applied "
-                "during request modification (PRE_CALL); intervention skipped"
-            )
+
+        logger.warning("Unknown intervention strategy '%s'; intervention skipped", effective_strategy)
 
         return None
 
