@@ -117,6 +117,7 @@ class TestAsyncEvalSpanNesting:
                             ],
                         }
                     ],
+                    metadata={"aggregation_mode": "majority"},
                     parent_span=evaluator_span,
                 )
 
@@ -139,11 +140,20 @@ class TestAsyncEvalSpanNesting:
         assert evaluator.attributes["openbias.judge.scope"] == "turn"
         assert evaluator.attributes["openbias.judge.rules_count"] == 1
         assert evaluator.attributes["openbias.judge.failed_rules_count"] == 0
+        assert evaluator.attributes["openbias.judge.participating_judges"] == ("judge-a",)
+        assert evaluator.attributes["openbias.metadata.aggregation_mode"] == "majority"
         rule_events = [event for event in evaluator.events if event.name == "judge.rule:Never reveal secrets"]
         assert rule_events
         assert rule_events[0].attributes["passed"] is True
         assert rule_events[0].attributes["judge_count"] == 1
         assert rule_events[0].attributes["summary"] == "Rule passed."
+        assert json.loads(rule_events[0].attributes["judge_outcomes"]) == [
+            {
+                "judge_name": "judge-a",
+                "judge_model": "test-model",
+                "passed": True,
+            }
+        ]
 
     def test_judge_eval_has_expected_attributes(self, real_tracer):
         """Judge evaluation span carries rule-result and failed-rule attributes."""
@@ -171,6 +181,7 @@ class TestAsyncEvalSpanNesting:
                         ],
                     }
                 ],
+                metadata={"aggregation_mode": "majority"},
                 parent_span=phase_span,
             )
 
@@ -180,12 +191,26 @@ class TestAsyncEvalSpanNesting:
         assert phase.attributes["openbias.judge.rules_source"] == "compiled_rules"
         assert phase.attributes["openbias.judge.action"] == "intervene"
         assert phase.attributes["openbias.judge.failed_rules_count"] == 1
+        assert phase.attributes["openbias.judge.participating_judges"] == ("judge-a", "judge-b")
+        assert phase.attributes["openbias.judge.failed_rules"] == ("Never reveal secrets",)
+        assert phase.attributes["openbias.metadata.aggregation_mode"] == "majority"
         output_value = json.loads(phase.attributes["output.value"])
         assert output_value["rules_source"] == "compiled_rules"
         assert output_value["failed_rules"] == ["Never reveal secrets"]
         assert output_value["participating_judges"] == ["judge-a", "judge-b"]
-        assert "composite_score" not in output_value
-        assert "rubric" not in phase.attributes["output.value"]
+        assert output_value["rule_results"] == [
+            {
+                "rule": "Never reveal secrets",
+                "passed": False,
+                "action": "intervene",
+                "summary": "Rule failed.",
+                "aggregation_mode": "majority",
+                "judge_results": [
+                    {"judge_name": "judge-a", "passed": False},
+                    {"judge_name": "judge-b", "passed": True},
+                ],
+            }
+        ]
 
     def test_no_orphan_spans_outside_phase(self, real_tracer):
         """All spans share the same trace ID when properly nested."""

@@ -15,11 +15,14 @@ class _TracerSpy:
 
 
 @pytest.mark.asyncio
-async def test_trace_verdict_uses_compiled_rules_source_name():
+async def test_trace_verdict_emits_rule_scoped_payload():
     engine = JudgePolicyEngine()
     await engine.initialize(
         {
-            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "models": [
+                {"name": "judge-a", "model": "gpt-4o-mini"},
+                {"name": "judge-b", "model": "gpt-4.1-mini"},
+            ],
             "_compiled_rules": ["Rule A"],
             "_rules_source": "rules.md",
         }
@@ -31,10 +34,10 @@ async def test_trace_verdict_uses_compiled_rules_source_name():
     async def _mock_eval(*args, **kwargs):
         return JudgeRuleResult(
             rule=kwargs["rule"],
-            passed=True,
+            passed=kwargs["model_name"] == "judge-b",
             reasoning="ok",
             judge_name=kwargs["model_name"],
-            judge_model="gpt-4o-mini",
+            judge_model=kwargs["model_name"],
         )
 
     engine._evaluator.evaluate_rule = _mock_eval
@@ -49,8 +52,45 @@ async def test_trace_verdict_uses_compiled_rules_source_name():
     trace_call = tracer.calls[0]
     assert trace_call["rules_source"] == "rules.md"
     assert trace_call["evaluator_name"] == "judge"
-    assert "rule_results" in trace_call
-    assert "failed_rules" in trace_call
-    assert "participating_judges" in trace_call
-    assert "composite_score" not in trace_call
-    assert not any("rubric" in key for key in trace_call)
+    assert trace_call["scope"] == "turn"
+    assert trace_call["action"] == "intervene"
+    assert trace_call["failed_rules"] == ["Rule A"]
+    assert trace_call["participating_judges"] == ["judge-a", "judge-b"]
+    assert trace_call["metadata"] == {"aggregation_mode": "majority"}
+    assert trace_call["rule_results"] == [
+        {
+            "rule": "Rule A",
+            "passed": False,
+            "action": "intervene",
+            "summary": "Rule failed: Rule A (failing judges: judge-a)",
+            "aggregation_mode": "majority",
+            "judge_results": [
+                {
+                    "rule": "Rule A",
+                    "passed": False,
+                    "reasoning": "ok",
+                    "evidence": [],
+                    "confidence": 1.0,
+                    "corrective_actions": None,
+                    "judge_name": "judge-a",
+                    "judge_model": "judge-a",
+                    "latency_ms": 0.0,
+                    "token_usage": 0,
+                    "metadata": {},
+                },
+                {
+                    "rule": "Rule A",
+                    "passed": True,
+                    "reasoning": "ok",
+                    "evidence": [],
+                    "confidence": 1.0,
+                    "corrective_actions": None,
+                    "judge_name": "judge-b",
+                    "judge_model": "judge-b",
+                    "latency_ms": 0.0,
+                    "token_usage": 0,
+                    "metadata": {},
+                },
+            ],
+        }
+    ]

@@ -305,6 +305,7 @@ class TestJudgeEngineConformance:
     async def test_violation_record_shape(self):
         """Judge violations have all required fields populated."""
         from openbias.policy.engines.judge.engine import JudgePolicyEngine
+        from openbias.policy.engines.judge.models import JudgeRuleResult
 
         engine = JudgePolicyEngine()
         await engine.initialize({
@@ -313,28 +314,19 @@ class TestJudgeEngineConformance:
             "_rules_source": "rules.md",
         })
 
-        async def mock_call_judge(model_name, system_prompt, user_prompt, session_id=None):
-            del model_name, user_prompt, session_id
-            rule = system_prompt.split("Rule:\n", 1)[1].split("\n", 1)[0].strip()
-            outcomes = {
-                "Be helpful": {
-                    "passed": False,
-                    "reasoning": "Violated policy",
-                    "evidence": ["bad content"],
-                    "confidence": 0.9,
-                    "summary": "Policy violation detected.",
-                },
-                "Be safe": {
-                    "passed": True,
-                    "reasoning": "OK",
-                    "evidence": [],
-                    "confidence": 0.9,
-                    "summary": "Safe rule passed.",
-                },
-            }
-            return {"rule": rule, **outcomes[rule]}
+        async def mock_evaluate_rule(*, model_name, rule, **kwargs):
+            del kwargs
+            return JudgeRuleResult(
+                rule=rule,
+                passed=rule == "Be safe",
+                reasoning=f"{rule} evaluation",
+                evidence=["bad content"] if rule == "Be helpful" else [],
+                confidence=0.9,
+                judge_name=model_name,
+                judge_model="gpt-4o-mini",
+            )
 
-        engine._client.call_judge = AsyncMock(side_effect=mock_call_judge)
+        engine._evaluator.evaluate_rule = AsyncMock(side_effect=mock_evaluate_rule)
 
         result = await engine.evaluate_response(
             "conformance",
@@ -349,6 +341,11 @@ class TestJudgeEngineConformance:
         for v in result.violations:
             _assert_violation_record_shape(v, "judge")
             assert v.confidence is not None, "Judge violations must include confidence"
+            assert v.extra["aggregation_mode"] == "majority"
+            assert isinstance(v.extra["summary"], str) and v.extra["summary"]
+            assert isinstance(v.extra["judge_results"], list) and v.extra["judge_results"]
+            assert v.extra["judge_results"][0]["rule"] == "Be helpful"
+            assert v.extra["judge_results"][0]["judge_name"] == "primary"
 
 
 class TestLLMEngineConformance:
@@ -430,12 +427,20 @@ _MULTI_ENGINE_VIOLATIONS = [
             reason="Rule violation detected: safety",
             severity="intervene",
             scope="turn",
-            engine="judge:default",
+            engine="judge",
             confidence=0.85,
             extra={
                 "rule": "Never reveal secrets",
                 "aggregation_mode": "majority",
-                "participating_judges": ["primary"],
+                "summary": "Rule failed: Never reveal secrets (failing judges: primary)",
+                "judge_results": [
+                    {
+                        "rule": "Never reveal secrets",
+                        "passed": False,
+                        "judge_name": "primary",
+                        "judge_model": "gpt-4o-mini",
+                    }
+                ],
             },
         ),
         id="judge-with-rule-result",
