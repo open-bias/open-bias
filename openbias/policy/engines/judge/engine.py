@@ -176,11 +176,12 @@ class JudgePolicyEngine(PolicyEngine):
 
         try:
             verdict = await self._evaluate_turn(
-                response_content=user_message,
+                content_to_evaluate=user_message,
                 conversation=messages,
                 metadata=(context or {}).get("metadata", {}),
                 session_id=session_id,
                 session_context=session,
+                target_role="user",
             )
             parent_span = (context or {}).get("_parent_span")
             self._trace_verdict(session_id, verdict, parent_span=parent_span)
@@ -215,13 +216,14 @@ class JudgePolicyEngine(PolicyEngine):
 
         try:
             verdict = await self._evaluate_turn(
-                response_content=response_content,
+                content_to_evaluate=response_content,
                 conversation=conversation,
                 metadata=metadata,
                 session_id=session_id,
                 tool_calls=tool_calls,
                 session_context=session,
                 tool_definitions=tool_definitions,
+                target_role="assistant",
             )
             self._trace_verdict(session_id, verdict, parent_span=parent_span)
         except Exception as e:
@@ -335,10 +337,12 @@ class JudgePolicyEngine(PolicyEngine):
                 session_id=session_id,
                 rules_source=self._rules_source,
                 scope=verdict.scope.value,
-                composite_score=self._compute_turn_pass_ratio(verdict),
                 action=verdict.action.value,
-                judge_model=",".join(verdict.judge_models),
-                scores=[
+                participating_judges=self._collect_participating_judges(
+                    verdict.aggregated_results
+                ),
+                failed_rules=verdict.failed_rules,
+                rule_results=[
                     {
                         "rule": result.rule,
                         "passed": result.passed,
@@ -405,8 +409,15 @@ class JudgePolicyEngine(PolicyEngine):
         metadata: dict[str, Any] = {
             "judge": {
                 "verdict": {
-                    **verdict.to_dict(),
+                    **{
+                        key: value
+                        for key, value in verdict.to_dict().items()
+                        if key != "judge_models"
+                    },
                     "rules_source": self._rules_source,
+                    "participating_judges": self._collect_participating_judges(
+                        verdict.aggregated_results
+                    ),
                 },
                 "session_turn": session.turn_count + 1,
             },
@@ -467,8 +478,9 @@ class JudgePolicyEngine(PolicyEngine):
 
     async def _evaluate_turn(
         self,
-        response_content: str,
+        content_to_evaluate: str,
         conversation: list[dict[str, Any]],
+        target_role: str,
         metadata: dict[str, Any] | None,
         session_id: str,
         tool_calls: list[dict[str, Any]] | None = None,
@@ -481,8 +493,9 @@ class JudgePolicyEngine(PolicyEngine):
             aggregated_results.append(
                 await self._evaluate_rule_with_judges(
                     rule=rule,
-                    response_content=response_content,
+                    content_to_evaluate=content_to_evaluate,
                     conversation=conversation,
+                    target_role=target_role,
                     metadata=metadata,
                     session_id=session_id,
                     tool_calls=tool_calls,
@@ -519,8 +532,9 @@ class JudgePolicyEngine(PolicyEngine):
     async def _evaluate_rule_with_judges(
         self,
         rule: str,
-        response_content: str,
+        content_to_evaluate: str,
         conversation: list[dict[str, Any]],
+        target_role: str,
         metadata: dict[str, Any] | None,
         session_id: str,
         tool_calls: list[dict[str, Any]] | None = None,
@@ -534,8 +548,9 @@ class JudgePolicyEngine(PolicyEngine):
                 self._evaluator.evaluate_rule(
                     model_name=model_name,
                     rule=rule,
-                    response_content=response_content,
+                    content_to_evaluate=content_to_evaluate,
                     conversation=conversation,
+                    target_role=target_role,
                     metadata=metadata,
                     session_id=session_id,
                     tool_calls=tool_calls,
@@ -603,6 +618,16 @@ class JudgePolicyEngine(PolicyEngine):
             return passed_count > 0
         return passed_count > failed_count
 
+    def _collect_participating_judges(
+        self, aggregated_results: list[AggregatedRuleResult]
+    ) -> list[str]:
+        seen: list[str] = []
+        for aggregated in aggregated_results:
+            for result in aggregated.judge_results:
+                if result.judge_name and result.judge_name not in seen:
+                    seen.append(result.judge_name)
+        return seen
+
     def _collect_judge_models(
         self, aggregated_results: list[AggregatedRuleResult]
     ) -> list[str]:
@@ -612,12 +637,6 @@ class JudgePolicyEngine(PolicyEngine):
                 if result.judge_model and result.judge_model not in seen:
                     seen.append(result.judge_model)
         return seen
-
-    def _compute_turn_pass_ratio(self, verdict: JudgeVerdict) -> float:
-        if not verdict.aggregated_results:
-            return 1.0
-        passed_count = sum(1 for result in verdict.aggregated_results if result.passed)
-        return passed_count / len(verdict.aggregated_results)
 
     def _rule_confidence(self, rule_result: AggregatedRuleResult) -> float:
         if not rule_result.judge_results:

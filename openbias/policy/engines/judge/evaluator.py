@@ -11,8 +11,8 @@ from openbias.policy.engines.judge.models import (
     JudgeSessionContext,
 )
 from openbias.policy.engines.judge.prompts import (
-    RULES_TURN_SYSTEM,
-    RULES_TURN_USER,
+    build_rule_system_prompt,
+    build_rule_user_prompt,
     format_conversation_block,
     format_metadata_block,
     format_session_context_block,
@@ -33,8 +33,9 @@ class JudgeEvaluator:
         self,
         model_name: str,
         rule: str,
-        response_content: str,
+        content_to_evaluate: str,
         conversation: list[dict[str, Any]],
+        target_role: str,
         metadata: dict[str, Any] | None = None,
         session_id: str | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
@@ -44,19 +45,20 @@ class JudgeEvaluator:
         if not rule.strip():
             raise ValueError("Judge evaluator requires a non-empty rule.")
 
-        rules_block = f"- Rule 1: {rule}"
         conversation_block = format_conversation_block(conversation)
         metadata_block = format_metadata_block(metadata or {})
         tool_calls_block = format_tool_calls_block(tool_calls or [], tool_definitions)
         session_block = format_session_context_block(session_context)
 
-        system_prompt = RULES_TURN_SYSTEM.format(
-            rules_block=rules_block,
+        system_prompt = build_rule_system_prompt(
+            rule=rule,
+            target_role=target_role,
             session_context_block=session_block,
         )
-        user_prompt = RULES_TURN_USER.format(
+        user_prompt = build_rule_user_prompt(
             conversation_block=conversation_block,
-            response_content=response_content,
+            content_to_evaluate=content_to_evaluate,
+            target_role=target_role,
             tool_calls_block=tool_calls_block,
             metadata_block=metadata_block,
         )
@@ -86,19 +88,11 @@ class JudgeEvaluator:
         return result
 
     def _parse_rule_result(self, raw: dict[str, Any], rule: str) -> JudgeRuleResult:
-        items = raw.get("results")
-        if not isinstance(items, list):
-            raise ValueError("Judge response missing 'results' list.")
+        raw_rule = str(raw.get("rule", "")).strip()
+        if not raw_rule:
+            raise ValueError("Judge response missing 'rule'.")
 
-        payload: dict[str, Any] | None = None
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            if str(item.get("rule", "")).strip() == rule:
-                payload = item
-                break
-
-        if payload is None:
+        if raw_rule != rule:
             return JudgeRuleResult(
                 rule=rule,
                 passed=False,
@@ -106,16 +100,16 @@ class JudgeEvaluator:
                 confidence=0.0,
             )
 
-        raw_passed = payload.get("passed")
+        raw_passed = raw.get("passed")
         passed = bool(raw_passed) if isinstance(raw_passed, bool) else False
-        evidence = payload.get("evidence", [])
+        evidence = raw.get("evidence", [])
         return JudgeRuleResult(
             rule=rule,
             passed=passed,
-            reasoning=str(payload.get("reasoning", "")),
+            reasoning=str(raw.get("reasoning", "")),
             evidence=evidence if isinstance(evidence, list) else [],
-            confidence=float(payload.get("confidence", 1.0)),
-            corrective_actions=payload.get("corrective_actions"),
+            confidence=float(raw.get("confidence", 1.0)),
+            corrective_actions=raw.get("corrective_actions"),
         )
 
     def _coerce_raw_payload(self, raw: Any) -> dict[str, Any]:

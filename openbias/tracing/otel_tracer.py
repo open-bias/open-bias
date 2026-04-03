@@ -516,10 +516,10 @@ class Tracer:
         span: Any,
         rules_source: str,
         scope: str,
-        composite_score: float,
         action: str,
-        judge_model: str,
-        scores: list[dict[str, Any]] | None = None,
+        participating_judges: list[str] | None = None,
+        failed_rules: list[str] | None = None,
+        rule_results: list[dict[str, Any]] | None = None,
         latency_ms: float | None = None,
         token_usage: int | None = None,
         metadata: dict[str, Any] | None = None,
@@ -527,75 +527,73 @@ class Tracer:
         """Attach judge verdict details to an existing span."""
         span.set_attribute("openbias.judge.rules_source", rules_source)
         span.set_attribute("openbias.judge.scope", scope)
-        span.set_attribute("openbias.judge.composite_score", composite_score)
         span.set_attribute("openbias.judge.action", action)
-        span.set_attribute("openbias.judge.model", judge_model)
+        span.set_attribute(
+            "openbias.judge.failed_rules_count",
+            len(failed_rules or []),
+        )
+        if participating_judges:
+            span.set_attribute(
+                "openbias.judge.participating_judges",
+                list(participating_judges),
+            )
+        if failed_rules:
+            span.set_attribute("openbias.judge.failed_rules", list(failed_rules))
 
         if latency_ms is not None:
             span.set_attribute("openbias.judge.latency_ms", latency_ms)
         if token_usage is not None:
             span.set_attribute("openbias.judge.token_usage", token_usage)
 
-        # Add per-rule or per-criterion events
-        if scores:
-            uses_rule_results = any(
-                isinstance(score_data, dict) and "rule" in score_data
-                for score_data in scores
-            )
-            count_attr = (
-                "openbias.judge.rules_count"
-                if uses_rule_results
-                else "openbias.judge.criteria_count"
-            )
-            span.set_attribute(count_attr, len(scores))
-            for score_data in scores:
-                if isinstance(score_data, dict) and "rule" in score_data:
-                    judge_results = score_data.get("judge_results", [])
-                    failing_judges = []
-                    if isinstance(judge_results, list):
-                        for judge_result in judge_results:
-                            if (
-                                isinstance(judge_result, dict)
-                                and not judge_result.get("passed", False)
-                                and judge_result.get("judge_name")
-                            ):
-                                failing_judges.append(str(judge_result["judge_name"]))
-                    span.add_event(
-                        f"judge.rule:{score_data.get('rule', 'unknown')}",
-                        attributes={
-                            "passed": bool(score_data.get("passed", False)),
-                            "action": str(score_data.get("action", "")),
-                            "judge_count": len(judge_results) if isinstance(judge_results, list) else 0,
-                            "failing_judges": ", ".join(failing_judges),
-                            "aggregation_mode": str(score_data.get("aggregation_mode", "")),
-                        },
-                    )
+        if rule_results:
+            span.set_attribute("openbias.judge.rules_count", len(rule_results))
+            for rule_result in rule_results:
+                if not isinstance(rule_result, dict):
                     continue
-
-                criterion = score_data.get("criterion", "unknown")
+                judge_results = rule_result.get("judge_results", [])
+                participating_rule_judges: list[str] = []
+                failing_judges: list[str] = []
+                judge_outcomes: list[dict[str, Any]] = []
+                if isinstance(judge_results, list):
+                    for judge_result in judge_results:
+                        if not isinstance(judge_result, dict):
+                            continue
+                        judge_name = str(judge_result.get("judge_name", ""))
+                        if judge_name:
+                            participating_rule_judges.append(judge_name)
+                            if not judge_result.get("passed", False):
+                                failing_judges.append(judge_name)
+                        judge_outcomes.append(
+                            {
+                                "judge_name": judge_name,
+                                "judge_model": judge_result.get("judge_model"),
+                                "passed": bool(judge_result.get("passed", False)),
+                            }
+                        )
                 span.add_event(
-                    f"judge.score:{criterion}",
+                    f"judge.rule:{rule_result.get('rule', 'unknown')}",
                     attributes={
-                        "score": score_data.get("score", 0),
-                        "max_score": score_data.get("max_score", 5),
-                        "normalized": score_data.get("normalized", 0.0),
-                        "confidence": score_data.get("confidence", 1.0),
-                        "reasoning": score_data.get("reasoning", ""),
+                        "passed": bool(rule_result.get("passed", False)),
+                        "action": str(rule_result.get("action", "")),
+                        "summary": str(rule_result.get("summary", "")),
+                        "judge_count": len(judge_results) if isinstance(judge_results, list) else 0,
+                        "participating_judges": ", ".join(participating_rule_judges),
+                        "failing_judges": ", ".join(failing_judges),
+                        "aggregation_mode": str(rule_result.get("aggregation_mode", "")),
+                        "judge_outcomes": self._safe_json(judge_outcomes),
                     },
                 )
 
         # Structured output for Langfuse
         output = {
-            "composite_score": composite_score,
             "action": action,
             "rules_source": rules_source,
             "scope": scope,
+            "participating_judges": participating_judges or [],
+            "failed_rules": failed_rules or [],
         }
-        if scores:
-            if any(isinstance(score_data, dict) and "rule" in score_data for score_data in scores):
-                output["rule_results"] = scores
-            else:
-                output["scores"] = scores
+        if rule_results:
+            output["rule_results"] = rule_results
         span.set_attribute("output.value", self._safe_json(output))
         span.set_attribute("langfuse.span.output", self._safe_json(output))
 
@@ -609,10 +607,10 @@ class Tracer:
         session_id: str,
         rules_source: str,
         scope: str,
-        composite_score: float,
         action: str,
-        judge_model: str,
-        scores: list[dict[str, Any]] | None = None,
+        participating_judges: list[str] | None = None,
+        failed_rules: list[str] | None = None,
+        rule_results: list[dict[str, Any]] | None = None,
         latency_ms: float | None = None,
         token_usage: int | None = None,
         metadata: dict[str, Any] | None = None,
@@ -626,10 +624,10 @@ class Tracer:
             session_id: Session identifier.
             rules_source: Source label for the compiled rules used for evaluation.
             scope: Evaluation scope label (currently "turn").
-            composite_score: Normalized composite score (0-1).
             action: Verdict action (pass/intervene/block).
-            judge_model: Model used for evaluation.
-            scores: Per-criterion score details.
+            participating_judges: Judge names that participated in this turn.
+            failed_rules: Aggregated rules that failed for this turn.
+            rule_results: Per-rule aggregated results including per-judge outcomes.
             latency_ms: Evaluation latency in milliseconds.
             token_usage: Total tokens consumed.
             metadata: Additional metadata.
@@ -660,10 +658,10 @@ class Tracer:
             target_span,
             rules_source=rules_source,
             scope=scope,
-            composite_score=composite_score,
             action=action,
-            judge_model=judge_model,
-            scores=scores,
+            participating_judges=participating_judges,
+            failed_rules=failed_rules,
+            rule_results=rule_results,
             latency_ms=latency_ms,
             token_usage=token_usage,
             metadata=metadata,
@@ -671,7 +669,7 @@ class Tracer:
 
         logger.debug(
             f"Logged judge evaluation for session {session_id} "
-            f"(rules_source={rules_source}, action={action}, score={composite_score:.2f})"
+            f"(rules_source={rules_source}, action={action}, failed_rules={len(failed_rules or [])})"
         )
 
     def end_trace(self, session_id: str) -> None:
