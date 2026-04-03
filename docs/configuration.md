@@ -31,14 +31,14 @@ evaluators:
 - Be professional.
 ```
 
-This uses a single judge evaluator, project-local `rules.md`, an auto-detected model, and the default port 4000.
+This uses a single judge evaluator, project-local `rules.md`, runtime-compiled rules, an auto-detected model, and the default port 4000.
 
 ## Global Settings
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `mode` | string | `async` | Evaluation mode: `sync` (blocking) or `async` (non-blocking, default) |
-| `fail_action` | string | `intervene` | What happens on a rules violation: `intervene` (modify next request), `block` (reject request), or `shadow` (log only). **Note:** `block` is automatically normalized to `intervene` when `mode: async`, since async evaluation cannot block a response that has already been sent. |
+| `fail_action` | string | `intervene` | What happens after a rule violation is detected: `intervene` (queue a corrective intervention for the next turn), `block` (reject request), or `shadow` (log only). **Note:** `block` is automatically normalized to `intervene` when `mode: async`, since async evaluation cannot block a response that has already been sent. |
 | `strategy` | string | `user_message_inject` | Intervention strategy: `system_prompt_append` or `user_message_inject` |
 | `session_ttl` | int | -- | Session time-to-live in seconds |
 | `max_sessions` | int | -- | Maximum concurrent sessions |
@@ -72,23 +72,22 @@ Legacy user-facing keys like `policy`, `policies`, and `rubric` are no longer su
 
 ## Judge Engine
 
-The judge engine evaluates responses against rules using a separate LLM as judge.
+The judge engine evaluates runtime-compiled rules using one or more separate LLM judges.
 
 ```yaml
 evaluators:
   - name: content-policy
     type: judge
     phase: post_call
-    model: anthropic/claude-sonnet-4-5
-    # verbose: true
+    # aggregation_mode: majority
 ```
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `model` | string | global `model` | LLM model for evaluation (shorthand for `config.models`). Overrides the global model setting. |
-| `verbose` | bool | `false` | Log the raw judge prompt and response |
+| `models` | list[object] | injected from global default model when omitted | Explicit judge model list for multi-judge evaluation. Each entry follows `{name, model, temperature?, max_tokens?, timeout?}`. |
+| `aggregation_mode` | string | `majority` | How to aggregate binary results when multiple judges evaluate the same compiled rule. Supported values: `majority`, `all`, `any`. |
 
-Pre-call evaluation is controlled by setting `phase: pre_call` on the evaluator entry. Policy text still comes from project `rules.md`; the runtime compiler handles any engine-specific expansion internally.
+Pre-call evaluation is controlled by setting `phase: pre_call` on the evaluator entry. Policy text still comes from project `rules.md`; Open Bias compiles that file into `_compiled_rules` internally, then judges each compiled rule independently with a binary pass/fail result. If you need to pin specific judge models instead of using the global default model, set `models` explicitly on the evaluator.
 
 ## LLM Engine
 

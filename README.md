@@ -68,7 +68,7 @@ response = client.chat.completions.create(
 )
 ```
 
-Every call now runs through your evaluators. The judge evaluator (default type) scores each response against the rules compiled from your local `rules.md` using a sidecar LLM, and intervenes (warn, modify, or block) when violations are detected. Model, port, and tracing are all auto-configured with smart defaults.
+Every call now runs through your evaluators. The judge evaluator (default type) compiles your local `rules.md`, evaluates one rule at a time with a sidecar LLM, and maps failed aggregated rules to `intervene`, `block`, or log-only `shadow` behavior according to `fail_action`. Model, port, and tracing are all auto-configured with smart defaults.
 
 Place your project policy in `rules.md`. `openbias serve` discovers that file automatically and compiles it to engine-native runtime config during startup.
 
@@ -111,20 +111,19 @@ Four evaluator types, same interface. Mix and match.
 
 | Engine | Mechanism | Critical-path latency |
 |--------|-----------|----------------------|
-| `judge` | Sidecar LLM scores responses against rules | **0ms** (async, deferred intervention) |
+| `judge` | Sidecar LLM evaluates compiled rules one at a time | **0ms** (async, deferred intervention) |
 | `fsm` | State machine with LTL-lite temporal constraints | **<1ms** tool call match, **~1ms** regex, **~50ms** embedding fallback |
 | `llm` | LLM-based state classification and drift detection | **100-500ms** |
 | `nemo` | NVIDIA NeMo Guardrails for content safety and dialog rails | **200-800ms** |
 
 ### Judge engine (default)
 
-Write rules in plain English in `rules.md`. The judge LLM evaluates every response against the compiled criteria and maps aggregate scores to actions.
+Write rules in plain English in `rules.md`. Open Bias compiles them into runtime rules, then the judge LLM evaluates each rule independently with a binary pass/fail result. If you configure multiple judge models, their results are aggregated per rule with `majority` by default.
 
 ```yaml
 evaluators:
   - name: content-policy
     type: judge
-    model: anthropic/claude-sonnet-4-5
 ```
 
 Runs async by default — zero latency on the critical path. The response goes back to your app immediately; the judge evaluates in a background `asyncio.Task`. Violations are applied as interventions on the next turn.

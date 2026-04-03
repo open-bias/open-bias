@@ -20,10 +20,10 @@ Do you need deterministic, auditable enforcement?
 
 | Property | Judge | FSM | LLM | NeMo |
 |----------|-------|-----|-----|------|
-| What it does | Scores responses against `rules.md`-compiled criteria using a separate LLM | Enforces state machine workflows with temporal constraints | Classifies state and detects drift using a sidecar LLM | Runs NVIDIA NeMo Guardrails input/output rails |
+| What it does | Evaluates `rules.md`-compiled rules one at a time with a separate LLM | Enforces state machine workflows with temporal constraints | Classifies state and detects drift using a sidecar LLM | Runs NVIDIA NeMo Guardrails input/output rails |
 | Deterministic | No | Yes | No | No |
 | Requires LLM calls | Yes (judge model) | No (tool calls, regex, local embeddings) | Yes (classification + constraint eval) | Yes (NeMo's LLM) |
-| Stateful | Per-turn + periodic conversation eval | Full FSM with state history | Full with drift tracking and evidence memory | Minimal (NeMo manages internally) |
+| Stateful | Per-turn with optional session context | Full FSM with state history | Full with drift tracking and evidence memory | Minimal (NeMo manages internally) |
 | Latency overhead | **0ms critical-path** (async default); 200-800ms total in background | ~0ms (local computation) | 100-500ms (LLM API calls) | 200-800ms (NeMo LLM calls) |
 | External deps | None beyond litellm | sentence-transformers (optional, for embedding fallback) | litellm, sentence-transformers | nemoguardrails |
 | Best for | Content quality, safety screening, rules compliance | Well-defined tool-based workflows with ordering requirements | Conversational workflows where classification is ambiguous | Jailbreak detection, PII filtering, content moderation |
@@ -32,7 +32,7 @@ Do you need deterministic, auditable enforcement?
 
 **Evaluator type**: `judge`
 
-Uses an LLM to evaluate every agent response against criteria compiled from project `rules.md`. The judge sees the conversation history and scores the response on multiple dimensions (tone, safety, instruction following, etc.), then maps the aggregate score to an action: pass, warn, intervene, or block.
+Uses an LLM to evaluate compiled rules from project `rules.md`. At startup, Open Bias compiles authored policy into runtime `_compiled_rules`. For each turn, the judge engine evaluates one compiled rule at a time against the current message and produces a binary pass/fail result. Failed aggregated rules are returned as violations and then mapped to the configured `fail_action`.
 
 ### When to use it
 
@@ -43,25 +43,25 @@ Uses an LLM to evaluate every agent response against criteria compiled from proj
 
 ### How it works
 
-1. After the agent responds, the judge LLM receives the conversation history and the response
-2. It scores the response on each compiled criterion (binary pass/fail or 5-point Likert)
-3. Binary rules: any criterion failure triggers the configured `fail_action` (block, intervene, or shadow)
-4. Likert rules: scores are normalized and aggregated; the aggregate maps to an action based on thresholds
-5. Optionally, conversation-level checks run every N turns to catch gradual drift
+1. Open Bias compiles project `rules.md` into runtime `_compiled_rules`
+2. On each evaluation, the engine picks the current message under review: latest user message for `phase: pre_call`, latest assistant response for `phase: post_call`
+3. For each compiled rule, one or more judge models evaluate that rule independently and return binary pass/fail results
+4. If multiple judges are configured, their results are aggregated per rule with `aggregation_mode: majority` by default
+5. Each failed aggregated rule is recorded as a violation, and the evaluator's `fail_action` determines whether Open Bias intervenes, blocks, or shadows
 
-### Evaluation scopes
+### Evaluation phases
 
-- **Turn scope**: Scores the latest response only. Runs every turn. Checks instruction following, safety, tool use correctness.
-- **Conversation scope**: Scores the full conversation trajectory. Runs periodically (default: every 5 turns). Catches drift, inconsistency, goal abandonment.
+- **`phase: pre_call`**: Evaluates the latest user message before the upstream model runs.
+- **`phase: post_call`**: Evaluates the latest assistant response after the upstream model returns.
 
 ### Sync vs async modes
 
 - **Async** (default): The agent's response reaches the user immediately. The judge runs in the background. Violations are applied as interventions on the next turn. Zero latency impact.
 - **Sync**: The response is held until the judge finishes. Violations are applied immediately. Adds one LLM round-trip of latency.
 
-### Ensemble
+### Multi-judge
 
-When `ensemble_enabled: true`, multiple judge models evaluate the same response. Results are aggregated by `mean_score` or `conservative` (takes the lowest score). Useful for reducing single-model bias at the cost of additional LLM calls.
+When multiple judge models are configured, they evaluate the same compiled rule in parallel. The engine aggregates those binary rule results with `aggregation_mode`, which defaults to `majority` and also supports `all` and `any`. This keeps multi-judge behavior per-rule and binary.
 
 ### Minimal config
 
@@ -69,7 +69,6 @@ When `ensemble_enabled: true`, multiple judge models evaluate the same response.
 evaluators:
   - name: content-policy
     type: judge
-    model: anthropic/claude-sonnet-4-5
 ```
 
 Full configuration reference: [docs/configuration.md](configuration.md#judge-engine)

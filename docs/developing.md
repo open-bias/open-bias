@@ -119,7 +119,7 @@ tests/
     ├── compiler/                  # Per-engine compiler tests
     └── engines/
         ├── fsm/                   # Classifier, constraints, state machine
-        ├── judge/                 # Evaluator, scoring, bias, tool calls
+        ├── judge/                 # Evaluator, per-rule verdicts, bias, tool calls
         ├── llm/                   # Drift, constraints, classification
         └── nemo/
 ```
