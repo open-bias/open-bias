@@ -580,6 +580,33 @@ class TestAsyncEdgeCases:
 
         await interceptor.shutdown()
 
+    async def test_intervention_not_available_until_async_verdict_finishes(self):
+        """A fast next turn cannot apply an intervention that has not finished evaluating yet."""
+        slow_violation = _mock_engine(
+            name="slow_async_violation",
+            status=EvaluationStatus.VIOLATION,
+            violation_message="Do not answer Python questions",
+            delay=0.2,
+        )
+        interceptor = Interceptor(
+            pre_call_evaluators=[],
+            post_call_evaluators=[slow_violation],
+        )
+
+        await interceptor.run_post_call(SESSION, _request("turn one"), {"r": 1}, REQUEST_ID)
+
+        immediate_result = await interceptor.run_pre_call(SESSION, _request("turn two"), "req-002")
+        assert immediate_result.allowed is True
+        assert immediate_result.modified_data is None
+
+        await asyncio.sleep(0.3)
+
+        delayed_result = await interceptor.run_pre_call(SESSION, _request("turn three"), "req-003")
+        assert delayed_result.allowed is True
+        assert delayed_result.modified_data is not None
+        guidance_msg = delayed_result.modified_data["messages"][1]
+        assert "Do not answer Python questions" in guidance_msg["content"]
+
     async def test_cleanup_session_cancels_tasks(self):
         """cleanup_session cancels running tasks and clears pending results."""
         slow_evaluator = _mock_engine(
