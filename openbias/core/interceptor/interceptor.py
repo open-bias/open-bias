@@ -171,11 +171,12 @@ class Interceptor:
         """
         Run PRE_CALL phase.
 
-        1. Apply pending async results from previous request
+        1. Wait for pending async results from previous requests to finish
+        2. Apply pending async results from previous request
            - BLOCK -> block this request
            - INTERVENE -> merge modified_data into request
-        2. Run sync PRE_CALL evaluators (gate only: ALLOW or BLOCK)
-        3. Return result with possibly modified request_data
+        3. Run sync PRE_CALL evaluators (gate only: ALLOW or BLOCK)
+        4. Return result with possibly modified request_data
         """
         self._sessions.touch(session_id)
         self._sessions.evict_stale()
@@ -184,7 +185,10 @@ class Interceptor:
         has_modifications = False
         all_metadata: dict[str, Any] = {"results": []}
 
-        # Step 1: Apply pending async results
+        # Step 1: Wait for prior async results so this turn sees their verdicts
+        await self._await_pending_async(session_id)
+
+        # Step 2: Apply pending async results
         pending_results = self._collect_completed_async(session_id)
         for processed_count, pending in enumerate(pending_results, start=1):
             _async_ctx = (
@@ -219,7 +223,7 @@ class Interceptor:
         # Async results processed successfully — remove from session store
         self._confirm_collected(session_id)
 
-        # Step 2: Run sync PRE_CALL evaluators
+        # Step 3: Run sync PRE_CALL evaluators
         # Note: INTERVENE results accumulate — each evaluator sees the already-modified
         # request_data from prior evaluators. Order in evaluators list matters.
         for evaluator in self._sync_pre_call_evaluators:
@@ -278,6 +282,23 @@ class Interceptor:
             modified_data=modified_data if has_modifications else None,
             metadata=all_metadata,
         )
+
+    async def _await_pending_async(self, session_id: str) -> None:
+        """Wait for all outstanding async evaluator tasks for a session."""
+        tasks = self._sessions.get(session_id)
+        if not tasks:
+            return
+
+        unfinished = [task for task in tasks if not task.done()]
+        if not unfinished:
+            return
+
+        logger.info(
+            "Waiting for %d async evaluator task(s) before pre-call for session %s",
+            len(unfinished),
+            session_id,
+        )
+        await asyncio.gather(*unfinished, return_exceptions=True)
 
     async def run_post_call(
         self,

@@ -560,11 +560,11 @@ class TestAsyncEdgeCases:
         # Fail-open: request is allowed despite async error
         assert result.allowed is True
 
-    async def test_still_running_not_collected(self):
-        """Async task that isn't done yet stays in _running_tasks."""
+    async def test_still_running_is_waited_for_and_cleared(self):
+        """PRE_CALL waits for unfinished async tasks and clears them after processing."""
         slow_evaluator = _mock_engine(
             name="slow_async",
-            delay=5.0,
+            delay=0.1,
         )
         interceptor = Interceptor(
             pre_call_evaluators=[], post_call_evaluators=[slow_evaluator]
@@ -572,16 +572,16 @@ class TestAsyncEdgeCases:
 
         await interceptor.run_post_call(SESSION, _request(), {"r": 1}, REQUEST_ID)
 
+        start = time.perf_counter()
         result = await interceptor.run_pre_call(SESSION, _request(), "req-002")
+        elapsed = time.perf_counter() - start
 
         assert result.allowed is True
-        assert SESSION in interceptor._sessions
-        assert len(interceptor._sessions.get(SESSION)) == 1
+        assert elapsed >= 0.08
+        assert SESSION not in interceptor._sessions
 
-        await interceptor.shutdown()
-
-    async def test_intervention_not_available_until_async_verdict_finishes(self):
-        """A fast next turn cannot apply an intervention that has not finished evaluating yet."""
+    async def test_intervention_available_on_immediate_next_turn_after_wait(self):
+        """PRE_CALL waits for the prior async verdict and applies it on the immediate next turn."""
         slow_violation = _mock_engine(
             name="slow_async_violation",
             status=EvaluationStatus.VIOLATION,
@@ -595,16 +595,14 @@ class TestAsyncEdgeCases:
 
         await interceptor.run_post_call(SESSION, _request("turn one"), {"r": 1}, REQUEST_ID)
 
+        start = time.perf_counter()
         immediate_result = await interceptor.run_pre_call(SESSION, _request("turn two"), "req-002")
+        elapsed = time.perf_counter() - start
+
         assert immediate_result.allowed is True
-        assert immediate_result.modified_data is None
-
-        await asyncio.sleep(0.3)
-
-        delayed_result = await interceptor.run_pre_call(SESSION, _request("turn three"), "req-003")
-        assert delayed_result.allowed is True
-        assert delayed_result.modified_data is not None
-        guidance_msg = delayed_result.modified_data["messages"][1]
+        assert immediate_result.modified_data is not None
+        assert elapsed >= 0.18
+        guidance_msg = immediate_result.modified_data["messages"][1]
         assert "Do not answer Python questions" in guidance_msg["content"]
 
     async def test_cleanup_session_cancels_tasks(self):
