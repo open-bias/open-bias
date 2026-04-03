@@ -597,6 +597,44 @@ class TestTriggerCommand:
 
 
 class TestEvalCommand:
+    def test_eval_compiles_rules_inside_async_run_without_nested_event_loop_error(self):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Stay polite\n")
+            Path("scenario.yaml").write_text("name: smoke\nconversation: []\n")
+            Path("openbias.yaml").write_text(
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: synthesis\n"
+                "    type: llm\n"
+                "    phase: post_call\n"
+                "eval:\n"
+                "  scenarios:\n"
+                "    - scenario.yaml\n"
+            )
+
+            mock_engine = AsyncMock()
+            mock_engine.shutdown = AsyncMock()
+
+            with patch(
+                "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
+                new_callable=AsyncMock,
+            ) as mock_compile:
+                mock_compile.return_value = {"workflow": {"steps": []}, "llm_model": "gpt-4o-mini"}
+                with patch(
+                    "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
+                    new=AsyncMock(return_value=mock_engine),
+                ):
+                    with patch(
+                        "openbias.eval.EvalRunner.run_suite",
+                        new=AsyncMock(return_value=[]),
+                    ):
+                        with patch("openbias.eval.print_report"):
+                            result = runner.invoke(main, ["eval", "--config", "openbias.yaml"])
+
+            assert result.exit_code == 0
+            mock_compile.assert_awaited_once()
+
     def test_eval_uses_active_evaluator_type_for_mock_provider(self):
         runner = CliRunner()
         with runner.isolated_filesystem():
