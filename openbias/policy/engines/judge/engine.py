@@ -1,7 +1,8 @@
 """
 LLM-as-a-Judge Policy Engine.
 
-Evaluates agent responses against runtime-compiled rules using LLM judges.
+Evaluates user messages or assistant responses against runtime-compiled rules
+using LLM judges.
 Integrates with the Open Bias policy engine infrastructure via PolicyEngine ABC.
 """
 
@@ -117,11 +118,6 @@ class JudgePolicyEngine(PolicyEngine):
             max_sessions=int(config["max_sessions"]) if "max_sessions" in config else None,
         )
 
-        if "rules_file" in config:
-            raise ValueError(
-                "Judge engine no longer accepts `rules_file`; use runtime-compiled "
-                "`_compiled_rules` from project rules.md."
-            )
         compiled_rules = config.get("_compiled_rules")
         if not isinstance(compiled_rules, list) or not all(
             isinstance(rule, str) and rule.strip() for rule in compiled_rules
@@ -289,11 +285,6 @@ class JudgePolicyEngine(PolicyEngine):
                 if not isinstance(m, dict) or not m.get("model"):
                     errors.append(f"models[{i}]: missing 'model' field.")
 
-        if "rules_file" in config:
-            errors.append(
-                "Judge engine no longer accepts `rules_file`; use runtime-compiled "
-                "`_compiled_rules` from project rules.md."
-            )
         compiled_rules = config.get("_compiled_rules")
         if (
             not isinstance(compiled_rules, list)

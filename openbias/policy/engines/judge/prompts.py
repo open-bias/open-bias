@@ -183,7 +183,7 @@ def format_tool_calls_block(
 
     # If no definitions, use compact format
     if not defs:
-        lines = ["Tool calls in this response:"]
+        lines = ["Tool calls in the evaluated content:"]
         for tc in tool_calls:
             name = tc.get("function_name", "unknown")
             args = tc.get("arguments", "")
@@ -193,7 +193,7 @@ def format_tool_calls_block(
         return "\n".join(lines) + "\n\n"
 
     # Enriched format with definitions
-    lines = ["Tool calls in this response:"]
+    lines = ["Tool calls in the evaluated content:"]
     for i, tc in enumerate(tool_calls, 1):
         name = tc.get("function_name", "unknown")
         args = tc.get("arguments", "")

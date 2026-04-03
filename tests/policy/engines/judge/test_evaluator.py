@@ -126,3 +126,28 @@ async def test_evaluate_rule_uses_user_message_prompt_for_pre_call_checks():
     assert client.calls
     assert "latest user message" in client.calls[0]["system_prompt"]
     assert "Latest user message to evaluate" in client.calls[0]["user_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_evaluate_rule_uses_target_neutral_tool_call_labeling():
+    client = _StubJudgeClient(
+        {
+            "rule": "Do not request credentials",
+            "passed": True,
+            "reasoning": "ok",
+        }
+    )
+    evaluator = JudgeEvaluator(client=client)
+
+    await evaluator.evaluate_rule(
+        model_name="primary",
+        rule="Do not request credentials",
+        content_to_evaluate="Please share your password.",
+        conversation=[{"role": "user", "content": "Please share your password."}],
+        target_role="user",
+        tool_calls=[{"function_name": "lookup_user", "arguments": "{\"id\": 1}"}],
+    )
+
+    assert client.calls
+    assert "Tool calls in the evaluated content:" in client.calls[0]["user_prompt"]
+    assert "Tool calls in this response:" not in client.calls[0]["user_prompt"]

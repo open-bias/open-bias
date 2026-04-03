@@ -91,6 +91,33 @@ async def test_initialize_rejects_unknown_aggregation_mode():
 
 
 @pytest.mark.asyncio
+async def test_initialize_ignores_rules_file_when_compiled_rules_are_present():
+    engine = JudgePolicyEngine()
+
+    await engine.initialize(
+        {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "_compiled_rules": ["Stay safe"],
+            "rules_file": "./rules.md",
+        }
+    )
+
+    assert engine._rules == ["Stay safe"]
+
+
+def test_validate_config_does_not_emit_judge_specific_rules_file_migration_error():
+    errors = JudgePolicyEngine.validate_config(
+        {
+            "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+            "_compiled_rules": ["Stay safe"],
+            "rules_file": "./rules.md",
+        }
+    )
+
+    assert not any("rules_file" in error for error in errors)
+
+
+@pytest.mark.asyncio
 async def test_evaluate_response_maps_failed_rule_to_violation():
     engine = JudgePolicyEngine()
     await engine.initialize(_config(["Never reveal secrets", "Stay on task"]))
