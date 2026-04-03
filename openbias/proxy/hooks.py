@@ -212,7 +212,7 @@ class AsyncEvaluatorExecutionSpanFactory:
                 links.append(link)
 
         with self._tracer.trace_block(
-            f"evaluator:{evaluator_name}",
+            f"evaluator_execution:{evaluator_name}",
             self._session_id,
             attributes=attrs,
             links=links or None,

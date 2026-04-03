@@ -1700,7 +1700,7 @@ class TestAsyncEvaluatorExecutionSpanFactory:
             span_id_hex="00000000000000bb",
         )
         mock_tracer.trace_block.assert_called_once_with(
-            "evaluator:judge:agent_behavior",
+            "evaluator_execution:judge:agent_behavior",
             "sess-2",
             attributes={
                 "openbias.evaluator.name": "judge:agent_behavior",
@@ -1731,7 +1731,7 @@ class TestAsyncEvaluatorExecutionSpanFactory:
 
         mock_tracer.build_span_link.assert_not_called()
         mock_tracer.trace_block.assert_called_once_with(
-            "evaluator:llm_safety",
+            "evaluator_execution:llm_safety",
             "sess-3",
             attributes={
                 "openbias.evaluator.name": "llm_safety",
