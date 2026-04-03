@@ -39,7 +39,7 @@ This uses a single judge evaluator, project-local `rules.md`, runtime-compiled r
 |-----|------|---------|-------------|
 | `mode` | string | `async` | Evaluation mode: `sync` (blocking) or `async` (non-blocking, default) |
 | `fail_action` | string | `intervene` | What happens after a rule violation is detected: `intervene` (queue a corrective intervention for the next turn), `block` (reject request), or `shadow` (log only). **Note:** `block` is automatically normalized to `intervene` when `mode: async`, since async evaluation cannot block a response that has already been sent. |
-| `strategy` | string | `user_message_inject` | Intervention strategy: `system_prompt_append` or `user_message_inject` |
+| `strategy` | string | `user_message_inject` | Request-time intervention strategy. Supported values are `system_prompt_append` and `user_message_inject`; `user_message_inject` is the default. |
 | `session_ttl` | int | -- | Session time-to-live in seconds |
 | `max_sessions` | int | -- | Maximum concurrent sessions |
 | `model` | string | auto-detected | Default LLM model for the proxy target. Auto-detected from whichever API key is present. Evaluators can override with their own `model` key. |
@@ -260,6 +260,11 @@ The `openbias serve` command validates configuration at startup:
 If validation fails, the server prints the error and exits with code 1. Use `--debug` for a full traceback.
 
 ## Full Example
+
+Open Bias now supports only these two request-time strategies:
+
+- `user_message_inject` (default): insert guidance as a synthetic user note on the request that carries the intervention.
+- `system_prompt_append`: append guidance to the system prompt on that request.
 
 ```yaml
 mode: async

@@ -218,16 +218,15 @@ The `Interceptor` accepts registered engines directly via `Interceptor(pre_call_
 
 ### Adding an Intervention Strategy
 
-Three strategies exist as standalone classes in `openbias/core/intervention/strategies.py` (no base class):
+Two request-time strategies exist as standalone classes in `openbias/core/intervention/strategies.py` (no base class):
 
 - **`SystemPromptAppendStrategy`** — appends guidance to the system message via `merge(messages, value)`.
 - **`UserMessageInjectStrategy`** — injects a user message with guidance via `merge(messages, value)`.
-- **`ResponseModificationStrategy`** — modifies the current LLM response (strips tool calls, replaces content, or appends warnings) via `apply_to_response(response, message, modified_messages)`.
 
 The `StrategyType` enum maps to these classes. To add a new strategy:
 
 1. Add a variant to `StrategyType` enum in `openbias/core/intervention/strategies.py`.
-2. Create a standalone class with the appropriate static method (`merge()` for request-modifying strategies, or `apply_to_response()` for response-modifying strategies).
+2. Create a standalone class with `merge(messages, value)` and `cleanup_rules()` so it behaves like the existing request-time strategies.
 3. Add handling for the new type in `Interceptor._apply_intervention()` in `openbias/core/interceptor/interceptor.py`.
 
 ### Adding a Classification Method (FSM Engine)
