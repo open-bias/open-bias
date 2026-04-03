@@ -79,13 +79,17 @@ evaluators:
 
   # --- Judge evaluator (type: judge) ---
   #
-  # Evaluates responses against rules using a separate LLM as judge.
+  # Evaluates runtime-compiled rules using a separate LLM as judge.
   # Judge uses turn-level binary evaluation only:
-  # if any rule fails, evaluation is marked as a violation.
+  # if an aggregated rule result fails, evaluation is marked as a violation.
   #
   - name: safety-screen
     type: judge
     phase: pre_call
+    # aggregation_mode: majority
+    # models:
+    #   - name: primary
+    #     model: anthropic/claude-sonnet-4-5
 
   - name: behavior-eval
     type: judge
