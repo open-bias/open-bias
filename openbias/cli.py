@@ -159,28 +159,27 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
     except Exception as e:
         error(str(e))
         raise SystemExit(1)
-
-
-def _compile_rules(settings: "Settings", config_path: Path | None) -> None:
+async def _compile_rules_async(settings: "Settings", config_path: Path | None) -> None:
     """Compile canonical rules input into engine-native evaluator configs."""
-    import asyncio
-
     from openbias.policy.compiler.runtime import compile_runtime_config_for_evaluator
 
     base_dir = (config_path.parent if config_path else Path.cwd()).resolve()
+    for evaluator in settings.evaluators:
+        compiled = await compile_runtime_config_for_evaluator(
+            evaluator_name=evaluator.name,
+            evaluator_type=evaluator.type,
+            evaluator_config=dict(evaluator.config),
+            default_model=settings.proxy.default_model,
+            base_dir=base_dir,
+        )
+        evaluator.config = compiled
 
-    async def _compile_all() -> None:
-        for evaluator in settings.evaluators:
-            compiled = await compile_runtime_config_for_evaluator(
-                evaluator_name=evaluator.name,
-                evaluator_type=evaluator.type,
-                evaluator_config=dict(evaluator.config),
-                default_model=settings.proxy.default_model,
-                base_dir=base_dir,
-            )
-            evaluator.config = compiled
 
-    asyncio.run(_compile_all())
+def _compile_rules(settings: "Settings", config_path: Path | None) -> None:
+    """Compile evaluator configs from synchronous CLI commands."""
+    import asyncio
+
+    asyncio.run(_compile_rules_async(settings, config_path))
 
 
 @main.command()
@@ -615,7 +614,7 @@ def eval_cmd(config: Path | None, json_output: Path | None, verbose: bool, debug
                 settings = Settings(_config_path=str(config_path), debug=debug)
 
             with spinner("Compiling rules for runtime engines..."):
-                _compile_rules(settings, config_path)
+                await _compile_rules_async(settings, config_path)
 
             with spinner("Initializing engine..."):
                 policy_config = settings.get_policy_config()
