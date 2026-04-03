@@ -180,6 +180,8 @@ class Tracer:
                 attributes={
                     "openbias.session_id": session_id,
                     "openbias.version": __version__,
+                    "langfuse.trace.name": "openbias-session",
+                    "langfuse.session.id": session_id,
                 },
             )
             self._sessions.put(session_id, span)
@@ -240,6 +242,8 @@ class Tracer:
             attributes={
                 "openbias.session_id": session_id,
                 "openbias.request_id": request_id,
+                "langfuse.trace.name": "openbias-session",
+                "langfuse.session.id": session_id,
             },
         )
         return span
