@@ -384,7 +384,7 @@ class Interceptor:
         # because the evaluator runs long after this request's spans end.
         for evaluator in self._async_post_call_evaluators:
             _dispatch_ctx = (
-                span_factory(evaluator.name, "post_call")
+                span_factory(evaluator.name, "dispatch")
                 if span_factory is not None
                 else nullcontext()
             )

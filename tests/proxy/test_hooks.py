@@ -1616,6 +1616,60 @@ class TestEvaluatorSpanFactory:
             parent_span=mock_phase_span,
         )
 
+    def test_uses_dispatch_span_name_for_async_handoff(self):
+        """Dispatch spans get a distinct name to avoid trace ambiguity."""
+        mock_span = MagicMock()
+        mock_tracer = MagicMock()
+
+        @contextmanager
+        def fake_trace_block(name, session_id, attributes=None, parent_span=None):
+            yield mock_span
+
+        mock_tracer.trace_block = MagicMock(side_effect=fake_trace_block)
+        mock_phase_span = MagicMock()
+
+        factory = EvaluatorSpanFactory(mock_tracer, mock_phase_span, "sess-1")
+
+        with factory("judge", "dispatch") as span:
+            assert span is mock_span
+
+        mock_tracer.trace_block.assert_called_once_with(
+            "evaluator_dispatch:judge",
+            "sess-1",
+            attributes={
+                "openbias.evaluator.name": "judge",
+                "openbias.evaluator.phase": "dispatch",
+            },
+            parent_span=mock_phase_span,
+        )
+
+    def test_uses_applied_span_name_for_deferred_async_results(self):
+        """Applied async results get a distinct name to avoid trace ambiguity."""
+        mock_span = MagicMock()
+        mock_tracer = MagicMock()
+
+        @contextmanager
+        def fake_trace_block(name, session_id, attributes=None, parent_span=None):
+            yield mock_span
+
+        mock_tracer.trace_block = MagicMock(side_effect=fake_trace_block)
+        mock_phase_span = MagicMock()
+
+        factory = EvaluatorSpanFactory(mock_tracer, mock_phase_span, "sess-1")
+
+        with factory("judge", "async_applied") as span:
+            assert span is mock_span
+
+        mock_tracer.trace_block.assert_called_once_with(
+            "evaluator_applied:judge",
+            "sess-1",
+            attributes={
+                "openbias.evaluator.name": "judge",
+                "openbias.evaluator.phase": "async_applied",
+            },
+            parent_span=mock_phase_span,
+        )
+
 
 class TestAsyncEvaluatorExecutionSpanFactory:
 

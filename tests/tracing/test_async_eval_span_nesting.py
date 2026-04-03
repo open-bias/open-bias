@@ -219,7 +219,7 @@ class TestAsyncEvalSpanNesting:
 
         with tracer.trace_block("phase", session_id) as phase_span:
             with tracer.trace_block(
-                "evaluator:e", session_id, parent_span=phase_span
+                "evaluator_dispatch:e", session_id, parent_span=phase_span
             ) as eval_span:
                 tracer.log_judge_evaluation(
                     session_id=session_id,

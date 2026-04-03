@@ -1326,7 +1326,7 @@ class TestSpanFactory:
         applied_span.set_attribute.assert_any_call("openbias.async.phase", "applied")
 
     async def test_span_factory_called_for_dispatched_async(self):
-        """span_factory is called with post_call phase when dispatching async evaluators."""
+        """span_factory is called with dispatch phase when dispatching async evaluators."""
         async_evaluator = _mock_engine(name="async_dispatch", delay=0.5)
         interceptor = Interceptor(
             pre_call_evaluators=[], post_call_evaluators=[async_evaluator]
@@ -1337,9 +1337,9 @@ class TestSpanFactory:
             SESSION, _request(), {"r": 1}, REQUEST_ID, span_factory=factory
         )
 
-        assert ("async_dispatch", "post_call") in factory.calls
+        assert ("async_dispatch", "dispatch") in factory.calls
         # The span should have the async_dispatched source attribute
-        dispatched_span = factory.spans[factory.calls.index(("async_dispatch", "post_call"))]
+        dispatched_span = factory.spans[factory.calls.index(("async_dispatch", "dispatch"))]
         dispatched_span.set_attribute.assert_any_call(
             "openbias.evaluator.source", "async_dispatched"
         )

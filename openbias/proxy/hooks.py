@@ -156,10 +156,18 @@ class EvaluatorSpanFactory:
         self._phase_span = phase_span
         self._session_id = session_id
 
+    @staticmethod
+    def _span_name(evaluator_name: str, phase: str) -> str:
+        if phase == "dispatch":
+            return f"evaluator_dispatch:{evaluator_name}"
+        if phase == "async_applied":
+            return f"evaluator_applied:{evaluator_name}"
+        return f"evaluator:{evaluator_name}"
+
     @contextmanager
     def __call__(self, evaluator_name: str, phase: str):
         with self._tracer.trace_block(
-            f"evaluator:{evaluator_name}",
+            self._span_name(evaluator_name, phase),
             self._session_id,
             attributes={
                 "openbias.evaluator.name": evaluator_name,
