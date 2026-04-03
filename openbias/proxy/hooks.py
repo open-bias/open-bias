@@ -24,6 +24,7 @@ https://docs.litellm.ai/docs/observability/custom_callback
 """
 
 import asyncio
+import copy
 import contextvars
 import json
 import logging
@@ -61,6 +62,10 @@ request_span_var: contextvars.ContextVar[Any] = contextvars.ContextVar("request_
 # Module-level counter tracking fail-open activations per hook.
 # Useful for monitoring/alerting without requiring an external metrics library.
 _fail_open_counter: dict[str, int] = {}
+
+SYNC_POST_REPLAY_COUNT_KEY = "_openbias_sync_post_replay_count"
+SYNC_POST_REPLAY_PARENT_REQUEST_ID_KEY = "_openbias_sync_post_replay_parent_request_id"
+SYNC_POST_REPLAY_KIND = "sync_post_call_reprompt"
 
 
 def get_fail_open_counts() -> dict[str, int]:
@@ -229,6 +234,7 @@ class Callback(CustomLogger):
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or Settings()
         self._response_cleanup = ResponseCleanupStage()
+        self._router: Any | None = None
 
         # Interceptor (lazy initialized)
         self._interceptor: Interceptor | None = None
@@ -258,6 +264,10 @@ class Callback(CustomLogger):
                 "enforcement (adds latency).",
                 self.settings.mode,
             )
+
+    def attach_router(self, router: Any) -> None:
+        """Attach the active LiteLLM router for sync replay requests."""
+        self._router = router
 
     async def _get_interceptor(self) -> Interceptor | None:
         """Lazy-load interceptor with configured evaluators."""
@@ -476,6 +486,83 @@ class Callback(CustomLogger):
                 self._tracer = Tracer(self.settings.otel)
                 logger.info(f"Tracer initialized: {self._tracer}")
         return self._tracer
+
+    @staticmethod
+    def _sync_post_replay_count(data: dict[str, Any]) -> int:
+        metadata = data.get("metadata", {})
+        if not isinstance(metadata, dict):
+            return 0
+        raw_count = metadata.get(SYNC_POST_REPLAY_COUNT_KEY, 0)
+        try:
+            return int(raw_count)
+        except (TypeError, ValueError):
+            return 0
+
+    def _build_sync_post_replay_request(
+        self,
+        *,
+        data: dict[str, Any],
+        pending_intervention: dict[str, Any],
+        session_id: str,
+        request_id: str,
+    ) -> dict[str, Any]:
+        replay_request = copy.deepcopy(
+            pending_intervention.get("request_data")
+            if isinstance(pending_intervention.get("request_data"), dict)
+            else data
+        )
+        replay_metadata = replay_request.setdefault("metadata", {})
+        if not isinstance(replay_metadata, dict):
+            replay_metadata = {}
+            replay_request["metadata"] = replay_metadata
+
+        session_metadata = data.get("metadata", {})
+        if isinstance(session_metadata, dict) and session_metadata.get("session_id"):
+            replay_metadata["session_id"] = session_metadata["session_id"]
+        else:
+            replay_metadata["session_id"] = session_id
+
+        replay_metadata[SYNC_POST_REPLAY_COUNT_KEY] = self._sync_post_replay_count(data) + 1
+        replay_metadata[SYNC_POST_REPLAY_PARENT_REQUEST_ID_KEY] = request_id
+        replay_metadata.pop("_openbias_traced", None)
+        replay_metadata.pop("_openbias_request_id", None)
+        replay_metadata.pop("_openbias_llm_start_time", None)
+        return replay_request
+
+    async def _maybe_execute_sync_post_replay(
+        self,
+        *,
+        data: dict[str, Any],
+        result: Any,
+        session_id: str,
+        request_id: str,
+    ) -> Any | None:
+        pending_intervention = result.pending_intervention
+        if not isinstance(pending_intervention, dict):
+            return None
+        if pending_intervention.get("kind") != SYNC_POST_REPLAY_KIND:
+            return None
+        if self._router is None:
+            logger.warning("Sync POST_CALL replay requested but no router is attached")
+            return None
+        if self._sync_post_replay_count(data) >= 1:
+            logger.info(
+                "Skipping sync POST_CALL replay for session %s because the single replay guard is already set",
+                session_id,
+            )
+            return None
+
+        replay_request = self._build_sync_post_replay_request(
+            data=data,
+            pending_intervention=pending_intervention,
+            session_id=session_id,
+            request_id=request_id,
+        )
+        logger.info(
+            "Issuing sync POST_CALL replay for session %s via attached router",
+            session_id,
+        )
+        return await self._router.acompletion(**replay_request)
 
     async def async_pre_call_hook(
         self,
@@ -765,6 +852,15 @@ class Callback(CustomLogger):
                         raise WorkflowViolationError(
                             message, context=result.internal_metadata
                         )
+
+                    replay_response = await self._maybe_execute_sync_post_replay(
+                        data=data,
+                        result=result,
+                        session_id=session_id,
+                        request_id=request_id,
+                    )
+                    if replay_response is not None:
+                        return replay_response
 
                     if result.modified_data and "_interventions" in result.modified_data:
                         from openbias.core.intervention.strategies import (

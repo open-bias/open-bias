@@ -133,6 +133,7 @@ class Proxy:
             routing_strategy="simple-shuffle",
             set_verbose=self.settings.litellm_verbose,
         )
+        callback.attach_router(router)
 
         logger.info(f"Created LiteLLM router with {len(model_list)} provider(s) and Callback")
         return router
