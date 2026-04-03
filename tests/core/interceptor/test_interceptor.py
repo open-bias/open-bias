@@ -30,6 +30,7 @@ from openbias.core.interceptor import (
     ViolationRecord,
     Interceptor,
 )
+from openbias.core.intervention.strategies import RESPONSE_CLEANUP_METADATA_KEY
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -213,7 +214,9 @@ class TestSyncPreCall:
         assert result.modified_data is not None
         system_msg = result.modified_data["messages"][0]
         assert system_msg["role"] == "system"
+        assert "<system-reminder>" in system_msg["content"]
         assert "Verify identity first" in system_msg["content"]
+        assert RESPONSE_CLEANUP_METADATA_KEY not in result.modified_data.get("metadata", {})
 
     async def test_intervene_user_message_inject_strategy(self):
         """VIOLATION with user_message_inject strategy injects a user message."""

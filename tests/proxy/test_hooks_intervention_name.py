@@ -85,6 +85,7 @@ class TestDeferredInterventionIntegration:
         assert result.modified_data is not None
         # System prompt should have the intervention appended
         system_msg = result.modified_data["messages"][0]
+        assert "<system-reminder>" in system_msg["content"]
         assert "Always verify identity first." in system_msg["content"]
 
     async def test_user_message_inject_applied(self):

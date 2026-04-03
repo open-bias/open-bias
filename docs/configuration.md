@@ -264,7 +264,7 @@ If validation fails, the server prints the error and exits with code 1. Use `--d
 Open Bias now supports only these two request-time strategies:
 
 - `user_message_inject` (default): insert guidance as a synthetic user note on the request that carries the intervention.
-- `system_prompt_append`: append guidance to the system prompt on that request.
+- `system_prompt_append`: append guidance to the system prompt on that request using a `<system-reminder>` wrapper. This strategy does not register response-cleanup markers.
 
 ```yaml
 mode: async

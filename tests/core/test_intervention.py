@@ -79,7 +79,10 @@ class TestSystemPromptAppendStrategy:
         result = SystemPromptAppendStrategy.merge(messages, "Stay on task.")
         assert isinstance(result[0]["content"], str)
         assert "You are helpful." in result[0]["content"]
-        assert "[WORKFLOW GUIDANCE]: Stay on task." in result[0]["content"]
+        assert "<system-reminder>" in result[0]["content"]
+        assert "Please address this message and continue with your tasks." in result[0]["content"]
+        assert "Stay on task." in result[0]["content"]
+        assert "</system-reminder>" in result[0]["content"]
 
     def test_append_to_multimodal_list_content(self):
         """Guidance appended as a text part when system content is a list."""
@@ -98,26 +101,30 @@ class TestSystemPromptAppendStrategy:
         assert isinstance(content, list)
         assert len(content) == 3
         assert content[2]["type"] == "text"
-        assert "[WORKFLOW GUIDANCE]: Stay on task." in content[2]["text"]
+        assert "<system-reminder>" in content[2]["text"]
+        assert "Stay on task." in content[2]["text"]
 
     def test_no_system_message_creates_one(self):
         """When no system message exists, one is inserted at index 0."""
         messages = [{"role": "user", "content": "Hello"}]
         result = SystemPromptAppendStrategy.merge(messages, "Be careful.")
         assert result[0]["role"] == "system"
-        assert "[WORKFLOW GUIDANCE]: Be careful." in result[0]["content"]
+        assert "<system-reminder>" in result[0]["content"]
+        assert "Be careful." in result[0]["content"]
 
     def test_append_to_empty_string_content(self):
         """Guidance appended when system content is empty string."""
         messages = [{"role": "system", "content": ""}, {"role": "user", "content": "Hi"}]
         result = SystemPromptAppendStrategy.merge(messages, "Guide.")
-        assert "[WORKFLOW GUIDANCE]: Guide." in result[0]["content"]
+        assert "<system-reminder>" in result[0]["content"]
+        assert "Guide." in result[0]["content"]
 
     def test_append_to_none_content(self):
         """Guidance appended when system content is None."""
         messages = [{"role": "system", "content": None}, {"role": "user", "content": "Hi"}]
         result = SystemPromptAppendStrategy.merge(messages, "Guide.")
-        assert "[WORKFLOW GUIDANCE]: Guide." in result[0]["content"]
+        assert "<system-reminder>" in result[0]["content"]
+        assert "Guide." in result[0]["content"]
 
     def test_does_not_mutate_original(self):
         """Original messages list is not mutated."""
@@ -127,12 +134,9 @@ class TestSystemPromptAppendStrategy:
         assert "Added" in result[0]["content"]
 
     def test_cleanup_rules_are_strategy_specific(self):
-        """System prompt cleanup strips its own wrapper markers."""
+        """System prompt append does not register response cleanup markers."""
         rules = SystemPromptAppendStrategy.cleanup_rules()
-        assert "[REPAIR-INSTRUCTION]" in rules
-        assert "[END-REPAIR-INSTRUCTION]" in rules
-        assert "[WORKFLOW GUIDANCE]" in rules
-        assert "[System Note]" not in rules
+        assert rules == []
 
 
 class TestUserMessageInjectStrategy:
@@ -144,6 +148,5 @@ class TestUserMessageInjectStrategy:
         assert "[REPAIR-INSTRUCTION]" in rules
         assert "[END-REPAIR-INSTRUCTION]" in rules
         assert "[System Note]" in rules
-        assert "[WORKFLOW GUIDANCE]" not in rules
-
+        assert "<system-reminder>" not in rules
 

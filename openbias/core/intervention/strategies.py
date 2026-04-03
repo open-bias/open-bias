@@ -57,7 +57,12 @@ class SystemPromptAppendStrategy:
                 system_idx = i
                 break
 
-        guidance = f"\n\n[WORKFLOW GUIDANCE]: {value}"
+        guidance = (
+            "\n\n<system-reminder>\n"
+            "Please address this message and continue with your tasks.\n\n"
+            f"{value}\n"
+            "</system-reminder>"
+        )
 
         if system_idx is not None:
             existing = messages[system_idx].get("content", "")
@@ -70,19 +75,20 @@ class SystemPromptAppendStrategy:
         else:
             messages.insert(0, {
                 "role": "system",
-                "content": f"[WORKFLOW GUIDANCE]: {value}",
+                "content": (
+                    "<system-reminder>\n"
+                    "Please address this message and continue with your tasks.\n\n"
+                    f"{value}\n"
+                    "</system-reminder>"
+                ),
             })
 
         return messages
 
     @staticmethod
     def cleanup_rules() -> list[str]:
-        """Markers that may leak when guidance is placed in the system prompt."""
-        return [
-            "[REPAIR-INSTRUCTION]",
-            "[END-REPAIR-INSTRUCTION]",
-            "[WORKFLOW GUIDANCE]",
-        ]
+        """System-appended reminders are not scrubbed from model output."""
+        return []
 
 
 class UserMessageInjectStrategy:
