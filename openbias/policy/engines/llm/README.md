@@ -210,7 +210,6 @@ class SessionContext:
     state_history: List[StateTransition]     # Full transition records
     drift_score: float                        # Latest composite drift
     violation_buffer: List[ConstraintEvaluation]
-    pending_intervention: Optional[str]       # Scheduled for next request
     turn_count: int
     recent_confidences: List[float]           # Ring buffer (max 3)
     turn_window: List[Dict[str, Any]]         # Sliding window (max 10)

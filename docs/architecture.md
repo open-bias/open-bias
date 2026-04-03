@@ -65,7 +65,6 @@ Engine-specific docs: [engines.md](engines.md). Engine-specific READMEs live in 
 |----------|-----------|
 | `SYSTEM_PROMPT_APPEND` | Appends guidance to system message |
 | `USER_MESSAGE_INJECT` | Inserts a `[System Note]` as user message |
-| `RESPONSE_MODIFICATION` | Modifies current response content or tool calls |
 
 ### Tracing (`openbias/tracing/`)
 
@@ -88,6 +87,15 @@ Client request
   → LLM call
   → post_call_hook: run POST_CALL evaluators (all pass)
   → response returned unmodified
+```
+
+### Violation with sync intervention
+
+```
+Call N:
+  → post_call_hook: sync POST_CALL evaluator detects violation
+  → hook rebuilds the request with the selected strategy
+  → proxy issues one replay request and returns the replayed response
 ```
 
 ### Violation with deferred intervention
@@ -115,7 +123,7 @@ Hook throws or times out
 
 **Fail-open over fail-closed.** A monitoring layer that takes down production is worse than one that misses a violation. All hooks have timeout and exception handling. Only explicit `WorkflowViolationError` blocks requests.
 
-**Deferred intervention.** Violations detected in POST_CALL are applied on the next request, not retroactively. This preserves the current response and avoids race conditions with streaming.
+**Phase-aware intervention timing.** Sync POST_CALL violations trigger a single replay with request-time guidance. Async POST_CALL violations remain deferred to the next request, which preserves the current response and avoids race conditions with streaming.
 
 **Evaluator-pipeline interceptor.** The interceptor knows about evaluators and phases, not about FSMs or judge rule-evaluation internals. Adding a new engine type requires zero changes to the proxy layer.
 

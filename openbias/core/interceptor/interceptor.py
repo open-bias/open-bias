@@ -294,7 +294,7 @@ class Interceptor:
 
         1. Run sync POST_CALL evaluators (ALLOW, BLOCK, or INTERVENE)
         2. Start async POST_CALL evaluators in background (don't wait)
-        3. Return result with optional modified_data for response modification
+        3. Return result with optional pending replay metadata for sync intervention
         """
         self._sessions.touch(session_id)
         self._sessions.evict_stale()
