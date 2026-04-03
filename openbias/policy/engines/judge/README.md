@@ -1,6 +1,6 @@
 # LLM-as-a-Judge Policy Engine
 
-> A judge evaluator that scores the latest request or response against runtime-compiled rules from project `rules.md`.
+> A judge evaluator that checks the latest request or response against runtime-compiled rules from project `rules.md`.
 
 ## Overview
 
@@ -9,7 +9,8 @@ The judge engine is the simplest policy evaluator in Open Bias: it asks a judge 
 - User policy lives in project `rules.md`.
 - Open Bias compiles that file into runtime `_compiled_rules`.
 - The judge engine receives those compiled rules plus model settings.
-- The engine returns a turn-level `JudgeVerdict` and maps it to an `EvaluationResult`.
+- Each judge evaluates one rule at a time with a binary pass/fail result.
+- The engine aggregates judges per rule and maps the final `JudgeVerdict` to an `EvaluationResult`.
 
 The engine does not load rubric registries, named rulesets, YAML rubric files, or pairwise comparisons.
 
@@ -18,9 +19,9 @@ The engine does not load rubric registries, named rulesets, YAML rubric files, o
 ```text
 judge/
 ├── engine.py       # JudgePolicyEngine entry point and PolicyEngine adapter
-├── evaluator.py    # Turn-level judge call and verdict construction
+├── evaluator.py    # Per-rule judge calls and result construction
 ├── client.py       # JudgeClient model management
-├── models.py       # JudgeScore, JudgeVerdict, JudgeSessionContext
+├── models.py       # JudgeRuleResult, AggregatedRuleResult, JudgeVerdict
 ├── prompts.py      # Prompt templates for compiled-rule evaluation
 ├── compiler.py     # Runtime compiler wiring for project rules.md
 └── __init__.py     # Exports and registration
@@ -44,15 +45,16 @@ When an evaluator is configured for `phase: pre_call`, the judge evaluates the l
 
 ### Post-call
 
-When an evaluator is configured for post-call use, the judge evaluates the latest model response against the same compiled rules. Conversation history and tool definitions are provided as context, but scoring is still turn-level.
+When an evaluator is configured for post-call use, the judge evaluates the latest model response against the same compiled rules. Conversation history and tool definitions are provided as context, but each rule is still judged independently.
 
 ### Verdict Mapping
 
-Each judge run produces:
+Each turn produces:
 
-- Per-rule `JudgeScore` entries
-- A composite score
+- Per-judge `JudgeRuleResult` entries
+- Per-rule `AggregatedRuleResult` entries across all configured judges
 - An action of `pass`, `intervene`, or `block`
+- One `ViolationRecord` per failed aggregated rule
 - Summary and tracing metadata, including `rules_source`
 
 Open Bias then maps non-`pass` verdicts into `EvaluationStatus.VIOLATION`.
