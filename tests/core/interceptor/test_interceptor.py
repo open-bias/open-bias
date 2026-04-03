@@ -250,29 +250,6 @@ class TestSyncPreCall:
         assert result.allowed is True
         assert result.modified_data is None
 
-    async def test_intervene_response_modification_strategy_does_not_modify_request(self):
-        """INTERVENE with response_modification strategy leaves request unmodified during PRE_CALL.
-
-        response_modification is a response-time strategy and must not be applied
-        at request-modification time.
-        """
-        evaluator = _mock_engine(
-            status=EvaluationStatus.VIOLATION,
-            violation_message="Some guidance",
-        )
-        interceptor = Interceptor(
-            pre_call_evaluators=[evaluator],
-            post_call_evaluators=[],
-            default_strategy="response_modification",
-        )
-        req = _request()
-
-        result = await interceptor.run_pre_call(SESSION, req, REQUEST_ID)
-
-        assert result.allowed is True
-        # response_modification is response-time only; request must be returned unmodified
-        assert result.modified_data is None
-
     async def test_intervene_does_not_mutate_original_request_data(self):
         """Intervention must not mutate the caller's original request_data dict."""
         evaluator = _mock_engine(
@@ -721,12 +698,21 @@ class TestInterceptorInit:
                 pre_call_evaluators=[], post_call_evaluators=[], default_strategy="hard_blok"
             )
 
+    def test_response_modification_default_strategy_raises(self) -> None:
+        """response_modification is no longer an accepted default strategy."""
+        with pytest.raises(ValueError, match="response_modification"):
+            Interceptor(
+                pre_call_evaluators=[],
+                post_call_evaluators=[],
+                default_strategy="response_modification",
+            )
+
     @pytest.mark.parametrize(
         "strategy",
-        ["system_prompt_append", "user_message_inject", "response_modification"],
+        ["system_prompt_append", "user_message_inject"],
     )
     def test_valid_default_strategies_accepted(self, strategy: str) -> None:
-        """All StrategyType values should be accepted without error."""
+        """Only request-time strategies should be accepted without error."""
         interceptor = Interceptor(
             pre_call_evaluators=[], post_call_evaluators=[], default_strategy=strategy
         )

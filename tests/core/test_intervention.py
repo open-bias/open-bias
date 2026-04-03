@@ -13,12 +13,11 @@ class TestInterventionStrategies:
     """Tests for intervention strategies."""
 
     def test_strategy_types(self):
-        """Test that all strategy types exist."""
+        """Only request-time strategy types are public."""
         types = {st.value for st in StrategyType}
         assert types == {
             "system_prompt_append",
             "user_message_inject",
-            "response_modification",
         }
 
     def test_format_message_with_missing_key(self):
