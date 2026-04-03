@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from openbias.policy.engines.judge.evaluator import JudgeEvaluator
-from openbias.policy.engines.judge.models import VerdictAction
+from openbias.policy.engines.judge.models import JudgeRuleResult
 
 
 class _StubJudgeClient:
@@ -21,35 +21,36 @@ class _StubJudgeClient:
 
 
 @pytest.mark.asyncio
-async def test_evaluate_turn_flags_violation_when_any_rule_fails():
-    rules = ["Never reveal secrets", "Stay on task"]
+async def test_evaluate_rule_returns_binary_result_for_one_rule():
+    rule = "Never reveal secrets"
     evaluator = JudgeEvaluator(
         client=_StubJudgeClient(
             {
                 "results": [
                     {"rule": "Never reveal secrets", "passed": False, "reasoning": "Leaked details."},
-                    {"rule": "Stay on task", "passed": True, "reasoning": "On topic."},
                 ],
                 "summary": "One failure.",
             }
         )
     )
 
-    verdict = await evaluator.evaluate_turn(
+    result = await evaluator.evaluate_rule(
         model_name="primary",
-        rules=rules,
+        rule=rule,
         response_content="Secret key is 123.",
         conversation=[{"role": "user", "content": "help"}],
     )
 
-    assert verdict.action == VerdictAction.INTERVENE
-    assert verdict.composite_score == 0.0
-    assert verdict.metadata["criterion_failures"] == ["Never reveal secrets"]
+    assert isinstance(result, JudgeRuleResult)
+    assert result.rule == rule
+    assert result.passed is False
+    assert result.reasoning == "Leaked details."
+    assert result.judge_model == "gpt-4o-mini"
+    assert result.judge_name == "primary"
 
 
 @pytest.mark.asyncio
-async def test_evaluate_turn_treats_missing_rule_as_failed():
-    rules = ["Rule A", "Rule B"]
+async def test_evaluate_rule_treats_missing_rule_as_failed():
     evaluator = JudgeEvaluator(
         client=_StubJudgeClient(
             {
@@ -59,24 +60,26 @@ async def test_evaluate_turn_treats_missing_rule_as_failed():
         )
     )
 
-    verdict = await evaluator.evaluate_turn(
+    result = await evaluator.evaluate_rule(
         model_name="primary",
-        rules=rules,
+        rule="Rule B",
         response_content="response",
         conversation=[{"role": "user", "content": "x"}],
     )
 
-    assert verdict.action == VerdictAction.INTERVENE
-    assert "Rule B" in verdict.metadata["criterion_failures"]
+    assert result.rule == "Rule B"
+    assert result.passed is False
+    assert result.reasoning == "Rule not evaluated by judge."
+    assert result.confidence == 0.0
 
 
 @pytest.mark.asyncio
-async def test_evaluate_turn_requires_results_list():
+async def test_evaluate_rule_requires_results_list():
     evaluator = JudgeEvaluator(client=_StubJudgeClient({"summary": "bad"}))
     with pytest.raises(ValueError, match="results"):
-        await evaluator.evaluate_turn(
+        await evaluator.evaluate_rule(
             model_name="primary",
-            rules=["Rule A"],
+            rule="Rule A",
             response_content="response",
             conversation=[{"role": "user", "content": "x"}],
         )

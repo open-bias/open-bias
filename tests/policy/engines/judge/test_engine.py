@@ -3,13 +3,18 @@ from __future__ import annotations
 import pytest
 
 from openbias.policy.engines.judge.engine import JudgePolicyEngine
-from openbias.policy.engines.judge.models import JudgeScore, JudgeVerdict, VerdictAction
+from openbias.policy.engines.judge.models import (
+    AggregatedRuleResult,
+    JudgeRuleResult,
+    JudgeVerdict,
+    VerdictAction,
+)
 from openbias.policy.protocols import EvaluationStatus
 
 
-def _config(rules: list[str]) -> dict:
+def _config(rules: list[str], models: list[dict] | None = None) -> dict:
     return {
-        "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+        "models": models or [{"name": "primary", "model": "gpt-4o-mini"}],
         "_compiled_rules": rules,
         "_rules_source": "rules.md",
     }
@@ -17,21 +22,30 @@ def _config(rules: list[str]) -> dict:
 
 def _verdict(action: VerdictAction, failed: list[str] | None = None) -> JudgeVerdict:
     failed = failed or []
-    scores = [
-        JudgeScore(
-            criterion=rule,
-            score=0 if rule in failed else 1,
-            reasoning="test",
+    aggregated_results = [
+        AggregatedRuleResult(
+            rule=rule,
+            passed=rule not in failed,
+            action=VerdictAction.PASS if rule not in failed else action,
+            judge_results=[
+                JudgeRuleResult(
+                    rule=rule,
+                    passed=rule not in failed,
+                    reasoning="test",
+                    judge_name="primary",
+                    judge_model="gpt-4o-mini",
+                )
+            ],
+            summary="test",
         )
         for rule in ["Never reveal secrets", "Stay on task"]
     ]
     return JudgeVerdict(
-        scores=scores,
-        composite_score=0.0 if failed else 1.0,
+        aggregated_results=aggregated_results,
+        failed_rules=failed,
         action=action,
         summary="test",
-        judge_model="gpt-4o-mini",
-        metadata={"criterion_failures": failed} if failed else {},
+        judge_models=["gpt-4o-mini"],
     )
 
 
@@ -92,14 +106,34 @@ def test_validate_config_rejects_empty_compiled_rules():
 
 
 @pytest.mark.asyncio
+async def test_initialize_rejects_unknown_aggregation_mode():
+    engine = JudgePolicyEngine()
+    with pytest.raises(ValueError, match="aggregation_mode"):
+        await engine.initialize(
+            {
+                "models": [{"name": "primary", "model": "gpt-4o-mini"}],
+                "_compiled_rules": ["Stay safe"],
+                "aggregation_mode": "sometimes",
+            }
+        )
+
+
+@pytest.mark.asyncio
 async def test_evaluate_response_maps_failed_rule_to_violation():
     engine = JudgePolicyEngine()
     await engine.initialize(_config(["Never reveal secrets", "Stay on task"]))
 
     async def _mock_eval(*args, **kwargs):
-        return _verdict(VerdictAction.INTERVENE, failed=["Never reveal secrets"])
+        rule = kwargs["rule"]
+        return JudgeRuleResult(
+            rule=rule,
+            passed=rule != "Never reveal secrets",
+            reasoning="test",
+            judge_name=kwargs["model_name"],
+            judge_model="gpt-4o-mini",
+        )
 
-    engine._evaluator.evaluate_turn = _mock_eval
+    engine._evaluator.evaluate_rule = _mock_eval
 
     result = await engine.evaluate_response(
         session_id="s1",
@@ -110,6 +144,7 @@ async def test_evaluate_response_maps_failed_rule_to_violation():
     assert result.status == EvaluationStatus.VIOLATION
     assert result.violations
     assert result.violations[0].severity == "intervene"
+    assert result.violations[0].extra["rule"] == "Never reveal secrets"
 
 
 @pytest.mark.asyncio
@@ -118,9 +153,15 @@ async def test_evaluate_response_reports_rules_source_in_metadata():
     await engine.initialize(_config(["Never reveal secrets", "Stay on task"]))
 
     async def _mock_eval(*args, **kwargs):
-        return _verdict(VerdictAction.PASS)
+        return JudgeRuleResult(
+            rule=kwargs["rule"],
+            passed=True,
+            reasoning="ok",
+            judge_name=kwargs["model_name"],
+            judge_model="gpt-4o-mini",
+        )
 
-    engine._evaluator.evaluate_turn = _mock_eval
+    engine._evaluator.evaluate_rule = _mock_eval
 
     result = await engine.evaluate_response(
         session_id="s1",
@@ -128,6 +169,88 @@ async def test_evaluate_response_reports_rules_source_in_metadata():
         request_data={"messages": [{"role": "user", "content": "help"}]},
     )
 
-    verdicts = result.metadata["judge"]["verdicts"]
-    assert verdicts[0]["rules_source"] == "rules.md"
-    assert "rubric_name" not in verdicts[0]
+    verdict = result.metadata["judge"]["verdict"]
+    assert verdict["rules_source"] == "rules.md"
+    assert verdict["failed_rules"] == []
+    assert "rubric_name" not in verdict
+
+
+@pytest.mark.asyncio
+async def test_evaluate_response_aggregates_multi_judge_results_per_rule():
+    engine = JudgePolicyEngine()
+    await engine.initialize(
+        _config(
+            ["Never reveal secrets", "Stay on task"],
+            models=[
+                {"name": "judge-a", "model": "gpt-4o-mini"},
+                {"name": "judge-b", "model": "gpt-4.1-mini"},
+                {"name": "judge-c", "model": "gpt-4.1-nano"},
+            ],
+        )
+    )
+
+    async def _mock_eval(*args, **kwargs):
+        outcomes = {
+            ("judge-a", "Never reveal secrets"): False,
+            ("judge-b", "Never reveal secrets"): True,
+            ("judge-c", "Never reveal secrets"): False,
+            ("judge-a", "Stay on task"): True,
+            ("judge-b", "Stay on task"): True,
+            ("judge-c", "Stay on task"): False,
+        }
+        model_name = kwargs["model_name"]
+        rule = kwargs["rule"]
+        return JudgeRuleResult(
+            rule=rule,
+            passed=outcomes[(model_name, rule)],
+            reasoning="test",
+            judge_name=model_name,
+            judge_model=model_name,
+        )
+
+    engine._evaluator.evaluate_rule = _mock_eval
+
+    result = await engine.evaluate_response(
+        session_id="s1",
+        response_data={"content": "response"},
+        request_data={"messages": [{"role": "user", "content": "help"}]},
+    )
+
+    assert result.status == EvaluationStatus.VIOLATION
+    assert [violation.extra["rule"] for violation in result.violations] == [
+        "Never reveal secrets"
+    ]
+    assert result.metadata["judge"]["verdict"]["failed_rules"] == [
+        "Never reveal secrets"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_evaluate_response_fails_closed_when_all_judges_error_for_rule():
+    engine = JudgePolicyEngine()
+    await engine.initialize(
+        _config(
+            ["Never reveal secrets"],
+            models=[
+                {"name": "judge-a", "model": "gpt-4o-mini"},
+                {"name": "judge-b", "model": "gpt-4.1-mini"},
+            ],
+        )
+    )
+
+    async def _mock_eval(*args, **kwargs):
+        raise RuntimeError(f"judge unavailable: {kwargs['model_name']}")
+
+    engine._evaluator.evaluate_rule = _mock_eval
+
+    result = await engine.evaluate_response(
+        session_id="s1",
+        response_data={"content": "response"},
+        request_data={"messages": [{"role": "user", "content": "help"}]},
+    )
+
+    assert result.status == EvaluationStatus.VIOLATION
+    assert [violation.extra["rule"] for violation in result.violations] == [
+        "Never reveal secrets"
+    ]
+    assert result.violations[0].extra["evaluation_error"] == "all_judges_failed"

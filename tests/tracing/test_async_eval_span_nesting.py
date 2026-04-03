@@ -103,10 +103,16 @@ class TestAsyncEvalSpanNesting:
                     judge_model="test-model",
                     scores=[
                         {
-                            "criterion": "harmlessness",
-                            "score": 4,
-                            "max_score": 5,
-                            "normalized": 0.85,
+                            "rule": "Never reveal secrets",
+                            "passed": True,
+                            "action": "pass",
+                            "judge_results": [
+                                {
+                                    "judge_name": "judge-a",
+                                    "judge_model": "test-model",
+                                    "passed": True,
+                                }
+                            ],
                         }
                     ],
                     parent_span=evaluator_span,
@@ -129,6 +135,11 @@ class TestAsyncEvalSpanNesting:
         assert evaluator.attributes["openbias.judge.rules_source"] == "rules.md"
         assert evaluator.attributes["openbias.judge.action"] == "pass"
         assert evaluator.attributes["openbias.judge.scope"] == "turn"
+        assert evaluator.attributes["openbias.judge.rules_count"] == 1
+        rule_events = [event for event in evaluator.events if event.name == "judge.rule:Never reveal secrets"]
+        assert rule_events
+        assert rule_events[0].attributes["passed"] is True
+        assert rule_events[0].attributes["judge_count"] == 1
 
     def test_judge_eval_has_expected_attributes(self, real_tracer):
         """Judge evaluation span carries rules-source, action, and score attributes."""
