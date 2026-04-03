@@ -50,4 +50,7 @@ def test_deterministic_builder_returns_stable_payload() -> None:
     assert payload.source_violations[0]["message"] == "Stay grounded in provided facts"
     assert "Stay grounded in provided facts" in payload.sync_repair_instruction
     assert payload.async_guidance is not None
+    assert "The previous response violated policy." in payload.async_guidance
+    assert "I think I made a mistake before; here's what I mean:" in payload.async_guidance
+    assert "Here's the response to your current message:" in payload.async_guidance
     assert payload.cleanup_rules
