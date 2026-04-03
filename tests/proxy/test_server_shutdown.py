@@ -10,6 +10,20 @@ from openbias.proxy.server import Proxy
 class TestShutdownCallbackCleanup:
     """Verify callbacks are removed from litellm.callbacks on shutdown."""
 
+    def test_create_router_attaches_router_to_callback(self) -> None:
+        """The callback keeps a router reference for sync post-call replays."""
+        proxy = Proxy()
+
+        with patch("openbias.proxy.server.Router") as mock_router_cls:
+            mock_router = mock_router_cls.return_value
+            with patch("openbias.proxy.hooks.Callback") as mock_callback_cls:
+                mock_callback = mock_callback_cls.return_value
+
+                router = proxy._create_router()
+
+        assert router is mock_router
+        mock_callback.attach_router.assert_called_once_with(mock_router)
+
     async def test_shutdown_removes_callback_from_litellm_callbacks(self) -> None:
         """After shutdown, the callback should no longer be in litellm.callbacks."""
         proxy = Proxy()

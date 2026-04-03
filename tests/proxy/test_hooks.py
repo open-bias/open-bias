@@ -1102,6 +1102,103 @@ async def test_post_call_generates_fallback_uuid_when_missing(callback, mock_api
     assert str(parsed) == request_id
 
 
+async def test_post_call_uses_router_seam_for_sync_replay(callback, mock_api_key):
+    """Sync post-call replays route through the stored router exactly once."""
+    from openbias.core.interceptor.types import InterceptionResult
+
+    request_id = "req-replay-1"
+    data = {
+        "messages": [{"role": "user", "content": "original"}],
+        "model": "gpt-4",
+        "metadata": {
+            "session_id": "sess-replay",
+            "_openbias_request_id": request_id,
+            "_openbias_llm_start_time": 1000.0,
+            "_openbias_traced": True,
+        },
+    }
+    response = MagicMock()
+    response.choices = []
+
+    replay_response = MagicMock(name="replay_response")
+    callback._router = MagicMock()
+    callback._router.acompletion = AsyncMock(return_value=replay_response)
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(
+            allowed=True,
+            pending_intervention={
+                "kind": "sync_post_call_reprompt",
+                "request_data": {
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "replayed"}],
+                    "metadata": {"custom": "keep-me"},
+                },
+            },
+        )
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._interceptor_initialized = True
+
+    result = await callback.async_post_call_success_hook(data, mock_api_key, response)
+
+    assert result is replay_response
+    callback._router.acompletion.assert_awaited_once()
+    replay_kwargs = callback._router.acompletion.await_args.kwargs
+    assert replay_kwargs["messages"] == [{"role": "user", "content": "replayed"}]
+    assert replay_kwargs["model"] == "gpt-4"
+    assert replay_kwargs["metadata"]["session_id"] == "sess-replay"
+    assert replay_kwargs["metadata"]["custom"] == "keep-me"
+    assert replay_kwargs["metadata"]["_openbias_sync_post_replay_count"] == 1
+    assert replay_kwargs["metadata"]["_openbias_sync_post_replay_parent_request_id"] == request_id
+    assert "_openbias_traced" not in replay_kwargs["metadata"]
+    assert "_openbias_request_id" not in replay_kwargs["metadata"]
+    assert "_openbias_llm_start_time" not in replay_kwargs["metadata"]
+
+
+async def test_post_call_sync_replay_guard_blocks_second_attempt(callback, mock_api_key):
+    """A replayed request does not trigger a second sync post-call replay."""
+    from openbias.core.interceptor.types import InterceptionResult
+
+    data = {
+        "messages": [{"role": "user", "content": "original"}],
+        "model": "gpt-4",
+        "metadata": {
+            "session_id": "sess-replay",
+            "_openbias_request_id": "req-replay-2",
+            "_openbias_llm_start_time": 1000.0,
+            "_openbias_sync_post_replay_count": 1,
+        },
+    }
+    response = MagicMock()
+    response.choices = []
+
+    callback._router = MagicMock()
+    callback._router.acompletion = AsyncMock()
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(
+            allowed=True,
+            pending_intervention={
+                "kind": "sync_post_call_reprompt",
+                "request_data": {
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "replayed"}],
+                },
+            },
+        )
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._interceptor_initialized = True
+
+    result = await callback.async_post_call_success_hook(data, mock_api_key, response)
+
+    assert result is response
+    callback._router.acompletion.assert_not_awaited()
+
+
 # ---------------------------------------------------------------------------
 # fail_action="block" integration test through the full hook stack
 # ---------------------------------------------------------------------------
