@@ -5,7 +5,7 @@ Commands:
 - openbias init: Initialize a new Open Bias project
 - openbias serve: Start the proxy server
 - openbias eval: Run evaluation scenarios against a policy engine
-- openbias validate: Validate an Open Bias config or workflow file
+- openbias validate: Validate an Open Bias configuration file
 - openbias info: Show workflow information
 """
 
@@ -282,18 +282,13 @@ def init(quick: bool) -> None:
     type=click.Path(exists=True, path_type=Path),
 )
 def validate(config_path: Path) -> None:
-    """Validate an Open Bias config or workflow file.
-
-    For openbias.yaml: validates evaluator config and runtime compilation inputs.
-    For workflow YAML: validates workflow structure and references.
+    """Validate an Open Bias configuration file.
 
     Examples:
         openbias validate openbias.yaml
-        openbias validate workflow.yaml
     """
     import yaml
 
-    # Detect whether this is an openbias.yaml or a workflow file
     try:
         with open(config_path) as f:
             raw = yaml.safe_load(f) or {}
@@ -301,35 +296,8 @@ def validate(config_path: Path) -> None:
         error(f"Failed to read {config_path}: {e}")
         raise SystemExit(1)
 
-    if isinstance(raw, dict) and ("engine" in raw or "evaluators" in raw):
-        _validate_openbias_config(config_path, raw)
-    else:
-        _validate_workflow(config_path)
+    _validate_openbias_config(config_path, raw)
 
-
-def _validate_workflow(config_path: Path) -> None:
-    """Validate a workflow definition file."""
-    from openbias.policy.engines.fsm.workflow.parser import WorkflowParser
-
-    try:
-        workflow = WorkflowParser.parse_file(config_path)
-
-        config_panel(
-            "\u2713 Valid Workflow",
-            {
-                "Name": workflow.name,
-                "States": str(len(workflow.states)),
-                "Transitions": str(len(workflow.transitions)),
-                "Constraints": str(len(workflow.constraints)),
-            },
-        )
-
-    except FileNotFoundError:
-        error(f"File not found: {config_path}")
-        raise SystemExit(1)
-    except Exception as e:
-        error(f"Validation error: {e}")
-        raise SystemExit(1)
 
 
 def _validate_openbias_config(config_path: Path, raw: dict) -> None:

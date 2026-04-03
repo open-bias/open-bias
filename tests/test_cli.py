@@ -45,37 +45,6 @@ class TestValidateCommand:
         result, _ = _invoke(["validate", "nonexistent.yaml"])
         assert result.exit_code != 0
 
-    def test_validate_valid_workflow(self):
-        """Test validate with a mock workflow parser."""
-        runner = CliRunner()
-        with runner.isolated_filesystem():
-            Path("test.yaml").write_text("name: test\nversion: '1.0'")
-
-            mock_workflow = MagicMock()
-            mock_workflow.name = "Test"
-            mock_workflow.version = "1.0"
-            mock_workflow.states = []
-            mock_workflow.transitions = []
-            mock_workflow.constraints = []
-            mock_workflow.interventions = {}
-
-            buf = StringIO()
-            from openbias.cli_ui import console
-
-            old_file = console.file
-            console.file = buf
-            try:
-                with patch(
-                    "openbias.policy.engines.fsm.workflow.parser.WorkflowParser.parse_file",
-                    return_value=mock_workflow,
-                ):
-                    result = runner.invoke(main, ["validate", "test.yaml"])
-            finally:
-                console.file = old_file
-
-            combined = result.output + buf.getvalue()
-            assert result.exit_code == 0
-            assert "Valid Workflow" in combined
 
     def test_validate_good_judge_config(self):
         """validate with a valid openbias.yaml should show summary."""
