@@ -22,18 +22,12 @@ INLINE_RULES = [
 
 
 def _make_judge_response(score: int, reasoning: str = "", summary: str = "") -> dict:
-    """Build a mock judge response with per-rule binary results."""
+    """Build a mock judge response for a single-rule binary verdict."""
     return {
-        "results": [
-            {
-                "rule": rule,
-                "passed": bool(score),
-                "reasoning": reasoning,
-                "evidence": [],
-                "confidence": 0.9,
-            }
-            for rule in INLINE_RULES
-        ],
+        "passed": bool(score),
+        "reasoning": reasoning,
+        "evidence": [],
+        "confidence": 0.9,
         "summary": summary,
     }
 
@@ -58,8 +52,16 @@ def runner() -> EvalRunner:
 
 
 def _patch_judge(engine: Any, responses: list[dict]) -> None:
-    """Patch engine._client.call_judge with sequential canned responses."""
-    call_count = 0
+    """Patch engine._client.call_judge with canned responses per evaluated message."""
+    response_index = 0
+    prompt_response_map: dict[str, dict[str, Any]] = {}
+
+    def _extract_rule(system_prompt: str) -> str:
+        marker = "Rule:\n"
+        if marker not in system_prompt:
+            raise AssertionError("Judge system prompt missing single-rule marker")
+        remainder = system_prompt.split(marker, 1)[1]
+        return remainder.split("\n", 1)[0].strip()
 
     async def mock_call_judge(
         model_name: str,
@@ -67,9 +69,13 @@ def _patch_judge(engine: Any, responses: list[dict]) -> None:
         user_prompt: str,
         session_id: str | None = None,
     ) -> dict[str, Any]:
-        nonlocal call_count
-        resp = responses[call_count % len(responses)]
-        call_count += 1
+        del model_name, session_id
+        nonlocal response_index
+        if user_prompt not in prompt_response_map:
+            prompt_response_map[user_prompt] = responses[response_index % len(responses)]
+            response_index += 1
+        resp = dict(prompt_response_map[user_prompt])
+        resp.setdefault("rule", _extract_rule(system_prompt))
         return resp
 
     engine._client.call_judge = mock_call_judge

@@ -313,26 +313,28 @@ class TestJudgeEngineConformance:
             "_rules_source": "rules.md",
         })
 
-        # Mock the judge call to return a failing verdict
-        engine._client.call_judge = AsyncMock(return_value={
-            "results": [
-                {
-                    "rule": "Be helpful",
+        async def mock_call_judge(model_name, system_prompt, user_prompt, session_id=None):
+            del model_name, user_prompt, session_id
+            rule = system_prompt.split("Rule:\n", 1)[1].split("\n", 1)[0].strip()
+            outcomes = {
+                "Be helpful": {
                     "passed": False,
                     "reasoning": "Violated policy",
                     "evidence": ["bad content"],
                     "confidence": 0.9,
+                    "summary": "Policy violation detected.",
                 },
-                {
-                    "rule": "Be safe",
+                "Be safe": {
                     "passed": True,
                     "reasoning": "OK",
                     "evidence": [],
                     "confidence": 0.9,
+                    "summary": "Safe rule passed.",
                 },
-            ],
-            "summary": "Policy violation detected.",
-        })
+            }
+            return {"rule": rule, **outcomes[rule]}
+
+        engine._client.call_judge = AsyncMock(side_effect=mock_call_judge)
 
         result = await engine.evaluate_response(
             "conformance",
@@ -341,7 +343,8 @@ class TestJudgeEngineConformance:
         )
 
         assert result.status == EvaluationStatus.VIOLATION
-        assert len(result.violations) > 0
+        assert len(result.violations) == 1
+        assert result.violations[0].extra["rule"] == "Be helpful"
 
         for v in result.violations:
             _assert_violation_record_shape(v, "judge")
@@ -424,14 +427,18 @@ _MULTI_ENGINE_VIOLATIONS = [
     ),
     pytest.param(
         ViolationRecord(
-            reason="Criterion not met: safety",
+            reason="Rule violation detected: safety",
             severity="intervene",
             scope="turn",
             engine="judge:default",
             confidence=0.85,
-            extra={"composite_score": 0.3, "judge_model": "gpt-4o-mini"},
+            extra={
+                "rule": "Never reveal secrets",
+                "aggregation_mode": "majority",
+                "participating_judges": ["primary"],
+            },
         ),
-        id="judge-with-composite-score",
+        id="judge-with-rule-result",
     ),
     pytest.param(
         ViolationRecord(

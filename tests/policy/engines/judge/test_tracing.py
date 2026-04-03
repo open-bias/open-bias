@@ -49,4 +49,8 @@ async def test_trace_verdict_uses_compiled_rules_source_name():
     trace_call = tracer.calls[0]
     assert trace_call["rules_source"] == "rules.md"
     assert trace_call["evaluator_name"] == "judge"
+    assert "rule_results" in trace_call
+    assert "failed_rules" in trace_call
+    assert "participating_judges" in trace_call
+    assert "composite_score" not in trace_call
     assert not any("rubric" in key for key in trace_call)

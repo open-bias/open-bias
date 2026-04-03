@@ -98,14 +98,16 @@ class TestAsyncEvalSpanNesting:
                     session_id=session_id,
                     rules_source="rules.md",
                     scope="turn",
-                    composite_score=0.85,
                     action="pass",
-                    judge_model="test-model",
-                    scores=[
+                    participating_judges=["judge-a"],
+                    failed_rules=[],
+                    rule_results=[
                         {
                             "rule": "Never reveal secrets",
                             "passed": True,
                             "action": "pass",
+                            "summary": "Rule passed.",
+                            "aggregation_mode": "majority",
                             "judge_results": [
                                 {
                                     "judge_name": "judge-a",
@@ -136,13 +138,15 @@ class TestAsyncEvalSpanNesting:
         assert evaluator.attributes["openbias.judge.action"] == "pass"
         assert evaluator.attributes["openbias.judge.scope"] == "turn"
         assert evaluator.attributes["openbias.judge.rules_count"] == 1
+        assert evaluator.attributes["openbias.judge.failed_rules_count"] == 0
         rule_events = [event for event in evaluator.events if event.name == "judge.rule:Never reveal secrets"]
         assert rule_events
         assert rule_events[0].attributes["passed"] is True
         assert rule_events[0].attributes["judge_count"] == 1
+        assert rule_events[0].attributes["summary"] == "Rule passed."
 
     def test_judge_eval_has_expected_attributes(self, real_tracer):
-        """Judge evaluation span carries rules-source, action, and score attributes."""
+        """Judge evaluation span carries rule-result and failed-rule attributes."""
         tracer, exporter = real_tracer
         session_id = "test-session-attrs"
 
@@ -151,9 +155,22 @@ class TestAsyncEvalSpanNesting:
                 session_id=session_id,
                 rules_source="compiled_rules",
                 scope="turn",
-                composite_score=0.72,
                 action="intervene",
-                judge_model="judge-v2",
+                participating_judges=["judge-a", "judge-b"],
+                failed_rules=["Never reveal secrets"],
+                rule_results=[
+                    {
+                        "rule": "Never reveal secrets",
+                        "passed": False,
+                        "action": "intervene",
+                        "summary": "Rule failed.",
+                        "aggregation_mode": "majority",
+                        "judge_results": [
+                            {"judge_name": "judge-a", "passed": False},
+                            {"judge_name": "judge-b", "passed": True},
+                        ],
+                    }
+                ],
                 parent_span=phase_span,
             )
 
@@ -162,10 +179,12 @@ class TestAsyncEvalSpanNesting:
 
         assert phase.attributes["openbias.judge.rules_source"] == "compiled_rules"
         assert phase.attributes["openbias.judge.action"] == "intervene"
-        assert phase.attributes["openbias.judge.composite_score"] == 0.72
-        assert phase.attributes["openbias.judge.model"] == "judge-v2"
+        assert phase.attributes["openbias.judge.failed_rules_count"] == 1
         output_value = json.loads(phase.attributes["output.value"])
         assert output_value["rules_source"] == "compiled_rules"
+        assert output_value["failed_rules"] == ["Never reveal secrets"]
+        assert output_value["participating_judges"] == ["judge-a", "judge-b"]
+        assert "composite_score" not in output_value
         assert "rubric" not in phase.attributes["output.value"]
 
     def test_no_orphan_spans_outside_phase(self, real_tracer):
@@ -181,9 +200,10 @@ class TestAsyncEvalSpanNesting:
                     session_id=session_id,
                     rules_source="rules.md",
                     scope="turn",
-                    composite_score=1.0,
                     action="pass",
-                    judge_model="m",
+                    participating_judges=["judge-a"],
+                    failed_rules=[],
+                    rule_results=[],
                     parent_span=eval_span,
                 )
 
@@ -202,9 +222,10 @@ class TestAsyncEvalSpanNesting:
             session_id=session_id,
             rules_source="rules.md",
             scope="turn",
-            composite_score=0.8,
             action="intervene",
-            judge_model="judge-x",
+            participating_judges=["judge-x"],
+            failed_rules=["Rule A"],
+            rule_results=[],
             parent_span=None,
             evaluator_name="judge:safety",
         )
