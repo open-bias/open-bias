@@ -431,7 +431,7 @@ async def test_post_call_response_cleanup_uses_request_metadata(
     assert result is response
 
 
-async def test_post_call_intervention_replaces_response_content(
+async def test_post_call_intervention_returns_replayed_response(
     callback, mock_api_key
 ):
     """Sync replay returns the replayed response instead of mutating the current one."""

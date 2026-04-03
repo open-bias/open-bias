@@ -1,7 +1,6 @@
 """Tests for intervention system."""
 
 from openbias.core.intervention.strategies import (
-    ResponseModificationStrategy,
     StrategyType,
     SystemPromptAppendStrategy,
     UserMessageInjectStrategy,
@@ -146,96 +145,5 @@ class TestUserMessageInjectStrategy:
         assert "[END-REPAIR-INSTRUCTION]" in rules
         assert "[System Note]" in rules
         assert "[WORKFLOW GUIDANCE]" not in rules
-
-
-class TestResponseModificationStrategy:
-    """Tests for ResponseModificationStrategy."""
-
-    def _make_response_obj(self, content="Hello", tool_calls=None):
-        """Create a mock LiteLLM-style response object."""
-        from unittest.mock import MagicMock
-
-        response = MagicMock()
-        message = MagicMock()
-        message.content = content
-        message.tool_calls = tool_calls
-        choice = MagicMock()
-        choice.message = message
-        response.choices = [choice]
-        return response
-
-    def _make_response_dict(self, content="Hello", tool_calls=None):
-        """Create a dict-style response."""
-        msg = {"role": "assistant", "content": content}
-        if tool_calls is not None:
-            msg["tool_calls"] = tool_calls
-        return {"choices": [{"message": msg}]}
-
-    def test_append_warning_to_object_response(self):
-        """Message appends a policy warning to response content."""
-        response = self._make_response_obj("I'll delete those records.")
-        result = ResponseModificationStrategy.apply_to_response(
-            response, message="Unauthorized destructive operation"
-        )
-        assert "[POLICY WARNING]" in result.choices[0].message.content
-        assert "Unauthorized destructive operation" in result.choices[0].message.content
-        assert "I'll delete those records." in result.choices[0].message.content
-
-    def test_append_warning_to_dict_response(self):
-        """Message appends warning to dict-style response."""
-        response = self._make_response_dict("Original content")
-        result = ResponseModificationStrategy.apply_to_response(
-            response, message="Warning text"
-        )
-        content = result["choices"][0]["message"]["content"]
-        assert "Original content" in content
-        assert "[POLICY WARNING]: Warning text" in content
-
-    def test_replace_content_with_modified_messages(self):
-        """modified_messages replaces entire response content."""
-        response = self._make_response_obj("Dangerous output")
-        modified = [{"role": "assistant", "content": "I cannot do that."}]
-        result = ResponseModificationStrategy.apply_to_response(
-            response, modified_messages=modified
-        )
-        assert result.choices[0].message.content == "I cannot do that."
-
-    def test_replace_strips_tool_calls(self):
-        """modified_messages replacement also strips tool calls."""
-        tool_calls = [{"id": "call_123", "function": {"name": "delete_all"}}]
-        response = self._make_response_obj("Bad", tool_calls=tool_calls)
-        modified = [{"role": "assistant", "content": "Safe response."}]
-        result = ResponseModificationStrategy.apply_to_response(
-            response, modified_messages=modified
-        )
-        assert result.choices[0].message.content == "Safe response."
-        assert result.choices[0].message.tool_calls is None
-
-    def test_strip_tool_calls_dict_response(self):
-        """Tool calls stripped from dict-style response."""
-        tool_calls = [{"id": "call_123", "function": {"name": "delete_all"}}]
-        response = self._make_response_dict("Bad", tool_calls=tool_calls)
-        modified = [{"role": "assistant", "content": "Safe."}]
-        result = ResponseModificationStrategy.apply_to_response(
-            response, modified_messages=modified
-        )
-        assert "tool_calls" not in result["choices"][0]["message"]
-
-    def test_no_message_no_modified_messages_unchanged(self):
-        """No message and no modified_messages — response unchanged."""
-        response = self._make_response_obj("Original")
-        result = ResponseModificationStrategy.apply_to_response(response)
-        assert result.choices[0].message.content == "Original"
-
-    def test_modified_messages_takes_precedence(self):
-        """modified_messages takes precedence over message."""
-        response = self._make_response_obj("Original")
-        result = ResponseModificationStrategy.apply_to_response(
-            response,
-            message="This warning should not appear",
-            modified_messages=[{"role": "assistant", "content": "Replaced."}],
-        )
-        assert result.choices[0].message.content == "Replaced."
-        assert "warning" not in result.choices[0].message.content.lower()
 
 
