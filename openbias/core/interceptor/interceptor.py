@@ -511,10 +511,10 @@ class Interceptor:
             recent_messages=recent_messages,
         )
 
-        if payload.mode == "async" and payload.user_visible_guidance:
-            intervention_message = payload.user_visible_guidance
+        if payload.mode == "async" and payload.async_guidance:
+            intervention_message = payload.async_guidance
         else:
-            intervention_message = payload.repair_instruction
+            intervention_message = payload.sync_repair_instruction
 
         cleanup_rules = self._cleanup_rules_for_strategy(self._default_strategy)
         payload = replace(payload, cleanup_rules=list(cleanup_rules))

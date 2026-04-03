@@ -48,6 +48,6 @@ def test_deterministic_builder_returns_stable_payload() -> None:
 
     assert payload.mode == "async"
     assert payload.source_violations[0]["message"] == "Stay grounded in provided facts"
-    assert "Stay grounded in provided facts" in payload.repair_instruction
-    assert payload.user_visible_guidance is not None
+    assert "Stay grounded in provided facts" in payload.sync_repair_instruction
+    assert payload.async_guidance is not None
     assert payload.cleanup_rules

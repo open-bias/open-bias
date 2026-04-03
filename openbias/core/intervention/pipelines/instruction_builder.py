@@ -39,8 +39,8 @@ class DeterministicRepairInstructionBuilder:
             else None
         )
         return InterventionPayload(
-            repair_instruction=instruction,
-            user_visible_guidance=guidance,
+            sync_repair_instruction=instruction,
+            async_guidance=guidance,
             cleanup_rules=list(self.DEFAULT_CLEANUP_RULES),
             source_violations=aggregated.source_violations,
             merged_violation_summary=merged_summary,

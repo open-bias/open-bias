@@ -23,8 +23,8 @@ class AggregatedInterventionInput:
 class InterventionPayload:
     """Deterministic instruction payload produced after aggregation."""
 
-    repair_instruction: str
-    user_visible_guidance: str | None
+    sync_repair_instruction: str
+    async_guidance: str | None
     cleanup_rules: list[str]
     source_violations: list[dict[str, Any]]
     merged_violation_summary: str
