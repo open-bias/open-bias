@@ -1,5 +1,7 @@
 # Judge evaluator config (block mode, sync) — explicit deny path.
 #
+# Open Bias compiles project `rules.md` into runtime rules, then the judge
+# evaluates one rule at a time with binary pass/fail results.
 # Keep mode=sync for true blocking behavior.
 # In mode=async, fail_action=block is normalized to intervene.
 
@@ -10,5 +12,4 @@ fail_action: block
 evaluators:
   - name: rules-judge
     type: judge
-    verbose: true
     phase: post_call

@@ -1,4 +1,5 @@
-# Minimal config — just an evaluator. Rules live in project rules.md.
+# Minimal config — just an evaluator. Rules live in project `rules.md` and are
+# compiled automatically at startup.
 # Everything else has
 # smart defaults.
 #

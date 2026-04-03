@@ -11,11 +11,10 @@ Architecture (what happens on each call):
   3. post_call_hook: fires an async judge evaluation in a background task.
      The response is returned to your app IMMEDIATELY — zero critical-path
      latency.
-  4. The judge LLM scores the response against each rule using
-     built-in rule sets (safety, tone, instruction_following, agent_behavior). Scores are
-     normalized to [0,1] and aggregated into a weighted average.
-  5. If the aggregate score falls below threshold, an intervention is
-     QUEUED for the next turn — not applied retroactively. This is the
+  4. Open Bias compiles `rules.md`, then the judge LLM evaluates one
+     compiled rule at a time with a binary pass/fail result.
+  5. If an aggregated rule result fails, an intervention is QUEUED for
+     the next turn — not applied retroactively. This is the
      deferred intervention pattern.
 
 What to watch for in the output:

@@ -21,7 +21,7 @@ Every example below triggers this pipeline. The interesting part is what the eva
 
 [`examples/quickstart/`](quickstart/)
 
-The smallest possible demo. ~30 lines of client code, 3 rules. Shows the judge engine evaluating responses in the background with zero critical-path latency. Start here.
+The smallest possible demo. ~30 lines of client code, 3 rules. Shows the judge engine compiling `rules.md`, evaluating one rule at a time in the background, and adding zero critical-path latency. Start here.
 
 ```bash
 cd examples/quickstart
@@ -36,9 +36,9 @@ python quickstart.py         # terminal 2
 
 [`examples/judge/`](judge/)
 
-A coding assistant that gets hit with a prompt injection attack. The judge engine evaluates the response asynchronously (zero latency on your call), catches the violation, and injects a system prompt amendment on the next turn. Watch the agent reassert its boundaries.
+A coding assistant that gets hit with a prompt injection attack. The judge engine evaluates the response asynchronously (zero latency on your call), catches the failed rule, and injects a system prompt amendment on the next turn. Watch the agent reassert its boundaries.
 
-**What's happening under the hood**: The judge LLM scores responses on criteria compiled from the example's `rules.md` and maps the verdict to an action (pass/intervene/block/shadow).
+**What's happening under the hood**: Open Bias compiles the example's `rules.md`, the judge LLM evaluates one compiled rule at a time with binary pass/fail results, and any failed aggregated rule is mapped to `intervene`, `block`, or `shadow`.
 
 ```bash
 cd examples/judge

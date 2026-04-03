@@ -1,6 +1,7 @@
 # Judge evaluator config (shadow mode) — monitor-only, always allow.
 #
-# Use this when you want visibility into violations without changing runtime behavior.
+# Use this when you want visibility into failed compiled rules without
+# changing runtime behavior.
 
 port: 4000
 mode: async
@@ -9,5 +10,4 @@ fail_action: shadow
 evaluators:
   - name: rules-judge
     type: judge
-    verbose: true
     phase: post_call

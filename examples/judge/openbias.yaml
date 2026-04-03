@@ -1,10 +1,11 @@
-# Judge evaluator config — evaluates every response against project rules.md.
+# Judge evaluator config — compiles project `rules.md` and evaluates every
+# response one rule at a time.
 #
 # Under the hood:
 # - The judge LLM (separate from your agent model) receives conversation history
 #   plus the latest response.
 # - Each rule is evaluated as pass/fail.
-# - If any rule fails, the evaluator reports a violation.
+# - If an aggregated rule result fails, the evaluator reports a violation.
 
 port: 4000
 fail_action: intervene        # intervene, block, or shadow on violation
