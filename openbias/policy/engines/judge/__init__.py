@@ -16,7 +16,8 @@ from openbias.policy.engines.judge.engine import JudgePolicyEngine
 from openbias.policy.engines.judge.models import (
     EvaluationScope,
     VerdictAction,
-    JudgeScore,
+    JudgeRuleResult,
+    AggregatedRuleResult,
     JudgeVerdict,
     JudgeSessionContext,
 )
@@ -29,7 +30,8 @@ __all__ = [
     "JudgePolicyEngine",
     "EvaluationScope",
     "VerdictAction",
-    "JudgeScore",
+    "JudgeRuleResult",
+    "AggregatedRuleResult",
     "JudgeVerdict",
     "JudgeSessionContext",
     "JudgeClient",

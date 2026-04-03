@@ -5,6 +5,7 @@ Evaluates agent responses against runtime-compiled rules using LLM judges.
 Integrates with the Open Bias policy engine infrastructure via PolicyEngine ABC.
 """
 
+import asyncio
 import logging
 from typing import Any
 
@@ -19,6 +20,8 @@ from openbias.policy.protocols import (
 )
 from openbias.policy.registry import register_engine
 from openbias.policy.engines.judge.models import (
+    AggregatedRuleResult,
+    JudgeRuleResult,
     JudgeVerdict,
     JudgeSessionContext,
     VerdictAction,
@@ -40,6 +43,7 @@ class JudgePolicyEngine(PolicyEngine):
     # Defaults for session memory management
     DEFAULT_SESSION_TTL = 3600  # 1 hour
     DEFAULT_MAX_SESSIONS = 10_000
+    VALID_AGGREGATION_MODES = frozenset({"majority", "all", "any"})
 
     def __init__(self) -> None:
         self._initialized = False
@@ -52,6 +56,7 @@ class JudgePolicyEngine(PolicyEngine):
         self._tracer: Any | None = None
         self._rules: list[str] = []
         self._rules_source: str = "compiled_rules"
+        self._aggregation_mode: str = "majority"
 
     @property
     def name(self) -> str:
@@ -126,6 +131,12 @@ class JudgePolicyEngine(PolicyEngine):
             )
         self._rules = [rule.strip() for rule in compiled_rules if rule.strip()]
         self._rules_source = str(config.get("_rules_source") or "compiled_rules")
+        self._aggregation_mode = str(config.get("aggregation_mode") or "majority")
+        if self._aggregation_mode not in self.VALID_AGGREGATION_MODES:
+            raise ValueError(
+                "Judge engine `aggregation_mode` must be one of: "
+                f"{', '.join(sorted(self.VALID_AGGREGATION_MODES))}."
+            )
         if not self._rules:
             raise ValueError("No rules found for judge evaluator.")
 
@@ -159,23 +170,21 @@ class JudgePolicyEngine(PolicyEngine):
         if not user_message:
             return EvaluationResult(status=EvaluationStatus.ALLOW)
 
-        primary_model = self._client.primary_model
-        if not primary_model:
+        session = self._get_or_create_session(session_id)
+        if not self._client or not self._client.model_names:
             return EvaluationResult(status=EvaluationStatus.ALLOW)
 
         try:
-            verdict = await self._evaluator.evaluate_turn(
-                model_name=primary_model,
-                rules=self._rules,
+            verdict = await self._evaluate_turn(
                 response_content=user_message,
                 conversation=messages,
                 metadata=(context or {}).get("metadata", {}),
                 session_id=session_id,
-                fail_action=VerdictAction.INTERVENE,
+                session_context=session,
             )
             parent_span = (context or {}).get("_parent_span")
             self._trace_verdict(session_id, verdict, parent_span=parent_span)
-            return self._build_result([verdict], self._get_or_create_session(session_id))
+            return self._build_result(verdict, session)
         except Exception as e:
             logger.error(f"Pre-call evaluation failed: {e}")
             return EvaluationResult(status=EvaluationStatus.ALLOW)
@@ -200,15 +209,12 @@ class JudgePolicyEngine(PolicyEngine):
         metadata = (context or {}).get("metadata", {})
         parent_span = (context or {}).get("_parent_span")
 
-        primary_model = self._client.primary_model
-        if not primary_model:
+        if not self._client or not self._client.model_names:
             logger.error("No judge models configured")
             return EvaluationResult(status=EvaluationStatus.ALLOW)
 
         try:
-            verdict = await self._evaluator.evaluate_turn(
-                model_name=primary_model,
-                rules=self._rules,
+            verdict = await self._evaluate_turn(
                 response_content=response_content,
                 conversation=conversation,
                 metadata=metadata,
@@ -216,7 +222,6 @@ class JudgePolicyEngine(PolicyEngine):
                 tool_calls=tool_calls,
                 session_context=session,
                 tool_definitions=tool_definitions,
-                fail_action=VerdictAction.INTERVENE,
             )
             self._trace_verdict(session_id, verdict, parent_span=parent_span)
         except Exception as e:
@@ -228,7 +233,7 @@ class JudgePolicyEngine(PolicyEngine):
 
         # Build result before recording verdicts so escalation checks
         # compare against prior session state, not the current turn's own data
-        result = self._build_result([verdict], session)
+        result = self._build_result(verdict, session)
 
         # Record verdicts to session after result is built
         session.turn_count += 1
@@ -297,6 +302,13 @@ class JudgePolicyEngine(PolicyEngine):
                 "Judge engine `_compiled_rules` must be a non-empty list of strings."
             )
 
+        aggregation_mode = config.get("aggregation_mode")
+        if aggregation_mode is not None and aggregation_mode not in cls.VALID_AGGREGATION_MODES:
+            errors.append(
+                "Judge engine `aggregation_mode` must be one of: "
+                f"{', '.join(sorted(cls.VALID_AGGREGATION_MODES))}."
+            )
+
         return errors
 
     async def shutdown(self) -> None:
@@ -323,20 +335,21 @@ class JudgePolicyEngine(PolicyEngine):
                 session_id=session_id,
                 rules_source=self._rules_source,
                 scope=verdict.scope.value,
-                composite_score=verdict.composite_score,
+                composite_score=self._compute_turn_pass_ratio(verdict),
                 action=verdict.action.value,
-                judge_model=verdict.judge_model,
+                judge_model=",".join(verdict.judge_models),
                 scores=[
                     {
-                        "criterion": s.criterion,
-                        "score": s.score,
-                        "max_score": s.max_score,
-                        "normalized": s.normalized,
-                        "confidence": s.confidence,
-                        "reasoning": s.reasoning,
-                        "corrective_actions": s.corrective_actions,
+                        "rule": result.rule,
+                        "passed": result.passed,
+                        "action": result.action.value,
+                        "summary": result.summary,
+                        "aggregation_mode": result.aggregation_mode,
+                        "judge_results": [
+                            judge_result.to_dict() for judge_result in result.judge_results
+                        ],
                     }
-                    for s in verdict.scores
+                    for result in verdict.aggregated_results
                 ],
                 latency_ms=verdict.latency_ms,
                 token_usage=verdict.token_usage,
@@ -358,37 +371,32 @@ class JudgePolicyEngine(PolicyEngine):
 
     def _build_result(
         self,
-        verdicts: list[JudgeVerdict],
+        verdict: JudgeVerdict,
         session: JudgeSessionContext,
     ) -> EvaluationResult:
         """Build EvaluationResult from judge verdicts.
 
-        Takes the most restrictive action across all verdicts.
-        Engines are pure evaluators: PASS → ALLOW, anything else → VIOLATION.
+        Emits one normalized ViolationRecord per failed aggregated rule.
         """
-        action_priority = {
-            VerdictAction.PASS: 0,
-            VerdictAction.INTERVENE: 1,
-            VerdictAction.BLOCK: 2,
-        }
-
-        worst_verdict = max(verdicts, key=lambda v: action_priority.get(v.action, 0))
-
-        # Build violation records for non-PASS verdicts
         violation_records: list[ViolationRecord] = []
-        for v in verdicts:
-            if v.action == VerdictAction.PASS:
+        for rule_result in verdict.aggregated_results:
+            if rule_result.passed:
                 continue
             violation_records.append(ViolationRecord(
-                reason=self._build_violation_message(v),
-                severity=v.action.value,
-                scope=v.scope.value,
+                reason=self._build_violation_message(rule_result),
+                severity=rule_result.action.value,
+                scope=verdict.scope.value,
                 engine=self.name,
-                confidence=v.composite_score,
+                confidence=self._rule_confidence(rule_result),
                 extra={
-                    "composite_score": v.composite_score,
-                    "judge_model": v.judge_model,
-                    "summary": v.summary,
+                    "rule": rule_result.rule,
+                    "aggregation_mode": rule_result.aggregation_mode,
+                    "judge_results": [
+                        judge_result.to_dict()
+                        for judge_result in rule_result.judge_results
+                    ],
+                    "summary": rule_result.summary,
+                    **rule_result.metadata,
                 },
             ))
 
@@ -396,10 +404,10 @@ class JudgePolicyEngine(PolicyEngine):
 
         metadata: dict[str, Any] = {
             "judge": {
-                "verdicts": [
-                    {**v.to_dict(), "rules_source": self._rules_source}
-                    for v in verdicts
-                ],
+                "verdict": {
+                    **verdict.to_dict(),
+                    "rules_source": self._rules_source,
+                },
                 "session_turn": session.turn_count + 1,
             },
         }
@@ -457,45 +465,215 @@ class JudgePolicyEngine(PolicyEngine):
 
         return definitions
 
-    def _build_violation_message(self, verdict: JudgeVerdict) -> str:
-        """Build a diagnostic reason string from failed criteria.
+    async def _evaluate_turn(
+        self,
+        response_content: str,
+        conversation: list[dict[str, Any]],
+        metadata: dict[str, Any] | None,
+        session_id: str,
+        tool_calls: list[dict[str, Any]] | None = None,
+        session_context: JudgeSessionContext | None = None,
+        tool_definitions: dict[str, dict[str, Any]] | None = None,
+        fail_action: VerdictAction = VerdictAction.INTERVENE,
+    ) -> JudgeVerdict:
+        aggregated_results: list[AggregatedRuleResult] = []
+        for rule in self._rules:
+            aggregated_results.append(
+                await self._evaluate_rule_with_judges(
+                    rule=rule,
+                    response_content=response_content,
+                    conversation=conversation,
+                    metadata=metadata,
+                    session_id=session_id,
+                    tool_calls=tool_calls,
+                    session_context=session_context,
+                    tool_definitions=tool_definitions,
+                    fail_action=fail_action,
+                )
+            )
+
+        failed_rules = [result.rule for result in aggregated_results if not result.passed]
+        summary = (
+            "All compiled rules passed."
+            if not failed_rules
+            else "Failed compiled rules: " + ", ".join(failed_rules)
+        )
+        return JudgeVerdict(
+            aggregated_results=aggregated_results,
+            failed_rules=failed_rules,
+            action=VerdictAction.PASS if not failed_rules else fail_action,
+            summary=summary,
+            judge_models=self._collect_judge_models(aggregated_results),
+            latency_ms=sum(
+                max((result.latency_ms for result in aggregated.judge_results), default=0.0)
+                for aggregated in aggregated_results
+            ),
+            token_usage=sum(
+                result.token_usage
+                for aggregated in aggregated_results
+                for result in aggregated.judge_results
+            ),
+            metadata={"aggregation_mode": self._aggregation_mode},
+        )
+
+    async def _evaluate_rule_with_judges(
+        self,
+        rule: str,
+        response_content: str,
+        conversation: list[dict[str, Any]],
+        metadata: dict[str, Any] | None,
+        session_id: str,
+        tool_calls: list[dict[str, Any]] | None = None,
+        session_context: JudgeSessionContext | None = None,
+        tool_definitions: dict[str, dict[str, Any]] | None = None,
+        fail_action: VerdictAction = VerdictAction.INTERVENE,
+    ) -> AggregatedRuleResult:
+        model_names = self._client.model_names if self._client else []
+        evaluations = await asyncio.gather(
+            *[
+                self._evaluator.evaluate_rule(
+                    model_name=model_name,
+                    rule=rule,
+                    response_content=response_content,
+                    conversation=conversation,
+                    metadata=metadata,
+                    session_id=session_id,
+                    tool_calls=tool_calls,
+                    session_context=session_context,
+                    tool_definitions=tool_definitions,
+                )
+                for model_name in model_names
+            ],
+            return_exceptions=True,
+        )
+
+        judge_results: list[JudgeRuleResult] = []
+        judge_errors: list[str] = []
+        for model_name, evaluation in zip(model_names, evaluations):
+            if isinstance(evaluation, Exception):
+                logger.error("Judge model '%s' failed for rule '%s': %s", model_name, rule, evaluation)
+                judge_errors.append(f"{model_name}: {evaluation}")
+                continue
+            judge_results.append(evaluation)
+
+        if not judge_results:
+            return AggregatedRuleResult(
+                rule=rule,
+                passed=False,
+                action=fail_action,
+                judge_results=[],
+                summary=f"All judge models failed while evaluating rule: {rule}",
+                aggregation_mode=self._aggregation_mode,
+                metadata={
+                    "passed_count": 0,
+                    "failed_count": 0,
+                    "participating_judges": [],
+                    "failing_judges": [],
+                    "evaluation_error": "all_judges_failed",
+                    "judge_errors": judge_errors,
+                },
+            )
+
+        passed = self._aggregate_rule_pass(judge_results)
+        passed_count = sum(1 for result in judge_results if result.passed)
+        failed_count = len(judge_results) - passed_count
+        return AggregatedRuleResult(
+            rule=rule,
+            passed=passed,
+            action=VerdictAction.PASS if passed else fail_action,
+            judge_results=judge_results,
+            summary=self._summarize_rule_result(rule, judge_results, passed),
+            aggregation_mode=self._aggregation_mode,
+            metadata={
+                "passed_count": passed_count,
+                "failed_count": failed_count,
+                "participating_judges": [result.judge_name for result in judge_results],
+                "failing_judges": [
+                    result.judge_name for result in judge_results if not result.passed
+                ],
+            },
+        )
+
+    def _aggregate_rule_pass(self, judge_results: list[JudgeRuleResult]) -> bool:
+        passed_count = sum(1 for result in judge_results if result.passed)
+        failed_count = len(judge_results) - passed_count
+        if self._aggregation_mode == "all":
+            return failed_count == 0
+        if self._aggregation_mode == "any":
+            return passed_count > 0
+        return passed_count > failed_count
+
+    def _collect_judge_models(
+        self, aggregated_results: list[AggregatedRuleResult]
+    ) -> list[str]:
+        seen: list[str] = []
+        for aggregated in aggregated_results:
+            for result in aggregated.judge_results:
+                if result.judge_model and result.judge_model not in seen:
+                    seen.append(result.judge_model)
+        return seen
+
+    def _compute_turn_pass_ratio(self, verdict: JudgeVerdict) -> float:
+        if not verdict.aggregated_results:
+            return 1.0
+        passed_count = sum(1 for result in verdict.aggregated_results if result.passed)
+        return passed_count / len(verdict.aggregated_results)
+
+    def _rule_confidence(self, rule_result: AggregatedRuleResult) -> float:
+        if not rule_result.judge_results:
+            return 0.0
+        return sum(result.confidence for result in rule_result.judge_results) / len(
+            rule_result.judge_results
+        )
+
+    def _summarize_rule_result(
+        self,
+        rule: str,
+        judge_results: list[JudgeRuleResult],
+        passed: bool,
+    ) -> str:
+        if passed:
+            return f"Rule passed after {len(judge_results)} judge evaluation(s): {rule}"
+        failing_judges = ", ".join(
+            result.judge_name for result in judge_results if not result.passed
+        )
+        if failing_judges:
+            return f"Rule failed: {rule} (failing judges: {failing_judges})"
+        return f"Rule failed: {rule}"
+
+    def _build_violation_message(self, rule_result: AggregatedRuleResult) -> str:
+        """Build a diagnostic reason string from a failed aggregated rule.
 
         The reason field is diagnostic: it explains *what* went wrong and
         *why*.  User-facing prose and enforcement decisions belong in the
         interceptor layer.
 
-        Prioritizes corrective_actions (judge-generated guidance) over raw
-        criterion data.  Falls back to the verdict summary when no
-        per-criterion failure data is available.
+        Prioritizes corrective_actions from failing judges. Falls back to the
+        aggregated rule summary when no per-judge guidance is available.
         """
-        failed_criteria: list[str] = verdict.metadata.get("criterion_failures", [])
-        if not failed_criteria:
-            return verdict.summary or "Rule violation detected."
-
-        score_map = {s.criterion: s for s in verdict.scores}
-
+        failing_results = [result for result in rule_result.judge_results if not result.passed]
+        if not failing_results:
+            return rule_result.summary or f"Rule violation detected: {rule_result.rule}"
         paragraphs: list[str] = []
-        for criterion_name in failed_criteria:
-            score = score_map.get(criterion_name)
-            if not score:
-                paragraphs.append(f"Criterion not met: {criterion_name}.")
-                continue
-
-            if score.corrective_actions:
-                parts: list[str] = [score.corrective_actions]
-                if score.evidence:
-                    quotes = ", ".join(f'"{e}"' for e in score.evidence)
+        for result in failing_results:
+            if result.corrective_actions:
+                parts: list[str] = [result.corrective_actions]
+                if result.evidence:
+                    quotes = ", ".join(f'"{e}"' for e in result.evidence)
                     parts.append(f"(Evidence: {quotes})")
                 paragraphs.append(" ".join(parts))
             else:
                 parts = []
-                if score.reasoning:
-                    parts.append(score.reasoning.rstrip(".") + ".")
-                if score.evidence:
-                    quotes = ", ".join(f'"{e}"' for e in score.evidence)
+                if result.reasoning:
+                    parts.append(result.reasoning.rstrip(".") + ".")
+                if result.evidence:
+                    quotes = ", ".join(f'"{e}"' for e in result.evidence)
                     parts.append(f"(Evidence: {quotes})")
-                paragraphs.append(" ".join(parts) if parts else
-                                  f"Criterion not met: {criterion_name}.")
+                paragraphs.append(
+                    " ".join(parts) if parts else f"Rule not met: {rule_result.rule}."
+                )
 
-        return "\n\n".join(paragraphs)
+        return "\n\n".join(paragraphs) if paragraphs else (
+            rule_result.summary or f"Rule violation detected: {rule_result.rule}"
+        )
 

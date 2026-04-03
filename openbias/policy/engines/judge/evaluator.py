@@ -7,11 +7,8 @@ from typing import Any
 
 from openbias.policy.engines.judge.client import JudgeClient
 from openbias.policy.engines.judge.models import (
-    EvaluationScope,
-    JudgeScore,
+    JudgeRuleResult,
     JudgeSessionContext,
-    JudgeVerdict,
-    VerdictAction,
 )
 from openbias.policy.engines.judge.prompts import (
     RULES_TURN_SYSTEM,
@@ -32,10 +29,10 @@ class JudgeEvaluator:
         self._client = client
         self.verbose = verbose
 
-    async def evaluate_turn(
+    async def evaluate_rule(
         self,
         model_name: str,
-        rules: list[str],
+        rule: str,
         response_content: str,
         conversation: list[dict[str, Any]],
         metadata: dict[str, Any] | None = None,
@@ -43,12 +40,11 @@ class JudgeEvaluator:
         tool_calls: list[dict[str, Any]] | None = None,
         session_context: JudgeSessionContext | None = None,
         tool_definitions: dict[str, dict[str, Any]] | None = None,
-        fail_action: VerdictAction = VerdictAction.INTERVENE,
-    ) -> JudgeVerdict:
-        if not rules:
-            raise ValueError("Judge evaluator requires at least one rule.")
+    ) -> JudgeRuleResult:
+        if not rule.strip():
+            raise ValueError("Judge evaluator requires a non-empty rule.")
 
-        rules_block = "\n".join(f"- Rule {i}: {rule}" for i, rule in enumerate(rules, 1))
+        rules_block = f"- Rule 1: {rule}"
         conversation_block = format_conversation_block(conversation)
         metadata_block = format_metadata_block(metadata or {})
         tool_calls_block = format_tool_calls_block(tool_calls or [], tool_definitions)
@@ -81,64 +77,46 @@ class JudgeEvaluator:
             logger.info("%s", raw)
             logger.info("=============================================")
 
-        scores = self._parse_rule_results(raw, rules)
-        failed_rules = [score.criterion for score in scores if score.score == 0]
-        action = fail_action if failed_rules else VerdictAction.PASS
-        composite = 0.0 if failed_rules else 1.0
+        result = self._parse_rule_result(raw, rule)
+        result.judge_name = model_name
+        result.judge_model = self._client.get_model_id(model_name)
+        result.latency_ms = latency_ms
+        result.token_usage = self._client.get_tokens_for_model(model_name)
+        result.metadata["judge_summary"] = str(raw.get("summary", ""))
+        return result
 
-        return JudgeVerdict(
-            scores=scores,
-            composite_score=composite,
-            action=action,
-            summary=str(raw.get("summary", "")),
-            judge_model=self._client.get_model_id(model_name),
-            latency_ms=latency_ms,
-            token_usage=self._client.get_tokens_for_model(model_name),
-            scope=EvaluationScope.TURN,
-            metadata={"criterion_failures": failed_rules} if failed_rules else {},
-        )
-
-    def _parse_rule_results(self, raw: dict[str, Any], rules: list[str]) -> list[JudgeScore]:
+    def _parse_rule_result(self, raw: dict[str, Any], rule: str) -> JudgeRuleResult:
         items = raw.get("results")
         if not isinstance(items, list):
             raise ValueError("Judge response missing 'results' list.")
 
-        by_rule: dict[str, dict[str, Any]] = {}
+        payload: dict[str, Any] | None = None
         for item in items:
             if not isinstance(item, dict):
                 continue
-            rule_text = str(item.get("rule", "")).strip()
-            if rule_text:
-                by_rule[rule_text] = item
+            if str(item.get("rule", "")).strip() == rule:
+                payload = item
+                break
 
-        scores: list[JudgeScore] = []
-        for rule_text in rules:
-            payload = by_rule.get(rule_text)
-            if payload is None:
-                scores.append(
-                    JudgeScore(
-                        criterion=rule_text,
-                        score=0,
-                        reasoning="Rule not evaluated by judge.",
-                        confidence=0.0,
-                    )
-                )
-                continue
-
-            raw_passed = payload.get("passed")
-            passed = bool(raw_passed) if isinstance(raw_passed, bool) else False
-            evidence = payload.get("evidence", [])
-            scores.append(
-                JudgeScore(
-                    criterion=rule_text,
-                    score=1 if passed else 0,
-                    reasoning=str(payload.get("reasoning", "")),
-                    evidence=evidence if isinstance(evidence, list) else [],
-                    confidence=float(payload.get("confidence", 1.0)),
-                    corrective_actions=payload.get("corrective_actions"),
-                )
+        if payload is None:
+            return JudgeRuleResult(
+                rule=rule,
+                passed=False,
+                reasoning="Rule not evaluated by judge.",
+                confidence=0.0,
             )
-        return scores
+
+        raw_passed = payload.get("passed")
+        passed = bool(raw_passed) if isinstance(raw_passed, bool) else False
+        evidence = payload.get("evidence", [])
+        return JudgeRuleResult(
+            rule=rule,
+            passed=passed,
+            reasoning=str(payload.get("reasoning", "")),
+            evidence=evidence if isinstance(evidence, list) else [],
+            confidence=float(payload.get("confidence", 1.0)),
+            corrective_actions=payload.get("corrective_actions"),
+        )
 
     def _coerce_raw_payload(self, raw: Any) -> dict[str, Any]:
         if isinstance(raw, dict):

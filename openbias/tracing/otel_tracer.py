@@ -536,10 +536,42 @@ class Tracer:
         if token_usage is not None:
             span.set_attribute("openbias.judge.token_usage", token_usage)
 
-        # Add per-criterion scores as events
+        # Add per-rule or per-criterion events
         if scores:
-            span.set_attribute("openbias.judge.criteria_count", len(scores))
+            uses_rule_results = any(
+                isinstance(score_data, dict) and "rule" in score_data
+                for score_data in scores
+            )
+            count_attr = (
+                "openbias.judge.rules_count"
+                if uses_rule_results
+                else "openbias.judge.criteria_count"
+            )
+            span.set_attribute(count_attr, len(scores))
             for score_data in scores:
+                if isinstance(score_data, dict) and "rule" in score_data:
+                    judge_results = score_data.get("judge_results", [])
+                    failing_judges = []
+                    if isinstance(judge_results, list):
+                        for judge_result in judge_results:
+                            if (
+                                isinstance(judge_result, dict)
+                                and not judge_result.get("passed", False)
+                                and judge_result.get("judge_name")
+                            ):
+                                failing_judges.append(str(judge_result["judge_name"]))
+                    span.add_event(
+                        f"judge.rule:{score_data.get('rule', 'unknown')}",
+                        attributes={
+                            "passed": bool(score_data.get("passed", False)),
+                            "action": str(score_data.get("action", "")),
+                            "judge_count": len(judge_results) if isinstance(judge_results, list) else 0,
+                            "failing_judges": ", ".join(failing_judges),
+                            "aggregation_mode": str(score_data.get("aggregation_mode", "")),
+                        },
+                    )
+                    continue
+
                 criterion = score_data.get("criterion", "unknown")
                 span.add_event(
                     f"judge.score:{criterion}",
@@ -560,7 +592,10 @@ class Tracer:
             "scope": scope,
         }
         if scores:
-            output["scores"] = scores
+            if any(isinstance(score_data, dict) and "rule" in score_data for score_data in scores):
+                output["rule_results"] = scores
+            else:
+                output["scores"] = scores
         span.set_attribute("output.value", self._safe_json(output))
         span.set_attribute("langfuse.span.output", self._safe_json(output))
 

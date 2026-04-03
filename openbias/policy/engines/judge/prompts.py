@@ -207,8 +207,8 @@ def format_metadata_block(metadata: dict) -> str:
 def format_session_context_block(session: JudgeSessionContext | None) -> str:
     """Format prior session evaluation history into a prompt block.
 
-    Gives the judge visibility into prior violations, interventions, and
-    score trends so it can make context-aware evaluations.
+    Gives the judge visibility into prior violations and rule outcomes so it
+    can make context-aware evaluations.
 
     Args:
         session: JudgeSessionContext with evaluation history, or None.
@@ -237,9 +237,8 @@ def format_session_context_block(session: JudgeSessionContext | None) -> str:
         if action == VerdictAction.PASS:
             lines.append(f"- Turn {turn_num}: No violations")
         else:
-            failed = verdict.metadata.get("criterion_failures", [])
-            criteria_desc = ", ".join(failed) if failed else verdict.scope.value
-            line = f"- Turn {turn_num}: {action.value.upper()} — {criteria_desc}"
+            failed_rules = ", ".join(verdict.failed_rules) if verdict.failed_rules else verdict.scope.value
+            line = f"- Turn {turn_num}: {action.value.upper()} — {failed_rules}"
             if verdict.summary and action in (
                 VerdictAction.INTERVENE,
                 VerdictAction.BLOCK,
@@ -247,9 +246,10 @@ def format_session_context_block(session: JudgeSessionContext | None) -> str:
                 line += f"\n  Intervention applied: \"{verdict.summary}\""
             lines.append(line)
 
-    # Score trend
-    if session.score_trend:
-        trend_str = " → ".join(f"{s:.1f}" for s in session.score_trend[-10:])
-        lines.append(f"Score trend: {trend_str}")
+    if session.failed_rules_history:
+        recent = []
+        for failed_rules in session.failed_rules_history[-10:]:
+            recent.append(", ".join(failed_rules) if failed_rules else "pass")
+        lines.append("Recent rule outcomes: " + " -> ".join(recent))
 
     return "\n".join(lines)
