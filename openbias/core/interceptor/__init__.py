@@ -12,7 +12,7 @@ from openbias.policy.protocols import (
     ViolationRecord,
 )
 
-from .interceptor import Interceptor
+from .interceptor import Interceptor, SYNC_POST_REPLAY_KIND
 from .types import InterceptionResult
 
 __all__ = [
@@ -24,4 +24,5 @@ __all__ = [
     "InterceptionResult",
     # Classes
     "Interceptor",
+    "SYNC_POST_REPLAY_KIND",
 ]

@@ -19,6 +19,8 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+RESPONSE_CLEANUP_METADATA_KEY = "_openbias_response_cleanup"
+
 
 class StrategyType(Enum):
     """Types of intervention strategies."""
@@ -73,6 +75,15 @@ class SystemPromptAppendStrategy:
 
         return messages
 
+    @staticmethod
+    def cleanup_rules() -> list[str]:
+        """Markers that may leak when guidance is placed in the system prompt."""
+        return [
+            "[REPAIR-INSTRUCTION]",
+            "[END-REPAIR-INSTRUCTION]",
+            "[WORKFLOW GUIDANCE]",
+        ]
+
 
 class UserMessageInjectStrategy:
     """
@@ -99,6 +110,15 @@ class UserMessageInjectStrategy:
             messages.append(guidance)
 
         return messages
+
+    @staticmethod
+    def cleanup_rules() -> list[str]:
+        """Markers that may leak when guidance is injected as a user note."""
+        return [
+            "[REPAIR-INSTRUCTION]",
+            "[END-REPAIR-INSTRUCTION]",
+            "[System Note]",
+        ]
 
 
 class ResponseModificationStrategy:

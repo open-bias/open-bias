@@ -9,10 +9,11 @@ import asyncio
 import copy
 import logging
 from contextlib import nullcontext
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any, Literal
 
 from openbias.core.intervention.strategies import (
+    RESPONSE_CLEANUP_METADATA_KEY,
     StrategyType,
     SystemPromptAppendStrategy,
     UserMessageInjectStrategy,
@@ -39,6 +40,8 @@ from openbias.policy.protocols import (
 from .types import InterceptionResult
 
 logger = logging.getLogger(__name__)
+
+SYNC_POST_REPLAY_KIND = "sync_post_call_reprompt"
 
 
 @dataclass
@@ -343,8 +346,8 @@ class Interceptor:
                         {"evaluator": evaluator.name, "decision": "error", "error": str(e)}
                     )
 
-        modified_data = self._finalize_post_call_interventions(
-            modified_data=modified_data,
+        pending_intervention = self._finalize_post_call_interventions(
+            request_data=request_data,
             all_metadata=all_metadata,
         )
 
@@ -389,6 +392,7 @@ class Interceptor:
         return InterceptionResult(
             allowed=True,
             modified_data=modified_data,
+            pending_intervention=pending_intervention,
             metadata=all_metadata,
         )
 
@@ -455,8 +459,53 @@ class Interceptor:
             if all(record.get("source") == "async_applied" for record in records)
             else "sync"
         )
+        applied, payload, intervention_message = self._build_request_intervention(
+            request_data=modified_data,
+            records=records,
+            mode=mode,
+        )
+        if applied is None:
+            return modified_data, False
+        all_metadata["interventions"] = [{"evaluator": "merged", "message": intervention_message}]
+        all_metadata["intervention_payload"] = asdict(payload)
+        return applied, True
+
+    def _finalize_post_call_interventions(
+        self,
+        *,
+        request_data: dict[str, Any],
+        all_metadata: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        records = all_metadata.get("_pending_post_call_interventions", [])
+        if not records:
+            return None
+
+        replay_request, payload, intervention_message = self._build_request_intervention(
+            request_data=request_data,
+            records=records,
+            mode="sync",
+        )
+        if replay_request is None:
+            return None
+
+        all_metadata.pop("_pending_post_call_interventions", None)
+        all_metadata["interventions"] = [{"evaluator": "merged", "message": intervention_message}]
+        all_metadata["intervention_payload"] = asdict(payload)
+        return {
+            "kind": SYNC_POST_REPLAY_KIND,
+            "request_data": replay_request,
+            "payload": asdict(payload),
+        }
+
+    def _build_request_intervention(
+        self,
+        *,
+        request_data: dict[str, Any],
+        records: list[dict[str, Any]],
+        mode: Literal["sync", "async"],
+    ) -> tuple[dict[str, Any] | None, Any, str]:
         aggregated = self._aggregation_stage.aggregate(records=records, mode=mode)
-        recent_messages = self._extract_recent_message_text(modified_data)
+        recent_messages = self._extract_recent_message_text(request_data)
         payload = self._instruction_builder.build(
             aggregated=aggregated,
             recent_messages=recent_messages,
@@ -467,47 +516,16 @@ class Interceptor:
         else:
             intervention_message = payload.repair_instruction
 
-        all_metadata["interventions"] = [{"evaluator": "merged", "message": intervention_message}]
-        all_metadata["intervention_payload"] = asdict(payload)
-
+        cleanup_rules = self._cleanup_rules_for_strategy(self._default_strategy)
+        payload = replace(payload, cleanup_rules=list(cleanup_rules))
         applied = self._apply_intervention(
-            modified_data,
+            request_data,
             intervention_message,
             self._default_strategy,
         )
-        if applied is None:
-            return modified_data, False
-        return applied, True
-
-    def _finalize_post_call_interventions(
-        self,
-        *,
-        modified_data: dict[str, Any] | None,
-        all_metadata: dict[str, Any],
-    ) -> dict[str, Any] | None:
-        records = all_metadata.pop("_pending_post_call_interventions", [])
-        if not records:
-            return modified_data
-
-        aggregated = self._aggregation_stage.aggregate(records=records, mode="sync")
-        payload = self._instruction_builder.build(aggregated=aggregated, recent_messages=None)
-
-        if modified_data is None:
-            modified_data = {}
-        modified_data["_interventions"] = [
-            {
-                "evaluator": "merged",
-                "message": payload.repair_instruction,
-                "metadata": {
-                    "source_violations": payload.source_violations,
-                    "merged_violation_summary": payload.merged_violation_summary,
-                },
-                "payload": asdict(payload),
-            }
-        ]
-        all_metadata["interventions"] = [{"evaluator": "merged", "message": payload.repair_instruction}]
-        all_metadata["intervention_payload"] = asdict(payload)
-        return modified_data
+        if applied is not None:
+            self._attach_response_cleanup_metadata(applied, cleanup_rules)
+        return applied, payload, intervention_message
 
     @staticmethod
     def _extract_recent_message_text(request_data: dict[str, Any]) -> list[str]:
@@ -763,6 +781,36 @@ class Interceptor:
         logger.warning("Unknown intervention strategy '%s'; intervention skipped", effective_strategy)
 
         return None
+
+    def _cleanup_rules_for_strategy(self, strategy: str) -> list[str]:
+        if strategy == StrategyType.SYSTEM_PROMPT_APPEND.value:
+            return SystemPromptAppendStrategy.cleanup_rules()
+        if strategy == StrategyType.USER_MESSAGE_INJECT.value:
+            return UserMessageInjectStrategy.cleanup_rules()
+        return []
+
+    @staticmethod
+    def _attach_response_cleanup_metadata(
+        request_data: dict[str, Any],
+        cleanup_rules: list[str],
+    ) -> None:
+        if not cleanup_rules:
+            return
+
+        metadata = request_data.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+            request_data["metadata"] = metadata
+
+        existing = metadata.get(RESPONSE_CLEANUP_METADATA_KEY, [])
+        if not isinstance(existing, list):
+            existing = []
+
+        merged_rules: list[str] = []
+        for rule in [*existing, *cleanup_rules]:
+            if rule not in merged_rules:
+                merged_rules.append(rule)
+        metadata[RESPONSE_CLEANUP_METADATA_KEY] = merged_rules
 
     def _on_session_evict(self, session_id: str, tasks: list[asyncio.Task[_PendingResult]]) -> None:
         """Cancel all async tasks when a session is evicted."""

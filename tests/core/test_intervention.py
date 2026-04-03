@@ -127,6 +127,26 @@ class TestSystemPromptAppendStrategy:
         assert "Added" not in messages[0]["content"]
         assert "Added" in result[0]["content"]
 
+    def test_cleanup_rules_are_strategy_specific(self):
+        """System prompt cleanup strips its own wrapper markers."""
+        rules = SystemPromptAppendStrategy.cleanup_rules()
+        assert "[REPAIR-INSTRUCTION]" in rules
+        assert "[END-REPAIR-INSTRUCTION]" in rules
+        assert "[WORKFLOW GUIDANCE]" in rules
+        assert "[System Note]" not in rules
+
+
+class TestUserMessageInjectStrategy:
+    """Tests for UserMessageInjectStrategy cleanup behavior."""
+
+    def test_cleanup_rules_are_strategy_specific(self):
+        """Injected user cleanup strips note markers without system markers."""
+        rules = UserMessageInjectStrategy.cleanup_rules()
+        assert "[REPAIR-INSTRUCTION]" in rules
+        assert "[END-REPAIR-INSTRUCTION]" in rules
+        assert "[System Note]" in rules
+        assert "[WORKFLOW GUIDANCE]" not in rules
+
 
 class TestResponseModificationStrategy:
     """Tests for ResponseModificationStrategy."""

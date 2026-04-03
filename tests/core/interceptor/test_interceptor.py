@@ -308,8 +308,8 @@ class TestSyncPostCall:
         assert result.allowed is False
         assert result.message == "toxic content"
 
-    async def test_intervene_returns_intervention_data(self):
-        """VIOLATION evaluator — modified_data contains intervention info."""
+    async def test_intervene_returns_sync_reprompt_request_data(self):
+        """VIOLATION evaluator — sync post-call returns a replay request, not response mutations."""
         evaluator = _mock_engine(
             status=EvaluationStatus.VIOLATION,
             violation_message="Dangerous tool call detected",
@@ -323,14 +323,16 @@ class TestSyncPostCall:
         )
 
         assert result.allowed is True
-        assert result.modified_data is not None
-        interventions = result.modified_data["_interventions"]
-        assert len(interventions) == 1
-        assert "Dangerous tool call detected" in interventions[0]["message"]
-        assert interventions[0]["evaluator"] == "merged"
+        assert result.modified_data is None
+        assert result.pending_intervention is not None
+        assert result.pending_intervention["kind"] == "sync_post_call_reprompt"
+        replay_request = result.pending_intervention["request_data"]
+        contents = [m["content"] for m in replay_request["messages"]]
+        assert any("Dangerous tool call detected" in c for c in contents)
+        assert "_openbias_response_cleanup" in replay_request["metadata"]
 
-    async def test_multiple_intervene_evaluators_merge_into_single_intervention(self):
-        """Multiple INTERVENE evaluators are merged into one turn-level intervention."""
+    async def test_multiple_intervene_evaluators_merge_into_single_sync_reprompt(self):
+        """Multiple INTERVENE evaluators are merged into one replay request."""
         e1 = _mock_engine(
             name="evaluator1",
             status=EvaluationStatus.VIOLATION,
@@ -350,10 +352,11 @@ class TestSyncPostCall:
         )
 
         assert result.allowed is True
-        interventions = result.modified_data["_interventions"]
-        assert len(interventions) == 1
-        assert "Issue 1" in interventions[0]["message"]
-        assert "Issue 2" in interventions[0]["message"]
+        assert result.pending_intervention is not None
+        replay_request = result.pending_intervention["request_data"]
+        contents = [m["content"] for m in replay_request["messages"]]
+        assert any("Issue 1" in c for c in contents)
+        assert any("Issue 2" in c for c in contents)
 
     async def test_engine_exception_fails_open(self):
         """Exception in sync POST_CALL evaluator fails open."""
@@ -1146,10 +1149,9 @@ class TestSeparateEvaluatorLists:
             SESSION, _request(), {"r": 1}, REQUEST_ID
         )
         assert post_result.allowed is True
-        assert post_result.modified_data is not None
-        interventions = post_result.modified_data["_interventions"]
-        assert len(interventions) == 1
-        assert interventions[0]["evaluator"] == "merged"
+        assert post_result.modified_data is None
+        assert post_result.pending_intervention is not None
+        assert post_result.pending_intervention["kind"] == "sync_post_call_reprompt"
 
     async def test_pre_call_evaluator_not_used_in_post_call(self):
         """Pre-call evaluator's evaluate_response is never called during post_call."""
