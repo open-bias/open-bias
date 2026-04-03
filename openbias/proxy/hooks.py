@@ -9,7 +9,7 @@ This module implements the core hook system that intercepts LLM calls:
    - Modifies request if INTERVENE with modified_data
 
 2. async_post_call_success_hook: Runs AFTER LLM call succeeds
-   - Runs sync POST_CALL engines (can modify response on INTERVENE)
+   - Runs sync POST_CALL engines (can trigger a replay request on INTERVENE)
    - Starts async engines in background
    - Completes tracing
 
@@ -41,10 +41,13 @@ from litellm.proxy._types import UserAPIKeyAuth
 
 
 from openbias.config.settings import Settings
+from openbias.core.intervention.strategies import (
+    RESPONSE_CLEANUP_METADATA_KEY,
+    WorkflowViolationError,
+)
 from openbias.core.utils import extract_response_content, extract_usage_info
-from openbias.core.interceptor import Interceptor
+from openbias.core.interceptor import Interceptor, SYNC_POST_REPLAY_KIND
 from openbias.core.intervention.pipelines.cleanup import ResponseCleanupStage
-from openbias.core.intervention.strategies import WorkflowViolationError
 from openbias.logging import session_id_var, request_id_var
 from openbias.policy.protocols import PolicyEngine
 from openbias.proxy.middleware import SessionExtractor
@@ -65,9 +68,6 @@ _fail_open_counter: dict[str, int] = {}
 
 SYNC_POST_REPLAY_COUNT_KEY = "_openbias_sync_post_replay_count"
 SYNC_POST_REPLAY_PARENT_REQUEST_ID_KEY = "_openbias_sync_post_replay_parent_request_id"
-SYNC_POST_REPLAY_KIND = "sync_post_call_reprompt"
-
-
 def get_fail_open_counts() -> dict[str, int]:
     """Return a snapshot of fail-open activation counts per hook."""
     return dict(_fail_open_counter)
@@ -221,7 +221,7 @@ class Callback(CustomLogger):
 
     Uses the Interceptor to orchestrate evaluators:
     - Sync PRE_CALL evaluators run before LLM call
-    - Sync POST_CALL evaluators run after LLM call (can modify response)
+    - Sync POST_CALL evaluators run after LLM call (can replay the request)
     - Async evaluators run in background, results applied next request
 
     The callback maintains:
@@ -529,6 +529,31 @@ class Callback(CustomLogger):
         replay_metadata.pop("_openbias_llm_start_time", None)
         return replay_request
 
+    def _apply_request_cleanup(self, data: dict[str, Any], response: Any) -> Any:
+        metadata = data.get("metadata", {})
+        if not isinstance(metadata, dict):
+            return response
+
+        cleanup_rules = metadata.get(RESPONSE_CLEANUP_METADATA_KEY)
+        if not isinstance(cleanup_rules, list) or not cleanup_rules:
+            return response
+
+        current_content = extract_response_content(response) or ""
+        cleaned_content = self._response_cleanup.clean_text(current_content, cleanup_rules)
+        if cleaned_content == current_content:
+            return response
+
+        if hasattr(response, "choices") and response.choices:
+            choice = response.choices[0]
+            if hasattr(choice, "message") and choice.message:
+                choice.message.content = cleaned_content
+                return response
+        if isinstance(response, dict):
+            choices = response.get("choices", [])
+            if choices and "message" in choices[0]:
+                choices[0]["message"]["content"] = cleaned_content
+        return response
+
     async def _maybe_execute_sync_post_replay(
         self,
         *,
@@ -833,15 +858,19 @@ class Callback(CustomLogger):
 
                     # Set output on span
                     if span is not None:
+                        has_modifications = (
+                            result.modified_data is not None
+                            or result.pending_intervention is not None
+                        )
                         output_data = {
                             "allowed": result.allowed,
-                            "has_modifications": result.modified_data is not None,
+                            "has_modifications": has_modifications,
                         }
                         output_json = json.dumps(output_data, default=str)
                         span.set_attribute("output.value", output_json)
                         span.set_attribute("langfuse.span.output", output_json)
                         span.set_attribute("openbias.decision", "allow" if result.allowed else "block")
-                        span.set_attribute("openbias.has_modifications", result.modified_data is not None)
+                        span.set_attribute("openbias.has_modifications", has_modifications)
 
                     # Handle sync POST_CALL results INSIDE trace block for proper nesting
                     if not result.allowed:
@@ -859,52 +888,25 @@ class Callback(CustomLogger):
                         session_id=session_id,
                         request_id=request_id,
                     )
+                    if replay_response is not None and self.tracer and result.internal_metadata.get("results"):
+                        self.tracer.log_intervention(
+                            session_id=session_id,
+                            intervention_name="post_call_intervention",
+                            context=result.internal_metadata,
+                            parent_span=span,
+                        )
                     if replay_response is not None:
                         return replay_response
 
-                    if result.modified_data and "_interventions" in result.modified_data:
-                        from openbias.core.intervention.strategies import (
-                            ResponseModificationStrategy,
+                    response = self._apply_request_cleanup(data, response)
+
+                    if result.pending_intervention and self.tracer and result.internal_metadata.get("results"):
+                        self.tracer.log_intervention(
+                            session_id=session_id,
+                            intervention_name="post_call_intervention",
+                            context=result.internal_metadata,
+                            parent_span=span,
                         )
-
-                        for intervention in result.modified_data["_interventions"]:
-                            cleanup_modified_messages = None
-                            payload = intervention.get("payload") or {}
-                            cleanup_rules = payload.get("cleanup_rules", [])
-                            if (
-                                payload.get("mode") == "sync"
-                                and cleanup_rules
-                                and not intervention.get("modified_messages")
-                            ):
-                                current_content = extract_response_content(response) or ""
-                                cleaned_content = self._response_cleanup.clean_text(
-                                    current_content,
-                                    cleanup_rules,
-                                )
-                                cleanup_modified_messages = [
-                                    {"role": "assistant", "content": cleaned_content}
-                                ]
-
-                            response = ResponseModificationStrategy.apply_to_response(
-                                response,
-                                message=intervention.get("message"),
-                                modified_messages=(
-                                    intervention.get("modified_messages")
-                                    or cleanup_modified_messages
-                                ),
-                            )
-                            logger.info(
-                                f"Applied POST_CALL intervention from "
-                                f"'{intervention.get('evaluator')}' for session {session_id}"
-                            )
-
-                        if self.tracer and result.internal_metadata.get("results"):
-                            self.tracer.log_intervention(
-                                session_id=session_id,
-                                intervention_name="post_call_intervention",
-                                context=result.internal_metadata,
-                                parent_span=span,
-                            )
 
             return response
         finally:

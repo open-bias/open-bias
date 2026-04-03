@@ -377,94 +377,10 @@ async def test_post_call_hook_block_uses_normalized_result_fields(
         await callback.async_post_call_success_hook(data, mock_api_key, response)
 
 
-async def test_post_call_intervention_modifies_returned_response(
+async def test_post_call_response_cleanup_uses_request_metadata(
     callback, mock_api_key
 ):
-    """POST_CALL intervention modifies the response returned by the hook."""
-    from openbias.core.interceptor.types import InterceptionResult
-    from litellm import ModelResponse
-
-    response = ModelResponse(
-        choices=[{"message": {"role": "assistant", "content": "original answer"}}],
-        model="test-model",
-    )
-
-    mock_interceptor = MagicMock()
-    mock_interceptor.run_post_call = AsyncMock(
-        return_value=InterceptionResult(
-            allowed=True,
-            modified_data={
-                "_interventions": [
-                    {
-                        "evaluator": "test_evaluator",
-                        "message": "policy warning: be careful",
-                    }
-                ]
-            },
-        )
-    )
-    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
-    callback._interceptor_initialized = True
-
-    result = await callback.async_post_call_success_hook(
-        {"messages": [{"role": "user", "content": "hello"}]},
-        mock_api_key,
-        response,
-    )
-
-    # The returned response must contain the intervention text
-    content = result.choices[0].message.content
-    assert "original answer" in content
-    assert "[POLICY WARNING]: policy warning: be careful" in content
-    # Verify it's the same object (in-place mutation)
-    assert result is response
-
-
-async def test_post_call_intervention_replaces_response_content(
-    callback, mock_api_key
-):
-    """POST_CALL intervention with modified_messages replaces response content entirely."""
-    from openbias.core.interceptor.types import InterceptionResult
-    from litellm import ModelResponse
-
-    response = ModelResponse(
-        choices=[{"message": {"role": "assistant", "content": "dangerous answer"}}],
-        model="test-model",
-    )
-
-    mock_interceptor = MagicMock()
-    mock_interceptor.run_post_call = AsyncMock(
-        return_value=InterceptionResult(
-            allowed=True,
-            modified_data={
-                "_interventions": [
-                    {
-                        "evaluator": "test_evaluator",
-                        "modified_messages": [
-                            {"role": "assistant", "content": "safe replacement"}
-                        ],
-                    }
-                ]
-            },
-        )
-    )
-    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
-    callback._interceptor_initialized = True
-
-    result = await callback.async_post_call_success_hook(
-        {"messages": [{"role": "user", "content": "hello"}]},
-        mock_api_key,
-        response,
-    )
-
-    assert result.choices[0].message.content == "safe replacement"
-    assert result is response
-
-
-async def test_post_call_intervention_cleanup_strips_repair_scaffolding(
-    callback, mock_api_key
-):
-    """Sync intervention cleanup removes internal scaffolding from visible output."""
+    """Request-scoped cleanup metadata strips leaked intervention scaffolding."""
     from openbias.core.interceptor.types import InterceptionResult
     from litellm import ModelResponse
 
@@ -474,10 +390,10 @@ async def test_post_call_intervention_cleanup_strips_repair_scaffolding(
                 "message": {
                     "role": "assistant",
                     "content": (
-                        "Safe content.\n"
+                        "Visible answer.\n"
+                        "[System Note]: hidden\n"
                         "[REPAIR-INSTRUCTION]internal[/REPAIR-INSTRUCTION]\n"
-                        "[System Note]: internal note\n"
-                        "[WORKFLOW GUIDANCE]: hidden"
+                        "Final answer."
                     ),
                 }
             }
@@ -487,22 +403,56 @@ async def test_post_call_intervention_cleanup_strips_repair_scaffolding(
 
     mock_interceptor = MagicMock()
     mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(allowed=True)
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._interceptor_initialized = True
+
+    result = await callback.async_post_call_success_hook(
+        {
+            "messages": [{"role": "user", "content": "hello"}],
+            "metadata": {
+                "_openbias_response_cleanup": [
+                    "[System Note]",
+                    "[REPAIR-INSTRUCTION]",
+                    "[END-REPAIR-INSTRUCTION]",
+                ]
+            },
+        },
+        mock_api_key,
+        response,
+    )
+
+    content = result.choices[0].message.content
+    assert "Visible answer." in content
+    assert "Final answer." in content
+    assert "[System Note]" not in content
+    assert "[REPAIR-INSTRUCTION]" not in content
+    assert result is response
+
+
+async def test_post_call_intervention_replaces_response_content(
+    callback, mock_api_key
+):
+    """Sync replay returns the replayed response instead of mutating the current one."""
+    from openbias.core.interceptor.types import InterceptionResult
+
+    response = MagicMock()
+    response.choices = []
+    replay_response = MagicMock(name="replay_response")
+    callback._router = MagicMock()
+    callback._router.acompletion = AsyncMock(return_value=replay_response)
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
         return_value=InterceptionResult(
             allowed=True,
-            modified_data={
-                "_interventions": [
-                    {
-                        "evaluator": "merged",
-                        "payload": {
-                            "mode": "sync",
-                            "cleanup_rules": [
-                                "[REPAIR-INSTRUCTION]",
-                                "[System Note]",
-                                "[WORKFLOW GUIDANCE]",
-                            ],
-                        },
-                    }
-                ]
+            pending_intervention={
+                "kind": "sync_post_call_reprompt",
+                "request_data": {
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "replayed"}],
+                },
             },
         )
     )
@@ -510,17 +460,129 @@ async def test_post_call_intervention_cleanup_strips_repair_scaffolding(
     callback._interceptor_initialized = True
 
     result = await callback.async_post_call_success_hook(
-        {"messages": [{"role": "user", "content": "hello"}]},
+        {
+            "messages": [{"role": "user", "content": "hello"}],
+            "model": "gpt-4",
+            "metadata": {
+                "_openbias_request_id": "req-replace",
+                "session_id": "sess-replace",
+            },
+        },
         mock_api_key,
         response,
     )
 
-    content = result.choices[0].message.content
-    assert "Safe content." in content
-    assert "[REPAIR-INSTRUCTION]" not in content
-    assert "[System Note]" not in content
-    assert "[WORKFLOW GUIDANCE]" not in content
-    assert result is response
+    assert result is replay_response
+    callback._router.acompletion.assert_awaited_once()
+
+
+async def test_post_call_intervention_cleanup_strips_repair_scaffolding(
+    callback, mock_api_key
+):
+    """Replay requests preserve cleanup metadata for the replayed response path."""
+    from openbias.core.interceptor.types import InterceptionResult
+
+    response = MagicMock()
+    response.choices = []
+    replay_response = MagicMock(name="replay_response")
+    callback._router = MagicMock()
+    callback._router.acompletion = AsyncMock(return_value=replay_response)
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(
+            allowed=True,
+            pending_intervention={
+                "kind": "sync_post_call_reprompt",
+                "request_data": {
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "replayed"}],
+                    "metadata": {
+                        "_openbias_response_cleanup": [
+                            "[REPAIR-INSTRUCTION]",
+                            "[END-REPAIR-INSTRUCTION]",
+                            "[WORKFLOW GUIDANCE]",
+                        ]
+                    },
+                },
+            },
+        )
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._interceptor_initialized = True
+
+    result = await callback.async_post_call_success_hook(
+        {
+            "messages": [{"role": "user", "content": "hello"}],
+            "model": "gpt-4",
+            "metadata": {
+                "_openbias_request_id": "req-cleanup",
+                "session_id": "sess-cleanup",
+            },
+        },
+        mock_api_key,
+        response,
+    )
+
+    assert result is replay_response
+    replay_kwargs = callback._router.acompletion.await_args.kwargs
+    assert replay_kwargs["metadata"]["_openbias_response_cleanup"] == [
+        "[REPAIR-INSTRUCTION]",
+        "[END-REPAIR-INSTRUCTION]",
+        "[WORKFLOW GUIDANCE]",
+    ]
+
+
+async def test_post_call_pending_replay_marks_span_as_modified(
+    callback, mock_api_key
+):
+    """Pending sync replay counts as a post-call modification in tracing output."""
+    from openbias.core.interceptor.types import InterceptionResult
+
+    data = {
+        "messages": [{"role": "user", "content": "hello"}],
+        "model": "gpt-4",
+        "metadata": {
+            "_openbias_request_id": "req-span",
+            "session_id": "sess-span",
+        },
+    }
+    response = MagicMock()
+    response.choices = []
+
+    callback._router = MagicMock()
+    callback._router.acompletion = AsyncMock(return_value=MagicMock(name="replay_response"))
+
+    mock_post_span = MagicMock()
+    mock_tracer = MagicMock()
+    mock_tracer.start_request_span.return_value = MagicMock(name="request_span")
+
+    @contextmanager
+    def fake_trace_block(*args, **kwargs):
+        yield mock_post_span
+
+    mock_tracer.trace_block = MagicMock(side_effect=fake_trace_block)
+    callback._tracer = mock_tracer
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(
+            allowed=True,
+            pending_intervention={
+                "kind": "sync_post_call_reprompt",
+                "request_data": {
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "replayed"}],
+                },
+            },
+        )
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._interceptor_initialized = True
+
+    await callback.async_post_call_success_hook(data, mock_api_key, response)
+
+    mock_post_span.set_attribute.assert_any_call("openbias.has_modifications", True)
 
 
 async def test_pre_call_skips_intervention_span_when_results_empty(
