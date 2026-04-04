@@ -40,6 +40,8 @@ Override engine selection at startup:
 openbias serve --config custom_config.yaml
 ```
 
+For the trace-backed improvement loop, keep `openbias.yaml`, `rules.md`, repo-owned eval suites under `evals/suites/`, and replayable JSONL traces under `.openbias/traces/`.
+
 ## Code Conventions
 
 ### File Organization
@@ -122,6 +124,26 @@ openbias compare --candidate rules.candidate.md --trace .openbias/traces/2026-04
 # Turn comparison.json into a reviewer-friendly Markdown artifact
 openbias review-pack --comparison .openbias/reports/latest/comparison.json
 ```
+
+### Nightly Improvement Workflow
+
+The OSS repo ships a copyable GitHub Actions example at [`examples/github-actions/nightly-improvement.yml`](../examples/github-actions/nightly-improvement.yml).
+
+That workflow intentionally lives under `examples/` instead of `.github/workflows/` because this repository does not ship a runnable project-local `rules.md`, `openbias.yaml`, and trace history for itself.
+
+The example assumes your application repo has:
+
+- a committed `openbias.yaml`
+- a committed baseline `rules.md`
+- repo-owned eval suites under `evals/suites/`
+- replayable trace files under `.openbias/traces/`
+- an optional `rules.candidate.md` created manually or by an external generator
+
+It runs the Python eval harness directly, because `openbias eval` is still temporarily disabled, then replays traces, compares a candidate file when present, generates a review pack, and uploads the resulting artifacts.
+
+Adjust the install step to match your repo. The example defaults to `pip install openbias` so it is easy to copy into an application repository that depends on Open Bias.
+
+End-to-end walkthrough: [continuous-improvement.md](continuous-improvement.md)
 
 ### Test Layout
 

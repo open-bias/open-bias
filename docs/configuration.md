@@ -199,6 +199,14 @@ tracing:
 - a file path ending in `.jsonl`
 - a directory path, in which case Open Bias writes `YYYY-MM-DD.jsonl` inside it
 
+These datasets are the handoff point into the continuous-improvement loop:
+
+- `openbias replay --trace ...` re-runs the current policy against captured traffic
+- `openbias compare --candidate ... --trace ...` measures baseline vs candidate deltas
+- `openbias review-pack --comparison ...` turns comparison output into a reviewer-facing artifact
+
+Candidate generation itself stays manual or external in OSS. Open Bias only handles capture, replay, comparison, and review packaging.
+
 ## Environment Variables
 
 Environment variables are only supported for config discovery and secrets. Generic runtime settings such as `debug`, `log_level`, `port`, and `litellm_verbose` should be configured in `openbias.yaml` or passed explicitly via CLI flags / `Settings(...)`.
@@ -245,7 +253,7 @@ See `.env.example` in the repository root for a template.
 
 ## Eval
 
-Configure offline scenario-based evaluation under the `eval:` section. Used by `openbias eval`.
+Configure offline scenario-based evaluation under the `eval:` section. The rebuilt eval harness is currently intended for Python APIs and CI scripts while the `openbias eval` CLI is temporarily unavailable.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|

@@ -9,7 +9,7 @@
 </pre>
 </p>
 
-<p align="center"><em>Rules enforcement for AI agents. Define rules, monitor responses, intervene automatically.</em></p>
+<p align="center"><em>Business-logic enforcement and reviewable policy evolution for AI agents.</em></p>
 
 <p align="center">
   <a href="https://pypi.org/project/openbias"><img src="https://img.shields.io/pypi/v/openbias?color=blue" alt="PyPI"></a>
@@ -18,7 +18,7 @@
   <!-- <a href="https://github.com/open-bias/open-bias/actions"><img src="https://img.shields.io/github/actions/workflow/status/open-bias/open-bias/ci.yml" alt="CI"></a> -->
 </p>
 
-Open Bias is a rules enforcement layer for AI agents. It ships a proxy you point your LLM client at, defines rules, and evaluates every response before it reaches the user.
+Open Bias is a business-logic enforcement layer for AI agents. It ships a proxy you point your LLM client at, evaluates every request and response against project-local `rules.md`, captures replayable traces, and supports a human-reviewed policy-improvement loop instead of auto-applying generated rules.
 
 ```
 Your App  ──▶  Open Bias  ──▶  LLM Provider
@@ -71,6 +71,20 @@ response = client.chat.completions.create(
 Every call now runs through your evaluators. The judge evaluator (default type) compiles your local `rules.md`, evaluates one rule at a time with a sidecar LLM, and maps failed aggregated rules to `intervene`, `block`, or log-only `shadow` behavior according to `fail_action`. Model, port, and tracing are all auto-configured with smart defaults.
 
 Place your project policy in `rules.md`. `openbias serve` discovers that file automatically and compiles it to engine-native runtime config during startup.
+
+## Continuous Improvement
+
+Open Bias is built for teams whose rules change as product behavior changes.
+
+1. Author the current business rules in `rules.md`.
+2. Capture replayable JSONL traces from real traffic.
+3. Replay traces and run repo-owned eval suites against the baseline policy.
+4. Compare `rules.md` against a candidate policy file such as `rules.candidate.md`.
+5. Generate a review pack and let a human decide whether to promote the candidate.
+
+This keeps the approval boundary explicit: OSS Open Bias helps you gather evidence, but it does not auto-merge policy updates into `rules.md`.
+
+Walkthrough: [docs/continuous-improvement.md](docs/continuous-improvement.md)
 
 ## How It Works
 
@@ -177,26 +191,28 @@ Full reference: [docs/configuration.md](docs/configuration.md)
 
 ```bash
 # Bootstrap a project
-openbias init                                            # interactive wizard
-openbias init --quick                                    # non-interactive defaults
+openbias init
+openbias init --quick
 
-# Run
-openbias serve                         # start proxy (default: 0.0.0.0:4000)
-openbias serve -p 8080 -c custom.yaml  # custom port and config
+# Run the proxy
+openbias serve
+openbias serve -p 8080 -c custom.yaml
 
 # Validate and inspect
-openbias validate openbias.yaml                          # check config + policy wiring
-openbias info openbias.yaml -v                           # detailed evaluator/config view
+openbias validate openbias.yaml
+openbias info openbias.yaml -v
 
-# Evaluate
-openbias eval                                            # run offline scenario-based evaluation
+# Replay and compare
+openbias replay --trace .openbias/traces/2026-04-05.jsonl
+openbias compare --candidate rules.candidate.md --trace .openbias/traces/2026-04-05.jsonl
+openbias review-pack --comparison .openbias/reports/latest/comparison.json
 
-# Trigger
-openbias trigger                                         # trigger evaluators manually
-
-# Version
-openbias version                                         # print version and exit
+# Trigger / inspect
+openbias trigger
+openbias version
 ```
+
+`openbias eval` is still temporarily disabled while the rebuilt eval harness CLI is being reintroduced. Use the Python eval APIs directly in CI or tests for now.
 
 ## Performance
 
@@ -212,13 +228,14 @@ All hooks are wrapped in `safe_hook()` with configurable timeout (default 30s). 
 
 ## Status
 
-v0.3.0 -- alpha. The proxy layer, four evaluator engines (judge, FSM, LLM, NeMo), rules compiler, CLI tooling, and OpenTelemetry tracing all work. YAML-first configuration with auto-detection of models and API keys. API surface may change. Session state is in-memory only (not persistent across restarts).
+v0.3.0 -- alpha. The proxy layer, four evaluator engines (judge, FSM, LLM, NeMo), rules compiler, replay/compare/review tooling, and OpenTelemetry tracing all work. YAML-first configuration with auto-detection of models and API keys. API surface may change. Session state is in-memory only (not persistent across restarts).
 
 Missing: persistent session storage, dashboard UI, pre-built rules library, rate limiting. These are planned but not built.
 
 ## Documentation
 
 - [Configuration Reference](docs/configuration.md) -- every config option with type, default, description
+- [Continuous Improvement Walkthrough](docs/continuous-improvement.md) -- trace capture, replay, compare, review, and approval flow
 - [Evaluator Engines](docs/engines.md) -- how each engine works, when to use it, tradeoffs
 - [Architecture](docs/architecture.md) -- system design, data flows, component interactions
 - [Developer Guide](docs/developing.md) -- setup, testing, extension points, debugging
