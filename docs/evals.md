@@ -7,6 +7,7 @@ The rebuilt eval harness is a small Python API for running one initialized polic
 - Canonical format: the internal contract the runner understands. Every suite becomes this shape after loading.
 - Native suite: a repo-authored YAML or JSON file that already matches the canonical shape.
 - Import flow: an external JSONL dataset plus an explicit mapping config that converts raw rows into the canonical shape.
+- Policy target: suite-level metadata that points at the rules source the suite is intended to evaluate.
 
 In practice, this means repo-owned suites should be simple native files under [`evals/suites/`](/Users/sasha/Desktop/open-bias/evals/suites), while external datasets should stay in JSONL and come through `load_jsonl_suite(...)`.
 
@@ -19,6 +20,12 @@ Each canonical case must define:
 - `tags`
 - optional `source`
 - `labels`
+
+Each native suite may also define:
+
+- `policy`
+
+`policy` is suite-level metadata, not enforcement logic. It tells us which rule source the suite is meant to evaluate so we can run the same suite against multiple engines or model setups that implement the same policy.
 
 `labels` is explicit and fixed in v1:
 
@@ -42,6 +49,8 @@ Repo-owned suites now live in [`evals/suites/`](/Users/sasha/Desktop/open-bias/e
 
 These files are intentionally short and behavior-first. Each file covers one family of expectations so contributors can understand the target behavior quickly.
 
+All repo-owned suites currently point at project-root [`rules.md`](/Users/sasha/Desktop/open-bias/rules.md), which is the shared authored policy source for engine comparisons.
+
 ## Why YAML For Repo Suites
 
 `load_native_suite(...)` supports both YAML and JSON, but YAML is the repo default for hand-authored suites because it is easier to scan, diff, and review when cases are short conversation transcripts.
@@ -56,6 +65,10 @@ JSON is still useful, but it works best for:
 
 ```yaml
 name: safe-basic
+policy:
+  name: default-project-policy
+  rules_path: rules.md
+  notes: Repo-owned suites target the shared project policy in rules.md.
 cases:
   - id: safe-greeting
     tags: [safe, smoke]
@@ -78,6 +91,14 @@ cases:
 - Keep cases short enough that a reviewer can understand the expected behavior in a few seconds.
 
 The older repo-owned `openbias.yaml` manifest pattern is gone. New repo suites should be written directly as native canonical files instead of through a discovery manifest.
+
+## Rules vs Suites
+
+- `rules.md` defines what the engine should block, allow, or repair.
+- The suite defines examples and expected outcomes for those rules.
+- The runner compares observed engine behavior to the suite labels.
+
+That separation is intentional: it lets us run the same suite library against different engines or models while holding the policy target constant.
 
 ## JSONL Import Mapping
 
@@ -117,11 +138,14 @@ The import layer does not guess missing labels. If the dataset cannot explicitly
 ## Running From Python
 
 ```python
-from openbias.eval import EvalRunner, load_native_suite
+from openbias.eval import EvalRunner, load_native_suites
 
-suite = load_native_suite("evals/suites/repair.yaml")
 runner = EvalRunner()
-result = await runner.run(engine, suite)
+suites = load_native_suites("evals/suites")
+
+for suite in suites:
+    result = await runner.run(engine, suite)
+    print(suite.name, suite.policy.rules_path if suite.policy else None, result.summary.exact_case_pass_rate)
 ```
 
 `EvalRunResult.summary` exposes only the v1 binary metrics:
