@@ -12,18 +12,16 @@ These tests ensure:
 4. Real engines populate ViolationRecord with required fields
 """
 
-import pytest
 import sys
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from openbias.policy.protocols import (
-    Decision,
     EvaluationResult,
     EvaluationStatus,
     ViolationRecord,
 )
-
 
 # ---------------------------------------------------------------------------
 # Interceptor fail_action conformance with evaluation contract
@@ -207,6 +205,7 @@ class TestFSMEngineConformance:
     @pytest.fixture
     async def fsm_engine(self):
         from pathlib import Path
+
         from openbias.policy.registry import PolicyEngineRegistry
 
         workflow_path = (
@@ -225,13 +224,29 @@ class TestFSMEngineConformance:
         """FSM violations have all required fields populated."""
         import json
         from pathlib import Path
-        from openbias.eval.runner import EvalRunner
 
         evals_dir = Path(__file__).resolve().parent.parent.parent / "evals" / "fsm"
         messages = json.loads((evals_dir / "skip_verification.json").read_text())
-        result = await EvalRunner().run(fsm_engine, messages)
+        request_data = {"messages": messages[:4], "model": "conformance"}
+        response_data = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": messages[4]["content"],
+                        "tool_calls": messages[4]["tool_calls"],
+                    }
+                }
+            ],
+            "model": "conformance",
+        }
+        result = await fsm_engine.evaluate_response(
+            session_id="fsm-conformance",
+            response_data=response_data,
+            request_data=request_data,
+        )
 
-        violations = [v for t in result.turns for v in t.response_eval.violations]
+        violations = result.violations
         assert len(violations) > 0, "Expected at least one FSM violation"
 
         for v in violations:

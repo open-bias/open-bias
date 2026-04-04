@@ -4,9 +4,35 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from openbias.cli import main
+
+
+def _restore_policy_registries() -> None:
+    from openbias.policy.compiler.registry import PolicyCompilerRegistry
+    from openbias.policy.engines.fsm import FSMCompiler, FSMPolicyEngine
+    from openbias.policy.engines.judge.compiler import JudgeRuntimeCompiler
+    from openbias.policy.engines.judge.engine import JudgePolicyEngine
+    from openbias.policy.engines.llm import LLMCompiler, LLMPolicyEngine
+    from openbias.policy.engines.nemo import NemoCompiler, NemoGuardrailsPolicyEngine
+    from openbias.policy.registry import PolicyEngineRegistry
+
+    PolicyEngineRegistry.register("fsm", FSMPolicyEngine)
+    PolicyEngineRegistry.register("judge", JudgePolicyEngine)
+    PolicyEngineRegistry.register("llm", LLMPolicyEngine)
+    PolicyEngineRegistry.register("nemo", NemoGuardrailsPolicyEngine)
+
+    PolicyCompilerRegistry.register("fsm", FSMCompiler)
+    PolicyCompilerRegistry.register("judge", JudgeRuntimeCompiler)
+    PolicyCompilerRegistry.register("llm", LLMCompiler)
+    PolicyCompilerRegistry.register("nemo", NemoCompiler)
+
+
+@pytest.fixture(autouse=True)
+def _restore_registries_before_each_test() -> None:
+    _restore_policy_registries()
 
 
 def _invoke(args):
@@ -566,134 +592,29 @@ class TestTriggerCommand:
 
 
 class TestEvalCommand:
-    def test_eval_compiles_rules_inside_async_run_without_nested_event_loop_error(self):
+    def test_eval_command_is_temporarily_unavailable(self):
+        result, output = _invoke(["eval"])
+        assert result.exit_code != 0
+        assert "temporarily unavailable" in output
+
+    def test_eval_command_returns_rebuild_message_before_config_handling(self):
         runner = CliRunner()
         with runner.isolated_filesystem():
-            Path("rules.md").write_text("- Stay polite\n")
-            Path("scenario.yaml").write_text("name: smoke\nconversation: []\n")
-            Path("openbias.yaml").write_text(
-                "model: gpt-4o-mini\n"
-                "evaluators:\n"
-                "  - name: synthesis\n"
-                "    type: llm\n"
-                "    phase: post_call\n"
-                "eval:\n"
-                "  scenarios:\n"
-                "    - scenario.yaml\n"
-            )
+            Path("openbias.yaml").write_text("evaluators: []\n")
+            buf = StringIO()
+            from openbias.cli_ui import console
 
-            mock_engine = AsyncMock()
-            mock_engine.shutdown = AsyncMock()
+            old_file = console.file
+            console.file = buf
+            try:
+                result = runner.invoke(main, ["eval", "--config", "openbias.yaml"])
+            finally:
+                console.file = old_file
 
-            with patch(
-                "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
-                new_callable=AsyncMock,
-            ) as mock_compile:
-                mock_compile.return_value = {"workflow": {"steps": []}, "llm_model": "gpt-4o-mini"}
-                with patch(
-                    "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
-                    new=AsyncMock(return_value=mock_engine),
-                ):
-                    with patch(
-                        "openbias.eval.EvalRunner.run_suite",
-                        new=AsyncMock(return_value=[]),
-                    ):
-                        with patch("openbias.eval.print_report"):
-                            result = runner.invoke(main, ["eval", "--config", "openbias.yaml"])
-
-            assert result.exit_code == 0
-            mock_compile.assert_awaited_once()
-
-    def test_eval_uses_active_evaluator_type_for_mock_provider(self):
-        runner = CliRunner()
-        with runner.isolated_filesystem():
-            Path("rules.md").write_text("- Stay polite\n")
-            Path("scenario.yaml").write_text("name: smoke\nconversation: []\n")
-            Path("openbias.yaml").write_text(
-                "model: gpt-4o-mini\n"
-                "evaluators:\n"
-                "  - name: synthesis\n"
-                "    type: llm\n"
-                "    phase: post_call\n"
-                "eval:\n"
-                "  scenarios:\n"
-                "    - scenario.yaml\n"
-                "  mock_provider:\n"
-                "    responses:\n"
-                "      - '{\"ok\": true}'\n"
-            )
-
-            mock_engine = AsyncMock()
-            mock_engine.shutdown = AsyncMock()
-
-            with patch(
-                "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
-                new_callable=AsyncMock,
-            ) as mock_compile:
-                mock_compile.return_value = {"steps": [], "llm_model": "gpt-4o-mini"}
-                with patch("openbias.cli._compile_rules"):
-                    with patch(
-                        "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
-                        new=AsyncMock(return_value=mock_engine),
-                    ):
-                        with patch(
-                            "openbias.eval.EvalRunner.run_suite",
-                            new=AsyncMock(return_value=[]),
-                        ):
-                            with patch("openbias.eval.print_report"):
-                                with patch("openbias.eval.mocks.apply_mock_provider") as mock_apply:
-                                    result = runner.invoke(main, ["eval", "--config", "openbias.yaml"])
-
-            assert result.exit_code == 0
-            mock_apply.assert_called_once()
-            assert mock_apply.call_args.args[1] == "llm"
-
-    def test_eval_ignores_legacy_top_level_engine_for_mock_provider(self):
-        runner = CliRunner()
-        with runner.isolated_filesystem():
-            Path("rules.md").write_text("- Stay polite\n")
-            Path("scenario.yaml").write_text("name: smoke\nconversation: []\n")
-            Path("openbias.yaml").write_text(
-                "model: gpt-4o-mini\n"
-                "engine: judge\n"
-                "evaluators:\n"
-                "  - name: synthesis\n"
-                "    type: llm\n"
-                "    phase: post_call\n"
-                "eval:\n"
-                "  scenarios:\n"
-                "    - scenario.yaml\n"
-                "  mock_provider:\n"
-                "    responses:\n"
-                "      - '{\"ok\": true}'\n"
-            )
-
-            mock_engine = AsyncMock()
-            mock_engine.shutdown = AsyncMock()
-
-            with patch(
-                "openbias.policy.compiler.runtime.compile_runtime_config_for_evaluator",
-                new_callable=AsyncMock,
-            ) as mock_compile:
-                mock_compile.return_value = {"steps": [], "llm_model": "gpt-4o-mini"}
-                with patch("openbias.cli._compile_rules"):
-                    with patch(
-                        "openbias.policy.registry.PolicyEngineRegistry.create_and_initialize",
-                        new=AsyncMock(return_value=mock_engine),
-                    ) as mock_create:
-                        with patch(
-                            "openbias.eval.EvalRunner.run_suite",
-                            new=AsyncMock(return_value=[]),
-                        ):
-                            with patch("openbias.eval.print_report"):
-                                with patch("openbias.eval.mocks.apply_mock_provider") as mock_apply:
-                                    result = runner.invoke(main, ["eval", "--config", "openbias.yaml"])
-
-            assert result.exit_code == 0
-            mock_create.assert_awaited_once()
-            assert mock_create.await_args.args[0] == "llm"
-            mock_apply.assert_called_once()
-            assert mock_apply.call_args.args[1] == "llm"
+            output = result.output + buf.getvalue()
+            assert result.exit_code != 0
+            assert "temporarily unavailable" in output
+            assert "No 'eval' section found" not in output
 
 
 class TestHelpOutput:
