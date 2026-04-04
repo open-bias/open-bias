@@ -2,9 +2,24 @@
 
 This directory contains the repo-owned eval suites used to test a shared project policy across different engines or model configurations.
 
+## Layout
+
+```text
+evals/
+  policies/
+    default/
+      rules.md
+  suites/
+    safe.yaml
+    request.yaml
+    response.yaml
+    repair.yaml
+    false_positive_guards.yaml
+```
+
 ## Relationship To Rules
 
-- `rules.md` defines the policy.
+- `evals/policies/default/rules.md` defines the eval policy.
 - Each suite file defines labeled examples and expected outcomes for that policy.
 - The same suites should be runnable against different engines as long as those engines are configured to enforce the same policy.
 
@@ -21,7 +36,8 @@ This directory contains the repo-owned eval suites used to test a shared project
 - Keep one suite file per behavior family.
 - Keep each case short and explicit.
 - Model one primary violation event per case.
-- Point every repo-owned suite at the shared project `rules.md` unless there is a deliberate reason to target a different policy source.
+- Point every repo-owned suite at the shared eval policy file unless there is a deliberate reason to target a different policy source.
+- Do not create one rule file per suite category unless those categories truly represent different policies.
 
 ## First-Wave Suites
 
