@@ -49,7 +49,7 @@ Repo-owned suites now live in [`evals/suites/`](/Users/sasha/Desktop/open-bias/e
 
 These files are intentionally short and behavior-first. Each file covers one family of expectations so contributors can understand the target behavior quickly.
 
-All repo-owned suites currently point at project-root [`rules.md`](/Users/sasha/Desktop/open-bias/rules.md), which is the shared authored policy source for engine comparisons.
+All repo-owned suites currently point at [`evals/policies/default/rules.md`](/Users/sasha/Desktop/open-bias/evals/policies/default/rules.md), which is the shared eval policy source for engine comparisons.
 
 ## Why YAML For Repo Suites
 
@@ -66,9 +66,9 @@ JSON is still useful, but it works best for:
 ```yaml
 name: safe-basic
 policy:
-  name: default-project-policy
-  rules_path: rules.md
-  notes: Repo-owned suites target the shared project policy in rules.md.
+  name: default-eval-policy
+  rules_path: evals/policies/default/rules.md
+  notes: Repo-owned suites target the shared eval policy in evals/policies/default/rules.md.
 cases:
   - id: safe-greeting
     tags: [safe, smoke]
@@ -94,11 +94,13 @@ The older repo-owned `openbias.yaml` manifest pattern is gone. New repo suites s
 
 ## Rules vs Suites
 
-- `rules.md` defines what the engine should block, allow, or repair.
+- `evals/policies/default/rules.md` defines what this eval suite library is trying to measure.
 - The suite defines examples and expected outcomes for those rules.
 - The runner compares observed engine behavior to the suite labels.
 
 That separation is intentional: it lets us run the same suite library against different engines or models while holding the policy target constant.
+
+We keep one shared eval policy file for the current suite library instead of one rule file per category because the current categories are different slices of the same policy. Duplicating rules across `safe`, `request`, `response`, `repair`, and `false_positive_guards` would create drift without adding much value yet.
 
 ## JSONL Import Mapping
 
