@@ -1,0 +1,147 @@
+# Copy this file into `.github/workflows/nightly-improvement.yml` in your own
+# Open Bias-enabled application repo. It is kept under `examples/` here so the
+# OSS repo ships a realistic workflow without enabling it for this repository.
+name: openbias-nightly-improvement
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  OPENBIAS_CONFIG_PATH: openbias.yaml
+  OPENBIAS_RULES_PATH: rules.md
+  OPENBIAS_CANDIDATE_PATH: rules.candidate.md
+  OPENBIAS_EVAL_SUITES_PATH: evals/suites
+  OPENBIAS_TRACE_GLOB: .openbias/traces/*.jsonl
+  OPENBIAS_REPORT_DIR: .openbias/reports/nightly
+
+jobs:
+  nightly-improvement:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Open Bias
+        run: |
+          python -m pip install --upgrade pip
+          pip install openbias
+
+      - name: Run eval, replay, compare, and review-pack flows
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          mkdir -p "$OPENBIAS_REPORT_DIR"
+          python - <<'PY'
+          import asyncio
+          import glob
+          import json
+          import os
+          from dataclasses import asdict
+          from pathlib import Path
+
+          from openbias.compare import (
+              build_engine_for_policy,
+              compare_policy_runs,
+              render_comparison_markdown,
+          )
+          from openbias.config.settings import Settings
+          from openbias.eval import EvalRunner, load_native_suites
+          from openbias.replay import ReplayRunner
+          from openbias.review import write_review_pack
+          from openbias.traces import load_trace_dataset
+
+          config_path = Path(os.environ["OPENBIAS_CONFIG_PATH"])
+          rules_path = Path(os.environ["OPENBIAS_RULES_PATH"])
+          candidate_path = Path(os.environ["OPENBIAS_CANDIDATE_PATH"])
+          suites_path = Path(os.environ["OPENBIAS_EVAL_SUITES_PATH"])
+          report_dir = Path(os.environ["OPENBIAS_REPORT_DIR"])
+          trace_paths = tuple(
+              Path(path) for path in sorted(glob.glob(os.environ["OPENBIAS_TRACE_GLOB"]))
+          )
+
+          settings = Settings(_config_path=str(config_path))
+          settings.validate()
+
+
+          async def main() -> None:
+              report_dir.mkdir(parents=True, exist_ok=True)
+
+              baseline_engine = await build_engine_for_policy(
+                  settings=settings,
+                  config_path=config_path,
+                  rules_path=rules_path,
+              )
+              try:
+                  eval_runner = EvalRunner()
+                  eval_results = []
+                  for suite in load_native_suites(suites_path):
+                      result = await eval_runner.run(baseline_engine, suite)
+                      eval_results.append(asdict(result))
+                  (report_dir / "evals.json").write_text(
+                      json.dumps(eval_results, indent=2),
+                      encoding="utf-8",
+                  )
+
+                  replay_results = []
+                  if trace_paths:
+                      replay_runner = ReplayRunner(fail_action=settings.fail_action)
+                      for trace_path in trace_paths:
+                          dataset = load_trace_dataset(trace_path)
+                          result = await replay_runner.run(baseline_engine, dataset)
+                          replay_results.append(asdict(result))
+                  (report_dir / "replay.json").write_text(
+                      json.dumps(replay_results, indent=2),
+                      encoding="utf-8",
+                  )
+              finally:
+                  await baseline_engine.shutdown()
+
+              if candidate_path.is_file():
+                  comparison = await compare_policy_runs(
+                      settings=settings,
+                      config_path=config_path,
+                      candidate_policy_path=candidate_path,
+                      trace_paths=trace_paths,
+                  )
+                  (report_dir / "comparison.json").write_text(
+                      json.dumps(comparison.to_dict(), indent=2),
+                      encoding="utf-8",
+                  )
+                  (report_dir / "comparison.md").write_text(
+                      render_comparison_markdown(comparison),
+                      encoding="utf-8",
+                  )
+                  write_review_pack(
+                      comparison_path=report_dir / "comparison.json",
+                      output_path=report_dir / "review-pack.md",
+                  )
+              else:
+                  (report_dir / "comparison-skipped.txt").write_text(
+                      "Candidate policy not found. Place a manual or externally "
+                      f"generated file at {candidate_path} to enable nightly comparison.\n",
+                      encoding="utf-8",
+                  )
+
+
+          asyncio.run(main())
+          PY
+
+      - name: Upload nightly artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openbias-nightly-artifacts
+          path: .openbias/reports/nightly
+          if-no-files-found: error
