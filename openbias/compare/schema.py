@@ -39,6 +39,7 @@ class PolicyComparisonResult:
     status: ComparisonStatus
     baseline_policy_path: str
     candidate_policy_path: str
+    candidate_details: dict[str, Any] = field(default_factory=dict)
     suites: list[SuiteComparison] = field(default_factory=list)
     traces: list[TraceComparison] = field(default_factory=list)
     gates: list[ComparisonGate] = field(default_factory=list)

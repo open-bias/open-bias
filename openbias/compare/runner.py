@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from openbias.candidates import (
+    CandidatePolicyBundle,
+    FileCandidateProvider,
+    PolicyCandidateProvider,
+)
 from openbias.compare.schema import (
     ComparisonGate,
     PolicyComparisonResult,
@@ -50,7 +54,9 @@ async def compare_policy_runs(
     *,
     settings: Settings,
     config_path: Path | None,
-    candidate_policy_path: Path,
+    candidate_policy_path: Path | None = None,
+    candidate_bundle: CandidatePolicyBundle | None = None,
+    candidate_provider: PolicyCandidateProvider | None = None,
     trace_paths: tuple[Path, ...] = (),
     trace_regression_budget: float = 0.05,
 ) -> PolicyComparisonResult:
@@ -58,6 +64,14 @@ async def compare_policy_runs(
     baseline_policy_path = base_dir / "rules.md"
     if not baseline_policy_path.is_file():
         raise ValueError(f"Baseline rules.md not found at {baseline_policy_path}")
+
+    if candidate_bundle is None:
+        provider = candidate_provider or FileCandidateProvider()
+        candidate_bundle = provider.generate(
+            baseline_policy_path=baseline_policy_path,
+            candidate_policy_path=candidate_policy_path,
+        )
+    candidate_path = Path(candidate_bundle.policy_path)
 
     baseline_engine = await build_engine_for_policy(
         settings=settings,
@@ -67,7 +81,7 @@ async def compare_policy_runs(
     candidate_engine = await build_engine_for_policy(
         settings=settings,
         config_path=config_path,
-        rules_path=candidate_policy_path,
+        rules_path=candidate_path,
     )
 
     try:
@@ -123,7 +137,8 @@ async def compare_policy_runs(
 
         return build_comparison_result(
             baseline_policy_path=baseline_policy_path,
-            candidate_policy_path=candidate_policy_path,
+            candidate_policy_path=candidate_path,
+            candidate_details=candidate_bundle.provenance_dict(),
             suites=suite_results,
             traces=trace_results,
             trace_regression_budget=trace_regression_budget,
@@ -137,6 +152,7 @@ def build_comparison_result(
     *,
     baseline_policy_path: Path,
     candidate_policy_path: Path,
+    candidate_details: dict[str, Any] | None = None,
     suites: list[SuiteComparison],
     traces: list[TraceComparison],
     trace_regression_budget: float,
@@ -202,6 +218,7 @@ def build_comparison_result(
         status=status,
         baseline_policy_path=str(baseline_policy_path),
         candidate_policy_path=str(candidate_policy_path),
+        candidate_details=dict(candidate_details or {}),
         suites=suites,
         traces=traces,
         gates=gates,
@@ -217,9 +234,12 @@ def render_comparison_markdown(result: PolicyComparisonResult) -> str:
         f"- Status: `{result.status}`",
         f"- Baseline: `{result.baseline_policy_path}`",
         f"- Candidate: `{result.candidate_policy_path}`",
-        "",
-        "## Gates",
     ]
+    if result.candidate_details:
+        lines.append(
+            f"- Candidate provider: `{result.candidate_details.get('provider', 'unknown')}`"
+        )
+    lines.extend(["", "## Gates"])
     for gate in result.gates:
         lines.append(f"- `{gate.status}` {gate.reason}")
 

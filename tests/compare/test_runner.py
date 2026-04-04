@@ -8,6 +8,7 @@ def test_build_comparison_result_fails_on_guard_false_positive_regression():
     result = build_comparison_result(
         baseline_policy_path=Path("rules.md"),
         candidate_policy_path=Path("rules.candidate.md"),
+        candidate_details={"provider": "file"},
         suites=[
             SuiteComparison(
                 name="false_positive_guards",
@@ -29,6 +30,7 @@ def test_build_comparison_result_passes_when_candidate_improves():
     result = build_comparison_result(
         baseline_policy_path=Path("rules.md"),
         candidate_policy_path=Path("rules.candidate.md"),
+        candidate_details={"provider": "file"},
         suites=[
             SuiteComparison(
                 name="safe",

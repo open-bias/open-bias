@@ -6,7 +6,8 @@ import asyncio
 import json
 from pathlib import Path
 
-from openbias.cli_ui import config_panel, console, key_value, spinner
+from openbias.candidates import FileCandidateProvider
+from openbias.cli_ui import config_panel, key_value, spinner
 from openbias.compare import compare_policy_runs, render_comparison_markdown
 from openbias.config.settings import Settings
 
@@ -28,6 +29,7 @@ def run_compare(
         compare_policy_runs(
             settings=settings,
             config_path=config,
+            candidate_provider=FileCandidateProvider(),
             candidate_policy_path=candidate_policy_path,
             trace_paths=trace_paths,
         )

@@ -9,6 +9,7 @@ def test_render_review_pack_includes_status_checklist_and_repro():
             "status": "review",
             "baseline_policy_path": "rules.md",
             "candidate_policy_path": "rules.candidate.md",
+            "candidate_details": {"provider": "file", "metadata": {"source_path": "rules.candidate.md"}},
             "gates": [{"status": "review", "reason": "Needs a human look."}],
             "suites": [
                 {
@@ -24,6 +25,7 @@ def test_render_review_pack_includes_status_checklist_and_repro():
     assert "# Policy Review Pack" in markdown
     assert "Reviewer Checklist" in markdown
     assert "openbias compare --candidate rules.candidate.md" in markdown
+    assert "Candidate provider: `file`" in markdown
     assert "`prod` matched-rate dropped by -10.00%." in markdown
 
 

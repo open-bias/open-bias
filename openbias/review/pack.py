@@ -22,6 +22,7 @@ def render_review_pack(payload: dict[str, Any]) -> str:
     status = payload.get("status", "review")
     candidate = payload.get("candidate_policy_path", "(unknown)")
     baseline = payload.get("baseline_policy_path", "(unknown)")
+    candidate_details = payload.get("candidate_details", {})
 
     wins: list[str] = []
     regressions: list[str] = []
@@ -59,6 +60,7 @@ def render_review_pack(payload: dict[str, Any]) -> str:
         f"- Status: `{status}`",
         f"- Baseline policy: `{baseline}`",
         f"- Candidate policy: `{candidate}`",
+        f"- Candidate provider: `{candidate_details.get('provider', 'unknown')}`",
         "",
         "## Gate Summary",
     ]
@@ -78,6 +80,10 @@ def render_review_pack(payload: dict[str, Any]) -> str:
             "",
             "## Reproduction",
             f"- `openbias compare --candidate {candidate}`",
+            "",
+            "## Candidate Provenance",
+            f"- Provider: `{candidate_details.get('provider', 'unknown')}`",
+            f"- Source path: `{candidate_details.get('metadata', {}).get('source_path', candidate)}`",
             "",
             "## Reviewer Checklist",
             "- Confirm the candidate policy intent matches the business rule you want to change.",
