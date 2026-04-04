@@ -564,5 +564,60 @@ def replay(
         verbose=verbose,
         debug=debug,
     )
+
+
+@main.command()
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to openbias.yaml config file",
+)
+@click.option(
+    "--candidate",
+    "candidate_policy_path",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Path to the candidate rules markdown file",
+)
+@click.option(
+    "--trace",
+    "trace_paths",
+    type=click.Path(exists=True, path_type=Path),
+    multiple=True,
+    default=(),
+    help="Optional replayable trace JSONL dataset (repeatable)",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(path_type=Path),
+    default=Path(".openbias/reports/latest"),
+    help="Directory for comparison.json and comparison.md",
+)
+@click.option(
+    "--debug/--no-debug",
+    default=False,
+    help="Enable debug logging",
+)
+def compare(
+    config: Path | None,
+    candidate_policy_path: Path,
+    trace_paths: tuple[Path, ...],
+    output_dir: Path,
+    debug: bool,
+) -> None:
+    """Compare baseline rules.md against a candidate policy file."""
+    configure_logging(debug=debug)
+    _require_config(config)
+
+    from openbias.cli_compare import run_compare
+
+    run_compare(
+        config=config,
+        candidate_policy_path=candidate_policy_path,
+        trace_paths=trace_paths,
+        output_dir=output_dir,
+    )
 if __name__ == "__main__":
     main()

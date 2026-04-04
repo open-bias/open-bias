@@ -450,6 +450,33 @@ class TestReplayCommand:
                 assert result.exit_code == 0
                 mock_run_replay.assert_called_once()
 
+
+class TestCompareCommand:
+    def test_compare_requires_candidate(self):
+        result, _ = _invoke(["compare"])
+        assert result.exit_code != 0
+
+    def test_compare_delegates_to_cli_compare_module(self):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n")
+            Path("rules.candidate.md").write_text("- Be safer\n")
+            Path("openbias.yaml").write_text(
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: behavior\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+            )
+
+            with patch("openbias.cli_compare.run_compare") as mock_run_compare:
+                result = runner.invoke(
+                    main,
+                    ["compare", "--candidate", "rules.candidate.md"],
+                )
+                assert result.exit_code == 0
+                mock_run_compare.assert_called_once()
+
     def test_trigger_success(self):
         """trigger with valid config should show ALLOW output."""
         runner = CliRunner()

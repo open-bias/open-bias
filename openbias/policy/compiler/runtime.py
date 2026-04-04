@@ -16,11 +16,13 @@ async def compile_runtime_config_for_evaluator(
     *,
     default_model: str | None,
     base_dir: Path,
+    rules_path: Path | None = None,
 ) -> dict[str, Any]:
     """Compile canonical rules inputs into engine-native runtime config."""
     normalized_rules = resolve_rules_payload(
         base_dir=base_dir,
         auto_discover_rules_md=True,
+        rules_path=rules_path,
     )
     if not normalized_rules:
         raise ValueError(

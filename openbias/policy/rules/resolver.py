@@ -63,12 +63,16 @@ def resolve_rules_payload(
     *,
     base_dir: Path | None = None,
     auto_discover_rules_md: bool = True,
+    rules_path: Path | None = None,
 ) -> list[str]:
     """Resolve normalized rules from project-local rules.md only."""
     root = base_dir or Path.cwd()
     resolved: list[str] = []
 
-    if auto_discover_rules_md:
+    if rules_path is not None:
+        if rules_path.exists():
+            resolved.extend(_segment_freeform_text(rules_path.read_text(encoding="utf-8")))
+    elif auto_discover_rules_md:
         autodiscovered = root / "rules.md"
         if autodiscovered.exists():
             resolved.extend(_segment_freeform_text(autodiscovered.read_text(encoding="utf-8")))

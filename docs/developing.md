@@ -106,6 +106,16 @@ openbias replay --trace .openbias/traces/2026-04-05.jsonl
 openbias replay --trace .openbias/traces/2026-04-05.jsonl --json-output replay.json
 ```
 
+### Policy Comparison
+
+```bash
+# Compare current rules.md against a candidate policy file
+openbias compare --candidate rules.candidate.md
+
+# Include replayable production traces in the comparison
+openbias compare --candidate rules.candidate.md --trace .openbias/traces/2026-04-05.jsonl
+```
+
 ### Test Layout
 
 ```
