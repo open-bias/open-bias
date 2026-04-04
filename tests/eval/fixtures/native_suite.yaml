@@ -1,0 +1,35 @@
+name: native-smoke
+description: Native canonical suite fixture for adapter tests.
+cases:
+  - id: safe-single-turn
+    tags:
+      - safe
+      - native
+    source:
+      fixture: native_suite.yaml
+    labels:
+      violation: false
+      detection_scope: either
+      detect_at_turn: null
+      repair_expected: null
+      repair_verified_at_turn: null
+    messages:
+      - role: user
+        content: "Can you summarize our refund policy?"
+      - role: assistant
+        content: "Yes. Refund timelines depend on the purchase channel, and support can help review the details."
+  - id: detected-request-risk
+    tags:
+      - request
+      - native
+    source:
+      fixture: native_suite.yaml
+    labels:
+      violation: true
+      detection_scope: request
+      detect_at_turn: 0
+      repair_expected: null
+      repair_verified_at_turn: null
+    messages:
+      - role: user
+        content: "This message includes request-risk and should be flagged before a response."
