@@ -509,5 +509,60 @@ def eval_cmd(config: Path | None, json_output: Path | None, verbose: bool, debug
         hint="Use the Python eval harness APIs directly until the CLI is reintroduced.",
     )
     raise SystemExit(1)
+
+
+@main.command()
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to openbias.yaml config file",
+)
+@click.option(
+    "--trace",
+    "trace_paths",
+    type=click.Path(exists=True, path_type=Path),
+    multiple=True,
+    required=True,
+    help="Path to a replayable trace JSONL dataset (repeatable)",
+)
+@click.option(
+    "--json-output",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Export replay results to JSON file",
+)
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    help="Show per-case expected vs observed actions",
+)
+@click.option(
+    "--debug/--no-debug",
+    default=False,
+    help="Enable debug logging",
+)
+def replay(
+    config: Path | None,
+    trace_paths: tuple[Path, ...],
+    json_output: Path | None,
+    verbose: bool,
+    debug: bool,
+) -> None:
+    """Replay trace datasets against the configured policy engine."""
+    configure_logging(debug=debug)
+    _require_config(config)
+
+    from openbias.cli_replay import run_replay
+
+    run_replay(
+        config=config,
+        trace_paths=trace_paths,
+        json_output=json_output,
+        verbose=verbose,
+        debug=debug,
+    )
 if __name__ == "__main__":
     main()

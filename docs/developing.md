@@ -96,6 +96,16 @@ pytest tests/policy/engines/fsm/test_state_machine.py::TestWorkflowStateMachine:
 pytest -v
 ```
 
+### Trace Replay
+
+```bash
+# Replay one trace dataset against the configured engine
+openbias replay --trace .openbias/traces/2026-04-05.jsonl
+
+# Export replay results for later comparison/reporting
+openbias replay --trace .openbias/traces/2026-04-05.jsonl --json-output replay.json
+```
+
 ### Test Layout
 
 ```

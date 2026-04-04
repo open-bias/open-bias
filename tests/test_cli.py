@@ -424,6 +424,32 @@ class TestTriggerCommand:
             assert result.exit_code != 0
             assert "openbias init" in combined
 
+
+class TestReplayCommand:
+    def test_replay_requires_trace(self):
+        result, _ = _invoke(["replay"])
+        assert result.exit_code != 0
+
+    def test_replay_delegates_to_cli_replay_module(self):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n")
+            Path("openbias.yaml").write_text(
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: behavior\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+            )
+            Path("trace.jsonl").write_text(
+                '{"id":"trace-1","session_id":"sess-1","messages":[{"role":"user","content":"hello"},{"role":"assistant","content":"hi"}]}\n'
+            )
+
+            with patch("openbias.cli_replay.run_replay") as mock_run_replay:
+                result = runner.invoke(main, ["replay", "--trace", "trace.jsonl"])
+                assert result.exit_code == 0
+                mock_run_replay.assert_called_once()
+
     def test_trigger_success(self):
         """trigger with valid config should show ALLOW output."""
         runner = CliRunner()
