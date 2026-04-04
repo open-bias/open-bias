@@ -53,7 +53,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Path resolution**: Project-local policy files and other relative paths are resolved relative to the config file location.
 - **Config validation at startup**: `openbias serve` checks that referenced rules files exist and that the required API key is present; exits with a clear error if not.
 - **API-key syncing**: Keys loaded from `.env` are synced into `os.environ` so downstream libraries (LiteLLM, LangChain) work without explicit `load_dotenv()`.
-- **Langfuse env-var aliases**: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` are read directly from the environment alongside YAML config.
+- **Langfuse config**: Langfuse keys are configured via `openbias.yaml` under `tracing:`.
 - **Automatic rules compilation**: `openbias serve`, `trigger`, and `eval` automatically compile rules into engine-native config at startup. No separate compile step needed.
 - **`docs/configuration.md`**: Full configuration reference for `openbias.yaml`.
 
