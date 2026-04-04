@@ -24,7 +24,7 @@ def test_load_native_yaml_suite():
     assert suite.name == "native-smoke"
     assert suite.policy is not None
     assert suite.policy.name == "fixture-policy"
-    assert suite.policy.rules_path == "rules.md"
+    assert suite.policy.rules_path == "evals/policies/default/rules.md"
     assert [case.id for case in suite.cases] == ["safe-single-turn", "detected-request-risk"]
 
 
@@ -50,10 +50,10 @@ def test_load_all_repo_owned_suite_files():
     ]
     assert all(suite.policy is not None for suite in loaded)
     assert {suite.policy.name for suite in loaded if suite.policy is not None} == {
-        "default-project-policy"
+        "default-eval-policy"
     }
     assert {suite.policy.rules_path for suite in loaded if suite.policy is not None} == {
-        "rules.md"
+        "evals/policies/default/rules.md"
     }
     assert [len(suite.cases) for suite in loaded] == [10, 10, 10, 10, 10]
     assert sum(len(suite.cases) for suite in loaded) == 50

@@ -2,8 +2,8 @@ name: native-smoke
 description: Native canonical suite fixture for adapter tests.
 policy:
   name: fixture-policy
-  rules_path: rules.md
-  notes: Fixture suite for native adapter coverage.
+  rules_path: evals/policies/default/rules.md
+  notes: Fixture suite for native adapter coverage against the eval policy path.
 cases:
   - id: safe-single-turn
     tags:
