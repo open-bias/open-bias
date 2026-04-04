@@ -188,6 +188,14 @@ openbias serve -p 8080 -c custom.yaml  # custom port and config
 openbias validate openbias.yaml                          # check config + policy wiring
 openbias info openbias.yaml -v                           # detailed evaluator/config view
 
+# Evaluate
+openbias eval                                            # run offline scenario-based evaluation
+
+# Trigger
+openbias trigger                                         # trigger evaluators manually
+
+# Version
+openbias version                                         # print version and exit
 ```
 
 ## Performance

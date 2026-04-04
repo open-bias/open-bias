@@ -159,7 +159,7 @@ The `StateClassifier` uses a three-tier classification cascade, stopping at the 
 ### 2. Regex Pattern Matching
 - **Method**: `re.search()` against `classification.patterns`
 - **Speed**: ~1ms
-- **Confidence**: `0.85`
+- **Confidence**: `0.9`
 - **When**: Response content matches a state's regex patterns
 
 ### 3. Semantic Embedding Similarity

@@ -37,11 +37,12 @@ Wraps LiteLLM to intercept all LLM traffic.
 | Hook | Timing | Purpose |
 |------|--------|---------|
 | `async_pre_call_hook` | Before LLM call | Apply pending interventions, run PRE_CALL evaluators, start trace |
-| `async_moderation_hook` | Parallel with LLM | Reserved (unused) |
 | `async_post_call_success_hook` | After LLM response | Run POST_CALL evaluators, start async evaluators, complete trace |
 | `async_post_call_failure_hook` | After LLM error | Log failure |
+| `async_log_success_event` | After success (library/router mode) | Wraps success logging with fail-open semantics |
+| `async_log_failure_event` | After failure (library/router mode) | Wraps failure logging with fail-open semantics |
 
-- **`middleware.py`** -- Session ID extraction. Priority: `x-openbias-session-id` header > `metadata.session_id` > `metadata.run_id` (LangChain) > `user` field > `thread_id` > hash of first message > random UUID.
+- **`middleware.py`** -- Session ID extraction. Priority: `x-openbias-session-id` / `x-session-id` headers (checked across explicit headers, `proxy_server_request.headers`, `metadata.headers`, `litellm_params.metadata.headers`) > `metadata.session_id` > `metadata.openbias_session_id` > `metadata.run_id` (LangChain) > `user` field > `thread_id` > hash of first message > random UUID.
 
 ### Interceptor (`openbias/core/interceptor/`)
 
@@ -55,7 +56,7 @@ Policy engines are passed directly as `pre_call_evaluators` and `post_call_evalu
 
 ### Policy Engines (`openbias/policy/`)
 
-All engines implement the `PolicyEngine` protocol (`protocols.py`): `initialize`, `evaluate_request`, `evaluate_response`, `get_session_state`, `reset_session`, `shutdown`. Engines register via `@register_engine("type")` and are created through `PolicyEngineRegistry`.
+All engines implement the `PolicyEngine` protocol (`protocols.py`): `name` (property), `engine_type` (property), `initialize`, `evaluate_request`, `evaluate_response`, `get_session_state`, `reset_session`, `shutdown`, `get_compiler`. Engines register via `@register_engine("type")` and are created through `PolicyEngineRegistry`.
 
 Engine-specific docs: [engines.md](engines.md). Engine-specific READMEs live in each engine's source directory under `openbias/policy/engines/`.
 

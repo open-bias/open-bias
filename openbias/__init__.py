@@ -13,9 +13,8 @@ Supports multiple policy engines:
 Quick Start:
     Configure via `openbias.yaml`:
     ```yaml
-    engine: judge
-    policy:
-      - "Be helpful and professional"
+    evaluators:
+      - type: judge
     ```
     Then run:
     ```bash

@@ -65,7 +65,7 @@ Important: when `mode: async`, `fail_action: block` is normalized to `intervene`
 
 A customer support agent with a precedence constraint: identity verification must happen before any account action. The agent tries to process a refund without verifying — the FSM catches the violation and injects corrective guidance.
 
-**What's happening under the hood**: Classification uses a three-tier cascade — tool call name matching (confidence 1.0, ~0ms), regex patterns (0.85, ~1ms), semantic embeddings (proportional to cosine similarity, ~50ms). First confident match wins. Constraints are evaluated as LTL-lite temporal logic over the state history.
+**What's happening under the hood**: Classification uses a three-tier cascade — tool call name matching (confidence 1.0, ~0ms), regex patterns (0.9, ~1ms), semantic embeddings (proportional to cosine similarity, ~50ms). First confident match wins. Constraints are evaluated as LTL-lite temporal logic over the state history.
 
 ```bash
 cd examples/fsm_workflow

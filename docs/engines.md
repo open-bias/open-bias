@@ -107,7 +107,7 @@ The classifier tries three methods in order, stopping at the first confident mat
 | Method | Signal | Confidence | Latency |
 |--------|--------|------------|---------|
 | Tool call matching | Function/tool names in the response | 1.0 | ~0ms |
-| Regex patterns | `re.search()` against state patterns | 0.85 | ~1ms |
+| Regex patterns | `re.search()` against state patterns | 0.9 | ~1ms |
 | Semantic embeddings | Cosine similarity via sentence-transformers | Proportional to similarity | ~50ms |
 
 ### Constraint types (LTL-lite)

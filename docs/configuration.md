@@ -105,7 +105,6 @@ evaluators:
     # confident_threshold: 0.8
     # uncertain_threshold: 0.5
     # temporal_weight: 0.55
-    # cooldown_turns: 2
     # max_constraints_per_batch: 5
 ```
 
@@ -118,7 +117,6 @@ evaluators:
 | `confident_threshold` | float | `0.8` | Confidence above which a state classification is accepted |
 | `uncertain_threshold` | float | `0.5` | Below this, classification is rejected |
 | `temporal_weight` | float | `0.55` | Weight for temporal signals in drift detection |
-| `cooldown_turns` | int | `2` | Minimum turns between constraint re-evaluations |
 | `max_constraints_per_batch` | int | `5` | Maximum constraints evaluated per batch |
 
 ## FSM Engine

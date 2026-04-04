@@ -138,8 +138,8 @@ composite = temporal × temporal_weight + semantic × (1 - temporal_weight)
 |-------------|----------------|--------|
 | `NOMINAL` | < 0.3 | No action |
 | `WARNING` | 0.3 – 0.6 | Gentle nudge via `SYSTEM_PROMPT_APPEND` |
-| `INTERVENTION` | 0.6 – 0.85 | Stronger correction via `USER_MESSAGE_INJECT` |
-| `CRITICAL` | > 0.85 | Escalation; flagged for human review via `BLOCK` decision |
+| `INTERVENTION` | 0.6 – < 0.85 | Stronger correction via `USER_MESSAGE_INJECT` |
+| `CRITICAL` | ≥ 0.85 | Escalation; flagged for human review via `BLOCK` decision |
 
 ### Anomaly Flags
 

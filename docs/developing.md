@@ -294,10 +294,10 @@ These keys are collected into the evaluator's `config` dict and passed to the en
 Enable debug logging:
 
 ```bash
-DEBUG=true openbias serve
+OBIAS_DEBUG=true openbias serve
 ```
 
-(If using standard env vars) or set `debug: true` in `openbias.yaml`.
+Or set `debug: true` in `openbias.yaml`.
 
 Target specific loggers:
 
