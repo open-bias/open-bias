@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from openbias.eval import EvalValidationError, load_jsonl_suite, load_native_suite
+from openbias.eval import (
+    EvalValidationError,
+    discover_native_suite_paths,
+    load_jsonl_suite,
+    load_native_suite,
+    load_native_suites,
+)
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 REPO_SUITES = Path(__file__).resolve().parents[2] / "evals" / "suites"
@@ -16,11 +22,14 @@ def test_load_native_yaml_suite():
     suite = load_native_suite(FIXTURES / "native_suite.yaml")
 
     assert suite.name == "native-smoke"
+    assert suite.policy is not None
+    assert suite.policy.name == "fixture-policy"
+    assert suite.policy.rules_path == "rules.md"
     assert [case.id for case in suite.cases] == ["safe-single-turn", "detected-request-risk"]
 
 
 def test_load_all_repo_owned_suite_files():
-    suite_paths = sorted(REPO_SUITES.glob("*.yaml"))
+    suite_paths = discover_native_suite_paths(REPO_SUITES)
 
     assert [path.name for path in suite_paths] == [
         "false_positive_guards.yaml",
@@ -30,7 +39,7 @@ def test_load_all_repo_owned_suite_files():
         "safe.yaml",
     ]
 
-    loaded = [load_native_suite(path) for path in suite_paths]
+    loaded = load_native_suites(REPO_SUITES)
 
     assert [suite.name for suite in loaded] == [
         "false-positive-guards",
@@ -39,6 +48,13 @@ def test_load_all_repo_owned_suite_files():
         "response-basic",
         "safe-basic",
     ]
+    assert all(suite.policy is not None for suite in loaded)
+    assert {suite.policy.name for suite in loaded if suite.policy is not None} == {
+        "default-project-policy"
+    }
+    assert {suite.policy.rules_path for suite in loaded if suite.policy is not None} == {
+        "rules.md"
+    }
     assert [len(suite.cases) for suite in loaded] == [10, 10, 10, 10, 10]
     assert sum(len(suite.cases) for suite in loaded) == 50
 
