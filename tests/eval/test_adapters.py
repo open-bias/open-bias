@@ -39,7 +39,8 @@ def test_load_all_repo_owned_suite_files():
         "response-basic",
         "safe-basic",
     ]
-    assert sum(len(suite.cases) for suite in loaded) == 14
+    assert [len(suite.cases) for suite in loaded] == [10, 10, 10, 10, 10]
+    assert sum(len(suite.cases) for suite in loaded) == 50
 
 
 def test_load_native_json_suite(tmp_path):
