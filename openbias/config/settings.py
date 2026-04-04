@@ -35,11 +35,11 @@ from pathlib import Path
 from typing import Any, Literal
 
 from dotenv import dotenv_values
-from pydantic import BaseModel, Field, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_settings import (
     BaseSettings,
-    SettingsConfigDict,
     PydanticBaseSettingsSource,
+    SettingsConfigDict,
 )
 
 logger = logging.getLogger(__name__)
@@ -128,6 +128,12 @@ class EvaluatorConfig(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
 
 
+class EvalConfig(BaseModel):
+    """Offline eval-suite discovery settings for ``openbias eval``."""
+
+    suites: list[str] = Field(default_factory=list)
+
+
 class YamlConfigSource(PydanticBaseSettingsSource):
     """Custom settings source that reads from a openbias.yaml config file.
 
@@ -170,11 +176,11 @@ class YamlConfigSource(PydanticBaseSettingsSource):
         """Resolve a path string relative to the config file location."""
         if not isinstance(path_str, str) or not self._config_file:
             return path_str
-            
+
         p = Path(path_str)
         if p.is_absolute():
             return path_str
-            
+
         # Resolve relative to config file directory (must be absolute
         # so downstream code doesn't re-resolve against base_dir).
         return str((self._config_file.parent / p).resolve())
@@ -186,7 +192,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             self._yaml_data = {}
             self._config_file = None
             return
-            
+
         self._config_file = path
 
         try:
@@ -297,16 +303,25 @@ class YamlConfigSource(PydanticBaseSettingsSource):
                 raise self._legacy_key_error(key)
 
         # Direct top-level pipeline fields
-        _FLAT_KEYS = (
+        flat_keys = (
             "mode", "fail_action", "strategy",
             "session_ttl", "max_sessions", "fail_open", "hook_timeout_seconds",
         )
-        for key in _FLAT_KEYS:
+        for key in flat_keys:
             if key in data:
                 result[key] = data[key]
 
         # Shared proxy, debug/log_level, and tracing mapping
         self._map_common_fields(data, result)
+
+        eval_cfg = data.get("eval")
+        if isinstance(eval_cfg, dict) and "suites" in eval_cfg:
+            suites = eval_cfg["suites"]
+            if not isinstance(suites, list) or not all(isinstance(item, str) for item in suites):
+                raise ValueError("eval.suites must be a list of strings.")
+            result["eval"] = {
+                "suites": [self._resolve_path(item) for item in suites],
+            }
 
         # Build evaluators list
         evaluators: list[dict[str, Any]] = []
@@ -468,6 +483,7 @@ class Settings(BaseSettings):
     fail_open: bool = True
     hook_timeout_seconds: float = 30.0
     evaluators: list[EvaluatorConfig] = Field(default_factory=list)
+    eval: EvalConfig = Field(default_factory=EvalConfig)
 
     # API Keys (loaded from env vars or .env file)
     # We use validation_alias to map standard keys to these fields

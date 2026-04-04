@@ -1,6 +1,6 @@
 # Eval Harness
 
-The rebuilt eval harness is a small Python API for running one initialized policy engine against one canonical suite.
+The rebuilt eval harness powers both the `openbias eval` CLI and the Python API for running one initialized policy engine against canonical native suites.
 
 ## Canonical, Native, And Import
 
@@ -162,6 +162,19 @@ for suite in suites:
 - `fix_failure_count`
 - `fix_rate`
 - `exact_case_pass_rate`
+
+## Running From CLI
+
+```bash
+# Run every repo-owned native suite under evals/suites/
+openbias eval
+
+# Run a specific suite file or directory
+openbias eval --suite evals/suites/repair.yaml
+openbias eval --suite evals/suites --json-output .openbias/reports/evals.json
+```
+
+`openbias eval` exits non-zero when one or more cases fail or when a suite has execution failures, which makes it suitable for CI.
 
 ## Outside Dataset Ingestion
 

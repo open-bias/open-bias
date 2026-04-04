@@ -4,32 +4,33 @@ Open Bias CLI entry point.
 Commands:
 - openbias init: Initialize a new Open Bias project
 - openbias serve: Start the proxy server
-- openbias eval: Run evaluation scenarios against a policy engine
+- openbias eval: Run offline native eval suites against a policy engine
 - openbias validate: Validate an Open Bias configuration file
 - openbias info: Show workflow information
 """
 
+from __future__ import annotations
+
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 from rich.text import Text
 
 from openbias import __version__
-from openbias.logging import configure_logging
 from openbias.cli_ui import (
     config_panel,
     console,
     dim,
     error,
-    key_value,
     make_table,
-    next_steps,
     spinner,
-    success,
-    warning,
-    yaml_preview,
 )
+from openbias.logging import configure_logging
+
+if TYPE_CHECKING:
+    from openbias.config.settings import Settings
 
 
 def _require_config(config: Path | None) -> None:
@@ -159,7 +160,7 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
     except Exception as e:
         error(str(e))
         raise SystemExit(1)
-async def _compile_rules_async(settings: "Settings", config_path: Path | None) -> None:
+async def _compile_rules_async(settings: Settings, config_path: Path | None) -> None:
     """Compile canonical rules input into engine-native evaluator configs."""
     from openbias.policy.compiler.runtime import compile_runtime_config_for_evaluator
 
@@ -175,7 +176,7 @@ async def _compile_rules_async(settings: "Settings", config_path: Path | None) -
         evaluator.config = compiled
 
 
-def _compile_rules(settings: "Settings", config_path: Path | None) -> None:
+def _compile_rules(settings: Settings, config_path: Path | None) -> None:
     """Compile evaluator configs from synchronous CLI commands."""
     import asyncio
 
@@ -318,8 +319,8 @@ def _validate_openbias_config(config_path: Path, raw: dict) -> None:
     judge_evaluators = [ev for ev in settings.evaluators if ev.type == "judge"]
 
     if judge_evaluators:
-        from openbias.policy.engines.judge.engine import JudgePolicyEngine
         from openbias.policy.compiler.runtime import compile_runtime_config_for_evaluator
+        from openbias.policy.engines.judge.engine import JudgePolicyEngine
 
         # Validate each judge evaluator
         all_errors: list[str] = []
@@ -485,6 +486,14 @@ def version() -> None:
     help="Path to openbias.yaml config file",
 )
 @click.option(
+    "--suite",
+    "suite_paths",
+    type=click.Path(exists=True, path_type=Path),
+    multiple=True,
+    default=(),
+    help="Native eval suite file or directory (repeatable); defaults to repo-owned suites",
+)
+@click.option(
     "--json-output",
     type=click.Path(path_type=Path),
     default=None,
@@ -494,21 +503,32 @@ def version() -> None:
     "--verbose",
     "-v",
     is_flag=True,
-    help="Show per-turn details",
+    help="Show per-case outcomes",
 )
 @click.option(
     "--debug/--no-debug",
     default=False,
     help="Enable debug logging",
 )
-def eval_cmd(config: Path | None, json_output: Path | None, verbose: bool, debug: bool) -> None:
-    """Temporarily disabled while the eval harness is being rebuilt."""
-    del config, json_output, verbose, debug
-    error(
-        "The `openbias eval` command is temporarily unavailable during the eval rebuild.",
-        hint="Use the Python eval harness APIs directly until the CLI is reintroduced.",
+def eval_cmd(
+    config: Path | None,
+    suite_paths: tuple[Path, ...],
+    json_output: Path | None,
+    verbose: bool,
+    debug: bool,
+) -> None:
+    """Run offline native eval suites against the configured policy engine."""
+    configure_logging(debug=debug)
+    _require_config(config)
+
+    from openbias.cli_eval import run_eval
+
+    run_eval(
+        config=config,
+        suite_paths=suite_paths,
+        json_output=json_output,
+        verbose=verbose,
     )
-    raise SystemExit(1)
 
 
 @main.command()

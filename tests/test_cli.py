@@ -662,29 +662,48 @@ class TestReviewPackCommand:
 
 
 class TestEvalCommand:
-    def test_eval_command_is_temporarily_unavailable(self):
-        result, output = _invoke(["eval"])
-        assert result.exit_code != 0
-        assert "temporarily unavailable" in output
-
-    def test_eval_command_returns_rebuild_message_before_config_handling(self):
+    def test_eval_delegates_to_cli_eval_module(self):
         runner = CliRunner()
         with runner.isolated_filesystem():
-            Path("openbias.yaml").write_text("evaluators: []\n")
-            buf = StringIO()
-            from openbias.cli_ui import console
+            Path("rules.md").write_text("- Be professional\n")
+            Path("openbias.yaml").write_text(
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: behavior\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+            )
+            suite_dir = Path("evals/suites")
+            suite_dir.mkdir(parents=True)
+            (suite_dir / "smoke.yaml").write_text(
+                "name: smoke\n"
+                "cases:\n"
+                "  - id: safe\n"
+                "    tags: [safe]\n"
+                "    labels:\n"
+                "      violation: false\n"
+                "      detection_scope: either\n"
+                "      detect_at_turn: null\n"
+                "      repair_expected: null\n"
+                "      repair_verified_at_turn: null\n"
+                "    messages:\n"
+                "      - role: user\n"
+                "        content: hello\n",
+                encoding="utf-8",
+            )
 
-            old_file = console.file
-            console.file = buf
-            try:
-                result = runner.invoke(main, ["eval", "--config", "openbias.yaml"])
-            finally:
-                console.file = old_file
-
-            output = result.output + buf.getvalue()
-            assert result.exit_code != 0
-            assert "temporarily unavailable" in output
-            assert "No 'eval' section found" not in output
+            with patch("openbias.cli_eval.run_eval") as mock_run_eval:
+                result = runner.invoke(
+                    main,
+                    ["eval", "--config", "openbias.yaml", "--suite", "evals/suites"],
+                )
+                assert result.exit_code == 0
+                mock_run_eval.assert_called_once_with(
+                    config=Path("openbias.yaml"),
+                    suite_paths=(Path("evals/suites"),),
+                    json_output=None,
+                    verbose=False,
+                )
 
 
 class TestHelpOutput:

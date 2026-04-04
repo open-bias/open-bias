@@ -1,6 +1,7 @@
 import pytest
 
 from openbias.config.settings import (
+    EvalConfig,
     EvaluatorConfig,
     Settings,
     YamlConfigSource,
@@ -75,6 +76,7 @@ class TestFlatFields:
         assert settings.fail_open is True
         assert settings.hook_timeout_seconds == 30.0
         assert settings.evaluators == []
+        assert settings.eval == EvalConfig()
 
     def test_evaluators_list(self):
         settings = Settings(
@@ -159,6 +161,14 @@ class TestEvaluatorYamlMapping:
         result = source._map_evaluators(source._yaml_data)
         assert result["otel"]["exporter_type"] == "otlp"
         assert result["otel"]["endpoint"] == "http://jaeger:4317"
+
+    def test_eval_suites_mapped(self):
+        source = self._build_source({
+            "evaluators": [],
+            "eval": {"suites": ["evals/suites", "evals/custom/*.yaml"]},
+        })
+        result = source._map_evaluators(source._yaml_data)
+        assert result["eval"]["suites"] == ["evals/suites", "evals/custom/*.yaml"]
 
     def test_judge_evaluator_basic(self):
         """Basic judge evaluator is parsed correctly."""

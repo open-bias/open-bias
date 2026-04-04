@@ -202,7 +202,8 @@ openbias serve -p 8080 -c custom.yaml
 openbias validate openbias.yaml
 openbias info openbias.yaml -v
 
-# Replay and compare
+# Eval, replay, and compare
+openbias eval
 openbias replay --trace .openbias/traces/2026-04-05.jsonl
 openbias compare --candidate rules.candidate.md --trace .openbias/traces/2026-04-05.jsonl
 openbias review-pack --comparison .openbias/reports/latest/comparison.json
@@ -211,8 +212,6 @@ openbias review-pack --comparison .openbias/reports/latest/comparison.json
 openbias trigger
 openbias version
 ```
-
-`openbias eval` is still temporarily disabled while the rebuilt eval harness CLI is being reintroduced. Use the Python eval APIs directly in CI or tests for now.
 
 ## Performance
 

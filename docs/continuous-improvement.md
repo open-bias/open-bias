@@ -60,7 +60,7 @@ It is stored under `examples/` instead of `.github/workflows/` so this repositor
 The example workflow:
 
 - installs Open Bias in CI
-- runs repo-owned eval suites through the Python eval harness
+- runs repo-owned eval suites through `openbias eval`
 - replays any captured JSONL trace datasets
 - compares `rules.md` against `rules.candidate.md` when a candidate file is present
 - generates `comparison.json`, `comparison.md`, and `review-pack.md`

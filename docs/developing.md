@@ -139,7 +139,7 @@ The example assumes your application repo has:
 - replayable trace files under `.openbias/traces/`
 - an optional `rules.candidate.md` created manually or by an external generator
 
-It runs the Python eval harness directly, because `openbias eval` is still temporarily disabled, then replays traces, compares a candidate file when present, generates a review pack, and uploads the resulting artifacts.
+It runs `openbias eval`, `openbias replay`, `openbias compare`, and `openbias review-pack`, then uploads the resulting artifacts.
 
 Adjust the install step to match your repo. The example defaults to `pip install openbias` so it is easy to copy into an application repository that depends on Open Bias.
 

@@ -150,9 +150,10 @@ tracing:
 # ---------------------------------------------------------------------------
 # Eval — openbias eval
 # ---------------------------------------------------------------------------
-# Used by `openbias eval` to run offline scenario-based evaluation.
+# Used by `openbias eval` to run offline native eval suites.
 eval:
-  # Glob patterns for scenario JSON files, resolved relative to this config file.
-  scenarios:
-    - ./eval/scenarios/*.json     # single directory
-    # - ./eval/scenarios/**/*.json  # recursive glob
+  # Optional native suite files, directories, or glob patterns.
+  # When omitted, `openbias eval` defaults to `evals/suites/`.
+  suites:
+    - ./evals/suites
+    # - ./evals/smoke/*.yaml

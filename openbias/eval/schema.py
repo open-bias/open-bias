@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -187,6 +187,9 @@ class EvalRunResult:
     outcomes: list[EvalCaseOutcome]
     failures: list[dict[str, str]]
     summary: EvalSummary
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)

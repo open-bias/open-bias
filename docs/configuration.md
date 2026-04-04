@@ -253,18 +253,20 @@ See `.env.example` in the repository root for a template.
 
 ## Eval
 
-Configure offline scenario-based evaluation under the `eval:` section. The rebuilt eval harness is currently intended for Python APIs and CI scripts while the `openbias eval` CLI is temporarily unavailable.
+Configure offline native-suite evaluation under the `eval:` section. `openbias eval` uses these paths when you do not pass `--suite` explicitly.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `eval.scenarios` | list of strings | `[]` | Glob patterns for scenario JSON files, resolved relative to the config file |
+| `eval.suites` | list of strings | `[]` | Native suite files, directories, or glob patterns, resolved relative to the config file |
 
 ```yaml
 eval:
-  scenarios:
-    - ./eval/scenarios/*.json
-    - ./eval/scenarios/**/*.json    # recursive
+  suites:
+    - ./evals/suites
+    - ./evals/smoke/*.yaml
 ```
+
+If `eval.suites` is omitted, `openbias eval` falls back to `evals/suites/` in the current project.
 
 The evaluators under test are determined by the top-level `evaluators` list.
 
