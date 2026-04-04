@@ -9,16 +9,14 @@ from openbias.config.settings import (
 
 def test_obias_config_env_var_discovery(monkeypatch):
     """Verify that OBIAS_CONFIG is still used to find the config file path."""
-    # This is handled manually in YamlConfigSource, so it should still work
     monkeypatch.setenv("OBIAS_CONFIG", "/tmp/nonexistent.yaml")
 
     settings = Settings()
-    # It won't fail to initialize, but YamlConfigSource will have attempted to load it
-    # We can check its internal state or just ensure no other OBIAS_ vars are picked up
+    assert settings.debug is False
 
     monkeypatch.setenv("OBIAS_DEBUG", "true")
     settings = Settings()
-    assert settings.debug is True  # OBIAS_ prefix maps to settings fields
+    assert settings.debug is False
 
 
 def test_standard_api_keys_work(monkeypatch):

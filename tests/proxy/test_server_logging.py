@@ -40,7 +40,7 @@ def test_debug_mode_does_not_enable_litellm_verbose():
 
 
 # ---------------------------------------------------------------------------
-# debug=True must emit a warning about OBIAS_LITELLM_VERBOSE
+# debug=True must emit a warning about openbias.yaml litellm_verbose
 # ---------------------------------------------------------------------------
 
 
@@ -50,7 +50,7 @@ def test_debug_mode_emits_warning():
         proxy._setup_logging()
     mock_logger.warning.assert_called_once()
     call_args = mock_logger.warning.call_args[0][0]
-    assert "OBIAS_LITELLM_VERBOSE" in call_args
+    assert "litellm_verbose: true" in call_args
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +90,7 @@ def test_debug_and_litellm_verbose_both_set():
     assert litellm.set_verbose is True
     mock_logger.warning.assert_called_once()
     call_args = mock_logger.warning.call_args[0][0]
-    assert "OBIAS_LITELLM_VERBOSE" in call_args
+    assert "litellm_verbose: true" in call_args
 
 
 # ---------------------------------------------------------------------------
@@ -104,14 +104,14 @@ def test_settings_litellm_verbose_default():
 
 
 # ---------------------------------------------------------------------------
-# Settings: litellm_verbose respects env var OBIAS_LITELLM_VERBOSE
+# Settings: litellm_verbose does not read a generic env var
 # ---------------------------------------------------------------------------
 
 
-def test_settings_litellm_verbose_from_env(monkeypatch):
+def test_settings_litellm_verbose_not_loaded_from_generic_env(monkeypatch):
     monkeypatch.setenv("OBIAS_LITELLM_VERBOSE", "true")
     settings = Settings()
-    assert settings.litellm_verbose is True
+    assert settings.litellm_verbose is False
 
 
 # ---------------------------------------------------------------------------

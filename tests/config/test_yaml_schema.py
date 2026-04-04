@@ -31,13 +31,11 @@ class TestTracingMapping:
             "tracing": {
                 "type": "otlp",
                 "endpoint": "http://jaeger:4317",
-                "service_name": "my-service",
             },
         })
         otel = result["otel"]
         assert otel["exporter_type"] == "otlp"
         assert otel["endpoint"] == "http://jaeger:4317"
-        assert otel["service_name"] == "my-service"
 
     def test_tracing_not_configured(self):
         """No tracing section means otel stays at defaults (disabled)."""
@@ -54,25 +52,12 @@ class TestTracingMapping:
         )
         assert result["otel"]["insecure"] is False
 
-    def test_tracing_redact_content(self):
-        result = self._map(
-            {"evaluators": [], "tracing": {"type": "otlp", "redact_content": True}}
-        )
-        assert result["otel"]["redact_content"] is True
-
-    def test_tracing_redact_content_false(self):
-        result = self._map(
-            {"evaluators": [], "tracing": {"type": "otlp", "redact_content": False}}
-        )
-        assert result["otel"]["redact_content"] is False
-
     def test_tracing_langfuse_complete(self):
         data = {
             "evaluators": [],
             "tracing": {
                 "type": "langfuse",
                 "endpoint": "http://localhost:4317",
-                "service_name": "test-svc",
                 "langfuse_public_key": "pk-test-123",
                 "langfuse_secret_key": "sk-test-456",
                 "langfuse_host": "https://us.cloud.langfuse.com",
@@ -82,7 +67,6 @@ class TestTracingMapping:
         otel = result["otel"]
         assert otel["exporter_type"] == "langfuse"
         assert otel["endpoint"] == "http://localhost:4317"
-        assert otel["service_name"] == "test-svc"
         assert otel["langfuse_public_key"] == "pk-test-123"
         assert otel["langfuse_secret_key"] == "sk-test-456"
         assert otel["langfuse_host"] == "https://us.cloud.langfuse.com"

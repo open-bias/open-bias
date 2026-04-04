@@ -28,7 +28,6 @@ def mock_otel():
 
 def test_tracer_initialization(mock_otel):
     config = OTelConfig(
-        service_name="test-service",
         endpoint="localhost:4317",
         exporter_type="otlp"
     )
@@ -236,100 +235,6 @@ class TestSessionEviction:
         assert len(tracer._sessions) == 0
         for s in spans:
             s.end.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# Content redaction tests
-# ---------------------------------------------------------------------------
-
-class TestContentRedaction:
-    """Tests for the redact_content flag on OTelConfig."""
-
-    def test_log_llm_call_default_includes_content(self, mock_otel):
-        """When redact_content is False (default), full content is in span attributes."""
-        config = OTelConfig(exporter_type="otlp")
-        tracer = Tracer(config)
-
-        mock_span = MagicMock()
-        mock_otel["tracer"].start_span.return_value = mock_span
-
-        tracer.log_llm_call(
-            session_id="s1",
-            model="gpt-4",
-            messages=[{"role": "user", "content": "secret data"}],
-            response_content="secret response",
-        )
-
-        set_calls = {c.args[0]: c.args[1] for c in mock_span.set_attribute.call_args_list}
-        assert "secret data" in set_calls.get("gen_ai.content.prompt", "")
-        assert set_calls.get("gen_ai.content.completion") == "secret response"
-        assert "secret data" in set_calls.get("input.value", "")
-        assert "secret data" in set_calls.get("langfuse.span.input", "")
-        assert set_calls.get("output.value") == "secret response"
-        assert set_calls.get("langfuse.span.output") == "secret response"
-
-    def test_log_llm_call_redacted(self, mock_otel):
-        """When redact_content is True, content is replaced with [REDACTED]."""
-        config = OTelConfig(exporter_type="otlp", redact_content=True)
-        tracer = Tracer(config)
-
-        mock_span = MagicMock()
-        mock_otel["tracer"].start_span.return_value = mock_span
-
-        tracer.log_llm_call(
-            session_id="s1",
-            model="gpt-4",
-            messages=[{"role": "user", "content": "secret data"}],
-            response_content="secret response",
-        )
-
-        set_calls = {c.args[0]: c.args[1] for c in mock_span.set_attribute.call_args_list}
-        assert set_calls.get("gen_ai.content.prompt") == "[REDACTED]"
-        assert set_calls.get("gen_ai.content.completion") == "[REDACTED]"
-        assert set_calls.get("input.value") == "[REDACTED]"
-        assert set_calls.get("langfuse.span.input") == "[REDACTED]"
-        assert set_calls.get("output.value") == "[REDACTED]"
-        assert set_calls.get("langfuse.span.output") == "[REDACTED]"
-
-    def test_trace_block_default_includes_input(self, mock_otel):
-        """When redact_content is False, trace_block includes full input_data."""
-        config = OTelConfig(exporter_type="otlp")
-        tracer = Tracer(config)
-
-        mock_span = MagicMock()
-        mock_otel["tracer"].start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
-        )
-        mock_otel["tracer"].start_as_current_span.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
-
-        with tracer.trace_block("test", "s1", input_data={"msg": "hello"}):
-            pass
-
-        set_calls = {c.args[0]: c.args[1] for c in mock_span.set_attribute.call_args_list}
-        assert "hello" in set_calls.get("input.value", "")
-        assert "hello" in set_calls.get("langfuse.span.input", "")
-
-    def test_trace_block_redacted(self, mock_otel):
-        """When redact_content is True, trace_block replaces input with [REDACTED]."""
-        config = OTelConfig(exporter_type="otlp", redact_content=True)
-        tracer = Tracer(config)
-
-        mock_span = MagicMock()
-        mock_otel["tracer"].start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
-        )
-        mock_otel["tracer"].start_as_current_span.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
-
-        with tracer.trace_block("test", "s1", input_data={"msg": "hello"}):
-            pass
-
-        set_calls = {c.args[0]: c.args[1] for c in mock_span.set_attribute.call_args_list}
-        assert set_calls.get("input.value") == "[REDACTED]"
-        assert set_calls.get("langfuse.span.input") == "[REDACTED]"
 
 
 # ---------------------------------------------------------------------------
