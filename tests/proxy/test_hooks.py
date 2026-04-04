@@ -1,13 +1,16 @@
 """Tests for fail-open hardening of Open Bias proxy hooks."""
 
 import asyncio
+import json
 import pytest
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch, call
 from datetime import datetime, timezone
+from pathlib import Path
 
 from openbias.config.settings import OTelConfig
 from openbias.core.intervention.strategies import WorkflowViolationError
+from openbias.core.interceptor.types import InterceptionResult
 from openbias.proxy.hooks import (
     safe_hook,
     _fail_open_counter,
@@ -238,6 +241,63 @@ async def test_pre_call_hook_timeout_returns_original_data(
     )
     # Should return original data unchanged (fail-open)
     assert result is original_data
+
+
+async def test_post_call_success_hook_writes_jsonl_trace_for_pending_intervention(
+    tmp_path: Path, mock_api_key
+):
+    settings = MagicMock()
+    settings.fail_open = True
+    settings.hook_timeout_seconds = 0.1
+    settings.mode = "async"
+    settings.strategy = "user_message_inject"
+    settings.fail_action = "intervene"
+    settings.session_ttl = 3600
+    settings.max_sessions = 10000
+    settings.evaluators = []
+    settings.otel = OTelConfig(
+        exporter_type="jsonl",
+        path=str(tmp_path / "traces" / "%Y-%m-%d.jsonl"),
+    )
+    settings.debug = False
+
+    with patch("openbias.proxy.hooks.Settings", return_value=settings):
+        from openbias.proxy.hooks import Callback
+
+        callback = Callback(settings=settings)
+
+    interceptor = AsyncMock()
+    interceptor.run_post_call.return_value = InterceptionResult(
+        allowed=True,
+        internal_metadata={
+            "results": [{"evaluator": "workflow-guard", "decision": "intervene", "engine_type": "fsm"}],
+            "violations": [{"message": "Verify identity first", "severity": "error"}],
+            "interventions": [{"evaluator": "merged", "message": "Please verify identity first."}],
+            "intervention_payload": {"strategy": "user_message_inject"},
+        },
+        pending_intervention={"kind": "async_intervention"},
+    )
+    callback._get_interceptor = AsyncMock(return_value=interceptor)
+    callback._interceptor_initialized = True
+
+    request = {
+        "messages": [{"role": "user", "content": "Refund me now"}],
+        "model": "gpt-4o-mini",
+        "metadata": {
+            "session_id": "sess-1",
+            "_openbias_request_id": "req-1",
+        },
+    }
+    response = {"content": "I have processed the refund."}
+
+    result = await callback.async_post_call_success_hook(request, mock_api_key, response)
+
+    assert result == response
+    dataset_path = next((tmp_path / "traces").glob("*.jsonl"))
+    rows = [json.loads(line) for line in dataset_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert rows[0]["id"] == "req-1"
+    assert rows[0]["metadata"]["final_action"] == "intervene"
+    assert rows[0]["metadata"]["policy_hash"] is None
 
 
 async def test_post_call_hook_timeout_returns_original_response(

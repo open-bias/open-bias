@@ -138,8 +138,9 @@ evaluators:
 # Tracing / Observability
 # ---------------------------------------------------------------------------
 tracing:
-  type: otlp                    # otlp | langfuse | console  (auto-enabled when set)
+  type: otlp                    # otlp | langfuse | console | jsonl  (auto-enabled when set)
   endpoint: http://localhost:4317
+  # path: .openbias/traces/%Y-%m-%d.jsonl
 
   # Langfuse-specific (auto-enabled when keys are present)
   # langfuse_public_key: pk-...

@@ -12,9 +12,11 @@ import json
 import logging
 from typing import Any
 from contextlib import contextmanager
+from pathlib import Path
 
 from openbias import __version__
 from openbias.core.session import SessionStore
+from openbias.core.utils import extract_response_content, extract_tool_calls
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
@@ -24,6 +26,14 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from opentelemetry.trace import Link, SpanContext, Status, StatusCode, TraceFlags, TraceState
 
 from openbias.config.settings import OTelConfig
+from openbias.traces import (
+    TraceCase,
+    TraceEvaluatorSummary,
+    TraceIntervention,
+    TraceMetadata,
+    TraceViolationSummary,
+)
+from openbias.tracing.jsonl_sink import JsonlTraceSink
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +84,7 @@ class Tracer:
         max_sessions: int | None = None,
     ):
         self.config = config
+        self._jsonl_sink: JsonlTraceSink | None = None
         # Session memory management
         self._sessions: SessionStore[trace.Span] = SessionStore(
             ttl=session_ttl_seconds if session_ttl_seconds is not None else self.DEFAULT_SESSION_TTL,
@@ -85,6 +96,18 @@ class Tracer:
         if not self._enabled:
             self._tracer = None
             logger.info("Tracer disabled")
+            return
+
+        if config.resolved_exporter_type == "jsonl":
+            if not config.path:
+                logger.warning("Tracer JSONL sink disabled: missing tracing.path")
+                self._enabled = False
+                self._tracer = None
+                return
+            self._jsonl_sink = JsonlTraceSink(config.path)
+            self._enabled = False
+            self._tracer = None
+            logger.info("Tracer using JSONL trace sink (path=%s)", config.path)
             return
 
         # Create resource with service name
@@ -257,6 +280,12 @@ class Tracer:
             span.end()
         except Exception:
             logger.debug("Failed to end request span", exc_info=True)
+
+    @property
+    def has_jsonl_sink(self) -> bool:
+        """Return whether replayable JSONL trace capture is enabled."""
+
+        return self._jsonl_sink is not None
 
     def _safe_json(self, obj: Any) -> str:
         """Safely serialize object to JSON string for span attributes."""
@@ -501,6 +530,93 @@ class Tracer:
 
             span.end()
             logger.info(f"Logged LLM call for session {session_id} (model={model})")
+
+    def record_trace_case(
+        self,
+        *,
+        case_id: str,
+        session_id: str,
+        request_messages: list[dict[str, Any]],
+        response_data: Any,
+        metadata: dict[str, Any] | None = None,
+        final_action: str = "unknown",
+        evaluator_summaries: list[dict[str, Any]] | None = None,
+        interventions: list[dict[str, Any]] | None = None,
+        expected_outcome: dict[str, Any] | None = None,
+        labels: dict[str, Any] | None = None,
+        source: dict[str, Any] | None = None,
+    ) -> Path | None:
+        """Append one normalized trace case to the JSONL sink, if enabled."""
+
+        if self._jsonl_sink is None:
+            return None
+
+        trace_metadata = dict(metadata or {})
+        model = trace_metadata.pop("model", None)
+        timestamp = trace_metadata.pop("timestamp", None)
+        environment = trace_metadata.pop("environment", None)
+        policy_hash = trace_metadata.pop("policy_hash", None)
+        request_id = trace_metadata.pop("request_id", None)
+        evaluator_names = trace_metadata.pop("evaluator_names", ())
+        tags = trace_metadata.pop("tags", ())
+
+        response_content = extract_response_content(response_data)
+        tool_calls = extract_tool_calls(response_data)
+        messages = [dict(message) for message in request_messages]
+        messages.append({"role": "assistant", "content": response_content})
+
+        try:
+            case = TraceCase(
+                id=case_id,
+                session_id=session_id,
+                messages=messages,
+                tool_calls=tuple(tool_calls),
+                metadata=TraceMetadata(
+                    model=model,
+                    timestamp=timestamp,
+                    environment=environment,
+                    policy_hash=policy_hash,
+                    request_id=request_id,
+                    final_action=final_action,
+                    evaluator_names=tuple(evaluator_names),
+                    tags=tuple(tags),
+                    extras=trace_metadata,
+                ),
+                evaluator_summaries=tuple(
+                    TraceEvaluatorSummary(
+                        name=item.get("name", "unnamed"),
+                        engine_type=item.get("engine_type", "unknown"),
+                        phase=item.get("phase", "post_call"),
+                        decision=item.get("decision", "unknown"),
+                        violations=tuple(
+                            TraceViolationSummary(
+                                reason=violation.get("reason") or violation.get("message") or "Policy violation",
+                                rule_id=violation.get("rule_id"),
+                                severity=violation.get("severity"),
+                            )
+                            for violation in item.get("violations", [])
+                            if isinstance(violation, dict)
+                        ),
+                    )
+                    for item in (evaluator_summaries or [])
+                ),
+                interventions=tuple(
+                    TraceIntervention(
+                        name=item.get("name", "intervention"),
+                        strategy=item.get("strategy"),
+                        applied_at=item.get("applied_at"),
+                        message=item.get("message"),
+                    )
+                    for item in (interventions or [])
+                ),
+                expected_outcome=expected_outcome,
+                labels=labels,
+                source=source,
+            )
+            return self._jsonl_sink.append(case)
+        except Exception:
+            logger.warning("Failed to append JSONL trace case", exc_info=True)
+            return None
 
     def _annotate_judge_details(
         self,

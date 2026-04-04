@@ -62,8 +62,9 @@ class OTelConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     endpoint: str = "http://localhost:4317"
-    exporter_type: Literal["otlp", "langfuse", "console"] | None = None
+    exporter_type: Literal["otlp", "langfuse", "console", "jsonl"] | None = None
     insecure: bool = True  # Use insecure connection (no TLS) for local dev
+    path: str | None = None
 
     # Langfuse-specific settings (used when exporter_type="langfuse")
     langfuse_public_key: str | None = None
@@ -273,11 +274,15 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             otel = result.setdefault("otel", {})
             if "type" in tracing_cfg:
                 otel["exporter_type"] = tracing_cfg["type"]
-            for k in ("endpoint", "insecure",
+            for k in ("endpoint", "insecure", "path",
                       "langfuse_public_key", "langfuse_secret_key",
                       "langfuse_host"):
                 if k in tracing_cfg:
-                    otel[k] = tracing_cfg[k]
+                    otel[k] = (
+                        self._resolve_path(tracing_cfg[k])
+                        if k == "path"
+                        else tracing_cfg[k]
+                    )
 
     def _map_evaluators(self, data: dict[str, Any]) -> dict[str, Any]:
         """Map new evaluator-based YAML format to Settings structure.

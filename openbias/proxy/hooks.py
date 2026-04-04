@@ -26,13 +26,15 @@ https://docs.litellm.ai/docs/observability/custom_callback
 import asyncio
 import copy
 import contextvars
+import hashlib
 import json
 import logging
 import time
 import uuid
 from collections.abc import Callable
 from contextlib import contextmanager, nullcontext
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal
 
 from litellm.caching.caching import DualCache
@@ -506,6 +508,107 @@ class Callback(CustomLogger):
         except (TypeError, ValueError):
             return 0
 
+    @staticmethod
+    def _policy_hash() -> str | None:
+        rules_path = Path.cwd() / "rules.md"
+        if not rules_path.is_file():
+            return None
+        return hashlib.sha256(rules_path.read_bytes()).hexdigest()
+
+    @staticmethod
+    def _trace_evaluator_summaries(
+        results: list[dict[str, Any]] | None,
+        *,
+        phase: str,
+        violations: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        summaries: list[dict[str, Any]] = []
+        shared_violations = [violation for violation in (violations or []) if isinstance(violation, dict)]
+        for item in results or []:
+            if not isinstance(item, dict):
+                continue
+            summaries.append(
+                {
+                    "name": item.get("evaluator", "unnamed"),
+                    "engine_type": item.get("engine_type", "unknown"),
+                    "phase": phase,
+                    "decision": item.get("decision", "unknown"),
+                    "violations": shared_violations if item.get("decision") in {"block", "intervene", "shadow"} else [],
+                }
+            )
+        return summaries
+
+    def _trace_interventions(
+        self,
+        metadata: dict[str, Any],
+        *,
+        applied_at: str,
+    ) -> list[dict[str, Any]]:
+        payload = metadata.get("intervention_payload", {})
+        strategy = payload.get("strategy") if isinstance(payload, dict) else None
+        interventions: list[dict[str, Any]] = []
+        for item in metadata.get("interventions", []):
+            if not isinstance(item, dict):
+                continue
+            interventions.append(
+                {
+                    "name": item.get("evaluator", "intervention"),
+                    "strategy": strategy or self.settings.strategy,
+                    "applied_at": applied_at,
+                    "message": item.get("message"),
+                }
+            )
+        return interventions
+
+    def _record_jsonl_trace(
+        self,
+        *,
+        session_id: str,
+        request_id: str,
+        data: dict[str, Any],
+        response_data: Any,
+        final_action: str,
+        internal_metadata: dict[str, Any] | None = None,
+        phase: str,
+        source: dict[str, Any] | None = None,
+    ) -> None:
+        if not self.tracer or not getattr(self.tracer, "has_jsonl_sink", False):
+            return
+
+        metadata = dict(internal_metadata or {})
+        trace_metadata = {
+            "model": data.get("model"),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "environment": "proxy",
+            "policy_hash": self._policy_hash(),
+            "request_id": request_id,
+            "evaluator_names": tuple(
+                item.get("evaluator", "unnamed")
+                for item in metadata.get("results", [])
+                if isinstance(item, dict)
+            ),
+            "tags": (),
+            "phase": phase,
+        }
+        self.tracer.record_trace_case(
+            case_id=request_id or str(uuid.uuid4()),
+            session_id=session_id,
+            request_messages=data.get("messages", []),
+            response_data=response_data,
+            metadata=trace_metadata,
+            final_action=final_action,
+            evaluator_summaries=self._trace_evaluator_summaries(
+                metadata.get("results"),
+                phase=phase,
+                violations=metadata.get("violations"),
+            ),
+            interventions=self._trace_interventions(
+                metadata,
+                applied_at="next_turn" if final_action == "intervene" else "post_call",
+            ),
+            source=source,
+        )
+
     def _build_sync_post_replay_request(
         self,
         *,
@@ -705,6 +808,16 @@ class Callback(CustomLogger):
                     logger.warning(
                         f"Request blocked for session {session_id}: {message}"
                     )
+                    self._record_jsonl_trace(
+                        session_id=session_id,
+                        request_id=request_id,
+                        data=data,
+                        response_data={"content": message},
+                        final_action="block",
+                        internal_metadata=result.internal_metadata,
+                        phase="pre_call",
+                        source={"hook": "async_pre_call_hook", "blocked": True},
+                    )
                     if self.tracer and request_span is not None:
                         self.tracer.end_request_span(request_span)
                     request_span_var.set(None)
@@ -724,6 +837,17 @@ class Callback(CustomLogger):
                             context=result.internal_metadata,
                             parent_span=span,
                         )
+
+                    self._record_jsonl_trace(
+                        session_id=session_id,
+                        request_id=request_id,
+                        data=data,
+                        response_data={"content": extract_response_content(data.get("messages", [])[-1]) if data.get("messages") else ""},
+                        final_action="intervene",
+                        internal_metadata=result.internal_metadata,
+                        phase="pre_call",
+                        source={"hook": "async_pre_call_hook", "modified_request": True},
+                    )
 
         # Capture start time at the end of pre-call to accurately measure LLM latency in trace
         data["metadata"]["_openbias_llm_start_time"] = time.time()
@@ -886,6 +1010,16 @@ class Callback(CustomLogger):
                         logger.warning(
                             f"Response blocked for session {session_id}: {message}"
                         )
+                        self._record_jsonl_trace(
+                            session_id=session_id,
+                            request_id=request_id,
+                            data=data,
+                            response_data={"content": message},
+                            final_action="block",
+                            internal_metadata=result.internal_metadata,
+                            phase="post_call",
+                            source={"hook": "async_post_call_success_hook", "blocked": True},
+                        )
                         raise WorkflowViolationError(
                             message, context=result.internal_metadata
                         )
@@ -904,6 +1038,17 @@ class Callback(CustomLogger):
                             parent_span=span,
                         )
                     if replay_response is not None:
+                        self._record_jsonl_trace(
+                            session_id=session_id,
+                            request_id=request_id,
+                            data=data,
+                            response_data=replay_response,
+                            final_action="intervene",
+                            internal_metadata=result.internal_metadata,
+                            phase="post_call",
+                            source={"hook": "async_post_call_success_hook", "replayed": True},
+                        )
+                    if replay_response is not None:
                         return replay_response
 
                     response = self._apply_request_cleanup(data, response)
@@ -915,6 +1060,25 @@ class Callback(CustomLogger):
                             context=result.internal_metadata,
                             parent_span=span,
                         )
+
+                    final_action = "intervene" if result.pending_intervention else (
+                        "shadow"
+                        if any(
+                            isinstance(item, dict) and item.get("decision") == "shadow"
+                            for item in result.internal_metadata.get("results", [])
+                        )
+                        else "allow"
+                    )
+                    self._record_jsonl_trace(
+                        session_id=session_id,
+                        request_id=request_id,
+                        data=data,
+                        response_data=response,
+                        final_action=final_action,
+                        internal_metadata=result.internal_metadata,
+                        phase="post_call",
+                        source={"hook": "async_post_call_success_hook", "replayed": False},
+                    )
 
             return response
         finally:

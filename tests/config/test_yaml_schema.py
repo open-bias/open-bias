@@ -71,6 +71,20 @@ class TestTracingMapping:
         assert otel["langfuse_secret_key"] == "sk-test-456"
         assert otel["langfuse_host"] == "https://us.cloud.langfuse.com"
 
+    def test_tracing_jsonl_path(self):
+        result = self._map(
+            {
+                "evaluators": [],
+                "tracing": {
+                    "type": "jsonl",
+                    "path": ".openbias/traces/%Y-%m-%d.jsonl",
+                },
+            }
+        )
+        otel = result["otel"]
+        assert otel["exporter_type"] == "jsonl"
+        assert otel["path"] == ".openbias/traces/%Y-%m-%d.jsonl"
+
 
 # =========================================================================
 # Intervention fields (now flat top-level keys in evaluator format)

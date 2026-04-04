@@ -170,8 +170,9 @@ Configure under the `tracing:` section. Tracing uses OpenTelemetry spans.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `tracing.type` | string | `none` | Exporter type: `otlp`, `langfuse`, `console`, `none`. Tracing is enabled when type is not `none`. |
+| `tracing.type` | string | `none` | Exporter type: `otlp`, `langfuse`, `console`, `jsonl`, `none`. Tracing is enabled when type is not `none`. |
 | `tracing.endpoint` | string | `http://localhost:4317` | OTLP endpoint URL |
+| `tracing.path` | string | -- | When `tracing.type: jsonl`, append replayable trace cases to this path. Supports file paths such as `.openbias/traces/%Y-%m-%d.jsonl` or directory paths such as `.openbias/traces/`. |
 
 ### Langfuse
 
@@ -182,6 +183,21 @@ When `tracing.type: langfuse`:
 | `tracing.langfuse_public_key` | string | -- | Langfuse public key |
 | `tracing.langfuse_secret_key` | string | -- | Langfuse secret key |
 | `tracing.langfuse_host` | string | `https://cloud.langfuse.com` | Langfuse host URL |
+
+### JSONL Trace Sink
+
+When `tracing.type: jsonl`, Open Bias writes one replayable request/response pair per line to a local JSONL dataset. This is intended for offline replay and policy comparison workflows.
+
+```yaml
+tracing:
+  type: jsonl
+  path: .openbias/traces/%Y-%m-%d.jsonl
+```
+
+`path` may be either:
+
+- a file path ending in `.jsonl`
+- a directory path, in which case Open Bias writes `YYYY-MM-DD.jsonl` inside it
 
 ## Environment Variables
 
