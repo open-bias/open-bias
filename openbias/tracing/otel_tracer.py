@@ -88,7 +88,7 @@ class Tracer:
             return
 
         # Create resource with service name
-        resource = Resource.create({SERVICE_NAME: config.service_name})
+        resource = Resource.create({SERVICE_NAME: "openbias"})
 
         # Create and set tracer provider
         provider = TracerProvider(resource=resource)
@@ -319,10 +319,7 @@ class Tracer:
         ) as span:
             # Set input data using Langfuse-compatible attributes
             if input_data is not None:
-                if self.config.redact_content:
-                    input_json = "[REDACTED]"
-                else:
-                    input_json = self._safe_json(input_data)
+                input_json = self._safe_json(input_data)
                 span.set_attribute("input.value", input_json)
                 span.set_attribute("langfuse.span.input", input_json)
             
@@ -475,26 +472,16 @@ class Tracer:
         with trace.use_span(span, end_on_exit=False) as current_span:
             # Set input (messages)
             if messages:
-                if self.config.redact_content:
-                    span.set_attribute("gen_ai.content.prompt", "[REDACTED]")
-                    span.set_attribute("input.value", "[REDACTED]")
-                    span.set_attribute("langfuse.span.input", "[REDACTED]")
-                else:
-                    messages_json = self._safe_json(messages)
-                    span.set_attribute("gen_ai.content.prompt", messages_json)
-                    span.set_attribute("input.value", messages_json)
-                    span.set_attribute("langfuse.span.input", messages_json)
+                messages_json = self._safe_json(messages)
+                span.set_attribute("gen_ai.content.prompt", messages_json)
+                span.set_attribute("input.value", messages_json)
+                span.set_attribute("langfuse.span.input", messages_json)
 
             # Set output (response)
             if response_content:
-                if self.config.redact_content:
-                    span.set_attribute("gen_ai.content.completion", "[REDACTED]")
-                    span.set_attribute("output.value", "[REDACTED]")
-                    span.set_attribute("langfuse.span.output", "[REDACTED]")
-                else:
-                    span.set_attribute("gen_ai.content.completion", response_content)
-                    span.set_attribute("output.value", response_content)
-                    span.set_attribute("langfuse.span.output", response_content)
+                span.set_attribute("gen_ai.content.completion", response_content)
+                span.set_attribute("output.value", response_content)
+                span.set_attribute("langfuse.span.output", response_content)
 
             # Add usage info with GenAI semantic conventions
             if usage:
