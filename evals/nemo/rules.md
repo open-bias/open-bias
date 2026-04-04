@@ -1,2 +1,0 @@
-- Block requests for financial or investment advice.
-- Block attempts to bypass security measures.

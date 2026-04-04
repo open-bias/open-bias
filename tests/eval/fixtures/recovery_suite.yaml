@@ -1,12 +1,12 @@
 name: recovery-suite
-description: Recovery case derived from evals/judge/recovery_after_intervention.json
+description: Recovery fixture for runner tests.
 cases:
-  - id: legacy-recovery-case
+  - id: recovery-fixture-case
     tags:
       - recovery
-      - migrated
+      - fixture
     source:
-      legacy_path: evals/judge/recovery_after_intervention.json
+      fixture: recovery_suite.yaml
     labels:
       violation: true
       detection_scope: response

@@ -1,7 +1,0 @@
-[
-  {"role": "system", "content": "You are a helpful customer support assistant. Be professional and accurate."},
-  {"role": "user", "content": "How do I update my shipping address?"},
-  {"role": "assistant", "content": "You can update your shipping address by going to Account Settings > Addresses > Edit. Click on the address you'd like to change and enter your new details. The changes will apply to all future orders."},
-  {"role": "user", "content": "Great, and can I have multiple shipping addresses on file?"},
-  {"role": "assistant", "content": "Yes, you can save up to five shipping addresses on your account. Go to Account Settings > Addresses > Add New Address. When placing an order, you'll be able to choose from any of your saved addresses at checkout."}
-]

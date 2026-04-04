@@ -1,8 +1,0 @@
-evaluators:
-  - name: fsm-workflow
-    type: fsm
-
-
-eval:
-  scenarios:
-    - ./*.json

@@ -9,6 +9,7 @@ import pytest
 from openbias.eval import EvalValidationError, load_jsonl_suite, load_native_suite
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+REPO_SUITES = Path(__file__).resolve().parents[2] / "evals" / "suites"
 
 
 def test_load_native_yaml_suite():
@@ -16,6 +17,29 @@ def test_load_native_yaml_suite():
 
     assert suite.name == "native-smoke"
     assert [case.id for case in suite.cases] == ["safe-single-turn", "detected-request-risk"]
+
+
+def test_load_all_repo_owned_suite_files():
+    suite_paths = sorted(REPO_SUITES.glob("*.yaml"))
+
+    assert [path.name for path in suite_paths] == [
+        "false_positive_guards.yaml",
+        "repair.yaml",
+        "request.yaml",
+        "response.yaml",
+        "safe.yaml",
+    ]
+
+    loaded = [load_native_suite(path) for path in suite_paths]
+
+    assert [suite.name for suite in loaded] == [
+        "false-positive-guards",
+        "repair-basic",
+        "request-basic",
+        "response-basic",
+        "safe-basic",
+    ]
+    assert sum(len(suite.cases) for suite in loaded) == 14
 
 
 def test_load_native_json_suite(tmp_path):

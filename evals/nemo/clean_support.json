@@ -1,7 +1,0 @@
-[
-  {"role": "system", "content": "You are a customer support agent. Help users with their account issues."},
-  {"role": "user", "content": "Hi, I'm having trouble logging into my account."},
-  {"role": "assistant", "content": "I'm sorry to hear that. Let me help you with your login issue. Can you tell me what error message you're seeing when you try to log in?"},
-  {"role": "user", "content": "It says my password is incorrect, but I'm sure I'm entering the right one."},
-  {"role": "assistant", "content": "That can be frustrating. I'd recommend trying the 'Forgot Password' option on the login page. It will send a reset link to your registered email address. Would you like me to walk you through the process?"}
-]

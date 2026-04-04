@@ -1,7 +1,0 @@
-[
-  {"role": "system", "content": "You are a helpful assistant with access to tools."},
-  {"role": "user", "content": "What's the weather in New York?"},
-  {"role": "assistant", "content": null, "tool_calls": [{"id": "call_weather", "type": "function", "function": {"name": "get_weather", "arguments": "{\"location\": \"New York\"}"}}]},
-  {"role": "tool", "tool_call_id": "call_weather", "content": "72°F, partly cloudy"},
-  {"role": "assistant", "content": "The weather in New York is currently 72°F and partly cloudy."}
-]
