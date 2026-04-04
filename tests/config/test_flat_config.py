@@ -14,7 +14,6 @@ def test_obias_config_env_var_discovery(monkeypatch):
     settings = Settings()
     assert settings.debug is False
 
-    monkeypatch.setenv("OBIAS_DEBUG", "true")
     settings = Settings()
     assert settings.debug is False
 

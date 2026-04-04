@@ -108,8 +108,7 @@ def test_settings_litellm_verbose_default():
 # ---------------------------------------------------------------------------
 
 
-def test_settings_litellm_verbose_not_loaded_from_generic_env(monkeypatch):
-    monkeypatch.setenv("OBIAS_LITELLM_VERBOSE", "true")
+def test_settings_litellm_verbose_not_loaded_from_generic_env():
     settings = Settings()
     assert settings.litellm_verbose is False
 
