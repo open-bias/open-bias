@@ -140,8 +140,6 @@ evaluators:
 tracing:
   type: otlp                    # otlp | langfuse | console  (auto-enabled when set)
   endpoint: http://localhost:4317
-  service_name: openbias
-  redact_content: false         # strip prompts/completions from spans (default: false)
 
   # Langfuse-specific (auto-enabled when keys are present)
   # langfuse_public_key: pk-...

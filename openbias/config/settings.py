@@ -34,6 +34,7 @@ import warnings
 from pathlib import Path
 from typing import Any, Literal
 
+from dotenv import dotenv_values
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from pydantic_settings import (
     BaseSettings,
@@ -61,19 +62,13 @@ class OTelConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     endpoint: str = "http://localhost:4317"
-    service_name: str = "openbias"
     exporter_type: Literal["otlp", "langfuse", "console"] | None = None
     insecure: bool = True  # Use insecure connection (no TLS) for local dev
 
     # Langfuse-specific settings (used when exporter_type="langfuse")
-    langfuse_public_key: str | None = Field(None, validation_alias="LANGFUSE_PUBLIC_KEY")
-    langfuse_secret_key: str | None = Field(None, validation_alias="LANGFUSE_SECRET_KEY")
-    langfuse_host: str = Field(
-        "https://cloud.langfuse.com", validation_alias="LANGFUSE_HOST"
-    )
-
-    # When True, user/assistant message content is replaced with "[REDACTED]" in traces
-    redact_content: bool = False
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_host: str = "https://cloud.langfuse.com"
 
     @property
     def enabled(self) -> bool:
@@ -278,9 +273,9 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             otel = result.setdefault("otel", {})
             if "type" in tracing_cfg:
                 otel["exporter_type"] = tracing_cfg["type"]
-            for k in ("endpoint", "service_name", "insecure",
+            for k in ("endpoint", "insecure",
                       "langfuse_public_key", "langfuse_secret_key",
-                      "langfuse_host", "redact_content"):
+                      "langfuse_host"):
                 if k in tracing_cfg:
                     otel[k] = tracing_cfg[k]
 
@@ -358,6 +353,69 @@ class YamlConfigSource(PydanticBaseSettingsSource):
         return self._map_evaluators(self._yaml_data or {})
 
 
+class FilteredSettingsSource(PydanticBaseSettingsSource):
+    """Allow only a narrow, explicit subset of env/.env-backed settings.
+
+    This keeps runtime configuration in ``openbias.yaml`` while still allowing
+    direct secret/config-discovery env vars such as provider API keys and
+    Langfuse credentials.
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        *,
+        dotenv_file: str | None = None,
+    ):
+        super().__init__(settings_cls)
+        self._dotenv_file = dotenv_file
+
+    @staticmethod
+    def _load_dotenv_values(dotenv_file: str | None) -> dict[str, str]:
+        if not dotenv_file:
+            return {}
+
+        raw = dotenv_values(dotenv_file)
+        return {
+            key: value
+            for key, value in raw.items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
+
+    def _get_supported_env(self) -> dict[str, Any]:
+        dotenv_data = self._load_dotenv_values(self._dotenv_file)
+
+        def read(name: str) -> str | None:
+            value = os.environ.get(name)
+            if value is not None:
+                return value
+            return dotenv_data.get(name)
+
+        result: dict[str, Any] = {}
+        supported = {
+            "openai_api_key": "OPENAI_API_KEY",
+            "anthropic_api_key": "ANTHROPIC_API_KEY",
+            "google_api_key": "GOOGLE_API_KEY",
+            "gemini_api_key": "GEMINI_API_KEY",
+            "groq_api_key": "GROQ_API_KEY",
+            "togetherai_api_key": "TOGETHERAI_API_KEY",
+            "openrouter_api_key": "OPENROUTER_API_KEY",
+        }
+        for field_name, env_name in supported.items():
+            if (value := read(env_name)) is not None:
+                result[field_name] = value
+
+        return result
+
+    def get_field_value(self, field: Any, field_name: str) -> tuple[Any, str, bool]:
+        data = self()
+        value = data.get(field_name)
+        return value, field_name, value is not None
+
+    def __call__(self) -> dict[str, Any]:
+        return self._get_supported_env()
+
+
 _config_path_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "_config_path_var", default=None
 )
@@ -377,7 +435,6 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_prefix="OBIAS_",
         env_nested_delimiter="__",
         env_file=".env",
         env_file_encoding="utf-8",
@@ -498,8 +555,8 @@ class Settings(BaseSettings):
         return (
             init_settings,
             yaml_source,
-            env_settings,
-            dotenv_settings,
+            FilteredSettingsSource(settings_cls),
+            FilteredSettingsSource(settings_cls, dotenv_file=".env"),
             file_secret_settings,
         )
 
