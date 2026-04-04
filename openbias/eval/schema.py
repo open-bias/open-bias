@@ -26,6 +26,23 @@ class EvalValidationError(ValueError):
 
 
 @dataclass(frozen=True)
+class EvalPolicyTarget:
+    """Suite-level policy source metadata for comparable eval runs."""
+
+    name: str
+    rules_path: str
+    notes: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.name or not isinstance(self.name, str):
+            raise EvalValidationError("EvalPolicyTarget.name must be a non-empty string.")
+        if not self.rules_path or not isinstance(self.rules_path, str):
+            raise EvalValidationError("EvalPolicyTarget.rules_path must be a non-empty string.")
+        if self.notes is not None and (not isinstance(self.notes, str) or not self.notes):
+            raise EvalValidationError("EvalPolicyTarget.notes must be a non-empty string when present.")
+
+
+@dataclass(frozen=True)
 class EvalLabels:
     """Explicit ground-truth labels for a canonical eval case."""
 
@@ -113,6 +130,7 @@ class EvalSuite:
     name: str
     cases: list[EvalCase]
     description: str | None = None
+    policy: EvalPolicyTarget | None = None
     source_path: str | None = None
 
     def __post_init__(self) -> None:
@@ -120,6 +138,8 @@ class EvalSuite:
             raise EvalValidationError("EvalSuite.name must be a non-empty string.")
         if not isinstance(self.cases, list) or not self.cases:
             raise EvalValidationError("EvalSuite.cases must contain at least one case.")
+        if self.policy is not None and not isinstance(self.policy, EvalPolicyTarget):
+            raise EvalValidationError("EvalSuite.policy must be an EvalPolicyTarget when present.")
         seen: set[str] = set()
         for case in self.cases:
             if case.id in seen:

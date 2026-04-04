@@ -7,11 +7,13 @@ from openbias.eval.adapters import (
     load_jsonl_suite,
     load_native_suite,
 )
+from openbias.eval.library import discover_native_suite_paths, load_native_suites
 from openbias.eval.runner import EvalRunner
 from openbias.eval.schema import (
     EvalCase,
     EvalCaseOutcome,
     EvalLabels,
+    EvalPolicyTarget,
     EvalRunResult,
     EvalSuite,
     EvalSummary,
@@ -22,6 +24,7 @@ __all__ = [
     "EvalCase",
     "EvalCaseOutcome",
     "EvalLabels",
+    "EvalPolicyTarget",
     "EvalRunResult",
     "EvalRunner",
     "EvalSuite",
@@ -30,6 +33,8 @@ __all__ = [
     "JsonlSuiteAdapter",
     "NativeSuiteAdapter",
     "SuiteAdapter",
+    "discover_native_suite_paths",
     "load_jsonl_suite",
     "load_native_suite",
+    "load_native_suites",
 ]

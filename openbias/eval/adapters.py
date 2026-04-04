@@ -10,6 +10,7 @@ from typing import Any, Protocol
 from openbias.eval.schema import (
     EvalCase,
     EvalLabels,
+    EvalPolicyTarget,
     EvalSuite,
     EvalValidationError,
     load_serialized_suite,
@@ -49,6 +50,7 @@ class NativeSuiteAdapter:
         return EvalSuite(
             name=_expect_string(payload.get("name"), context=f"{suite_path}:name"),
             description=_optional_string(payload.get("description"), context=f"{suite_path}:description"),
+            policy=_build_policy_target(payload.get("policy"), context=f"{suite_path}:policy"),
             source_path=str(suite_path),
             cases=cases,
         )
@@ -168,6 +170,24 @@ def _build_labels(payload: dict[str, Any], *, context: str) -> EvalLabels:
             payload.get("repair_verified_at_turn"),
             context=f"{context}.repair_verified_at_turn",
         ),
+    )
+
+
+def _build_policy_target(payload: Any, *, context: str) -> EvalPolicyTarget | None:
+    if payload is None:
+        return None
+    if not isinstance(payload, dict):
+        raise EvalValidationError(f"{context} must be an object when present.")
+
+    expected_keys = {"name", "rules_path", "notes"}
+    unexpected = sorted(set(payload) - expected_keys)
+    if unexpected:
+        raise EvalValidationError(f"{context} has unsupported fields: {', '.join(unexpected)}")
+
+    return EvalPolicyTarget(
+        name=_expect_string(payload.get("name"), context=f"{context}.name"),
+        rules_path=_expect_string(payload.get("rules_path"), context=f"{context}.rules_path"),
+        notes=_optional_string(payload.get("notes"), context=f"{context}.notes"),
     )
 
 
