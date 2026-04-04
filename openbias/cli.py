@@ -619,5 +619,30 @@ def compare(
         trace_paths=trace_paths,
         output_dir=output_dir,
     )
+
+
+@main.command(name="review-pack")
+@click.option(
+    "--comparison",
+    "comparison_path",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Path to comparison.json",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(path_type=Path),
+    default=Path(".openbias/reports/latest/review-pack.md"),
+    help="Output path for the reviewer-facing Markdown package",
+)
+def review_pack(comparison_path: Path, output_path: Path) -> None:
+    """Generate a reviewer-friendly Markdown package from comparison.json."""
+    from openbias.cli_review import run_review_pack
+
+    run_review_pack(
+        comparison_path=comparison_path,
+        output_path=output_path,
+    )
 if __name__ == "__main__":
     main()

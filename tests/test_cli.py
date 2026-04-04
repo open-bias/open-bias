@@ -477,6 +477,23 @@ class TestCompareCommand:
                 assert result.exit_code == 0
                 mock_run_compare.assert_called_once()
 
+
+class TestReviewPackCommand:
+    def test_review_pack_delegates_to_cli_review_module(self):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("comparison.json").write_text(
+                '{"status":"review","baseline_policy_path":"rules.md","candidate_policy_path":"rules.candidate.md","gates":[],"suites":[],"traces":[]}'
+            )
+
+            with patch("openbias.cli_review.run_review_pack") as mock_run_review_pack:
+                result = runner.invoke(
+                    main,
+                    ["review-pack", "--comparison", "comparison.json"],
+                )
+                assert result.exit_code == 0
+                mock_run_review_pack.assert_called_once()
+
     def test_trigger_success(self):
         """trigger with valid config should show ALLOW output."""
         runner = CliRunner()

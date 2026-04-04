@@ -116,6 +116,13 @@ openbias compare --candidate rules.candidate.md
 openbias compare --candidate rules.candidate.md --trace .openbias/traces/2026-04-05.jsonl
 ```
 
+### Review Package
+
+```bash
+# Turn comparison.json into a reviewer-friendly Markdown artifact
+openbias review-pack --comparison .openbias/reports/latest/comparison.json
+```
+
 ### Test Layout
 
 ```
