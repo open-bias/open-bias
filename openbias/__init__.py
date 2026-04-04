@@ -59,6 +59,7 @@ from openbias.config.settings import Settings
 
 # Proxy server
 from openbias.proxy.server import Proxy, start_proxy
+from openbias.traces import TraceCase, TraceDataset, TraceMetadata
 
 # Policy engines
 from openbias.policy import (
@@ -77,6 +78,10 @@ __all__ = [
     # Proxy
     "Proxy",
     "start_proxy",
+    # Traces
+    "TraceCase",
+    "TraceDataset",
+    "TraceMetadata",
     # Policy engines
     "PolicyEngine",
     "PolicyEngineRegistry",
