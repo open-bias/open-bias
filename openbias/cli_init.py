@@ -195,20 +195,11 @@ def run_interactive_init() -> None:
         warning(f"Invalid port '{port_str}', using 4000")
         port = 4000
 
-    fail_open = confirm(
-        "Fail open? (allow requests if the engine errors)",
-        default=True,
-    )
-
-    debug = confirm("Enable debug logging?", default=False)
-
     # -----------------------------------------------------------------------
     # 6. Generate Config
     # -----------------------------------------------------------------------
     final_config: dict = {
         "port": port,
-        "fail_open": fail_open,
-        "debug": debug,
         "tracing": tracing_config,
     }
     if model:
