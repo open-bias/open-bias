@@ -172,8 +172,6 @@ Configure under the `tracing:` section. Tracing uses OpenTelemetry spans.
 |-----|------|---------|-------------|
 | `tracing.type` | string | `none` | Exporter type: `otlp`, `langfuse`, `console`, `none`. Tracing is enabled when type is not `none`. |
 | `tracing.endpoint` | string | `http://localhost:4317` | OTLP endpoint URL |
-| `tracing.service_name` | string | `openbias` | Service name in traces |
-| `tracing.redact_content` | bool | `false` | Strip prompts and completions from trace spans |
 
 ### Langfuse
 
@@ -187,7 +185,7 @@ When `tracing.type: langfuse`:
 
 ## Environment Variables
 
-Environment variables are primarily used for LLM API keys. Generic settings should be configured via `openbias.yaml`.
+Environment variables are only supported for config discovery and secrets. Generic runtime settings such as `debug`, `log_level`, `port`, and `litellm_verbose` should be configured in `openbias.yaml` or passed explicitly via CLI flags / `Settings(...)`.
 
 ### Config File Discovery
 
@@ -213,15 +211,15 @@ API keys bypass the `OBIAS_` prefix. Set them directly:
 
 If multiple keys are present, the auto-detected model uses the first one found in the order above.
 
-### Langfuse via Environment
+### Langfuse Keys
 
-While most settings are in YAML, Langfuse keys are also supported via environment variables for convenience:
+Langfuse credentials can also be set via environment variables (or `.env`):
 
 | Variable | YAML Equivalent |
 |----------|-----------------|
-| `LANGFUSE_PUBLIC_KEY` | `tracing.langfuse_public_key` |
-| `LANGFUSE_SECRET_KEY` | `tracing.langfuse_secret_key` |
-| `LANGFUSE_HOST` | `tracing.langfuse_host` |
+| `OBIAS_OTEL__LANGFUSE_PUBLIC_KEY` | `tracing.langfuse_public_key` |
+| `OBIAS_OTEL__LANGFUSE_SECRET_KEY` | `tracing.langfuse_secret_key` |
+| `OBIAS_OTEL__LANGFUSE_HOST` | `tracing.langfuse_host` |
 
 ## .env File
 
@@ -290,6 +288,4 @@ evaluators:
 tracing:
   type: otlp
   endpoint: http://localhost:4317
-  service_name: openbias
-  redact_content: false
 ```

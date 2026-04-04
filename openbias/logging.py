@@ -107,7 +107,7 @@ def configure_logging(
 
     Args:
         debug: When True, overrides *log_level* to DEBUG and emits a warning
-            about ``OBIAS_LITELLM_VERBOSE``.
+            about ``litellm_verbose: true`` in ``openbias.yaml``.
         log_level: Root logger level (e.g. ``"INFO"``, ``"DEBUG"``).
             Ignored when *debug* is True.
         log_format: ``"text"`` for colored console output, ``"json"`` for
@@ -144,9 +144,9 @@ def configure_logging(
 
     if debug:
         logger.warning(
-            "Debug mode enabled. Set OBIAS_LITELLM_VERBOSE=true to also enable "
-            "LiteLLM verbose logging (WARNING: this logs full request payloads "
-            "including API keys)."
+            "Debug mode enabled. Set `litellm_verbose: true` in openbias.yaml "
+            "to also enable LiteLLM verbose logging (WARNING: this logs full "
+            "request payloads including API keys)."
         )
 
     if litellm_verbose:

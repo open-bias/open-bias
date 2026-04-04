@@ -239,8 +239,8 @@ def start_proxy(settings: Settings | None = None) -> None:
     This is the main entry point for the CLI.
 
     Args:
-        settings: Optional Settings. If not provided, will be loaded
-                 from environment variables.
+        settings: Optional Settings. If not provided, runtime settings are
+                 loaded from ``openbias.yaml`` plus supported secret env vars.
     """
     resolved_settings = settings or Settings()
     policy_config = resolved_settings.get_policy_config()

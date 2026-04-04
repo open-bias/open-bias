@@ -93,7 +93,7 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
     The proxy intercepts LLM calls and monitors workflow adherence.
     Point your LLM client's base_url to http://HOST:PORT/v1
 
-    Configure via openbias.yaml or environment variables:
+    Configure runtime settings via openbias.yaml or CLI flags:
         openbias serve -c openbias.yaml
         openbias serve --port 4000
     """
