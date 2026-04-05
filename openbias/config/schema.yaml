@@ -157,3 +157,14 @@ eval:
   suites:
     - ./evals/suites
     # - ./evals/smoke/*.yaml
+
+# ---------------------------------------------------------------------------
+# Replay / Trace Compare — openbias replay + trace-backed openbias compare
+# ---------------------------------------------------------------------------
+# Used by offline detection replay. This does not change serve-time behavior.
+replay:
+  # Which trace boundary to evaluate offline.
+  # request  -> evaluate_request(...) only
+  # response -> evaluate_response(...) only
+  # default: response
+  boundary: response

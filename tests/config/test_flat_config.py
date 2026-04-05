@@ -3,6 +3,7 @@ import pytest
 from openbias.config.settings import (
     EvalConfig,
     EvaluatorConfig,
+    ReplayConfig,
     Settings,
     YamlConfigSource,
 )
@@ -77,6 +78,7 @@ class TestFlatFields:
         assert settings.hook_timeout_seconds == 30.0
         assert settings.evaluators == []
         assert settings.eval == EvalConfig()
+        assert settings.replay == ReplayConfig()
 
     def test_evaluators_list(self):
         settings = Settings(
@@ -169,6 +171,14 @@ class TestEvaluatorYamlMapping:
         })
         result = source._map_evaluators(source._yaml_data)
         assert result["eval"]["suites"] == ["evals/suites", "evals/custom/*.yaml"]
+
+    def test_replay_boundary_mapped(self):
+        source = self._build_source({
+            "evaluators": [],
+            "replay": {"boundary": "request"},
+        })
+        result = source._map_evaluators(source._yaml_data)
+        assert result["replay"]["boundary"] == "request"
 
     def test_judge_evaluator_basic(self):
         """Basic judge evaluator is parsed correctly."""

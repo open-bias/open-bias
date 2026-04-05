@@ -146,3 +146,7 @@ class TestConfigValidation:
 
         with pytest.raises(ValueError, match="project-local `rules.md`"):
             settings.validate()
+
+    def test_invalid_replay_boundary_is_rejected(self):
+        with pytest.raises(Exception):
+            Settings(replay={"boundary": "both"})

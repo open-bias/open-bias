@@ -134,6 +134,12 @@ class EvalConfig(BaseModel):
     suites: list[str] = Field(default_factory=list)
 
 
+class ReplayConfig(BaseModel):
+    """Offline replay settings shared by replay and trace-backed compare."""
+
+    boundary: Literal["request", "response"] = "response"
+
+
 class YamlConfigSource(PydanticBaseSettingsSource):
     """Custom settings source that reads from a openbias.yaml config file.
 
@@ -223,6 +229,7 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             "model",
             "tracing",
             "eval",
+            "replay",
             "fail_action",
             "fail_open",
             "hook_timeout_seconds",
@@ -322,6 +329,10 @@ class YamlConfigSource(PydanticBaseSettingsSource):
             result["eval"] = {
                 "suites": [self._resolve_path(item) for item in suites],
             }
+
+        replay_cfg = data.get("replay")
+        if isinstance(replay_cfg, dict) and replay_cfg:
+            result["replay"] = dict(replay_cfg)
 
         # Build evaluators list
         evaluators: list[dict[str, Any]] = []
@@ -484,6 +495,7 @@ class Settings(BaseSettings):
     hook_timeout_seconds: float = 30.0
     evaluators: list[EvaluatorConfig] = Field(default_factory=list)
     eval: EvalConfig = Field(default_factory=EvalConfig)
+    replay: ReplayConfig = Field(default_factory=ReplayConfig)
 
     # API Keys (loaded from env vars or .env file)
     # We use validation_alias to map standard keys to these fields
