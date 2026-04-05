@@ -4,6 +4,8 @@ Open Bias can enforce rules with no `openbias.yaml` at all. If you have a projec
 
 Use `openbias.yaml` when you want explicit project settings such as pinned models, multiple evaluators, tracing, replay boundary selection, or committed offline eval/improvement workflows.
 
+If you want starter policy text, `openbias init` now lets you choose from the packaged preset library under `openbias/presets/rules`. Those Markdown files are the browseable source of truth in the repo. Compliance-flavored presets are starter guardrails, not legal advice or certification.
+
 ## Zero-Config Defaults
 
 When you run `openbias serve`, `openbias trigger`, `openbias validate`, or `openbias info` without a config file, Open Bias resolves:

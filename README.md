@@ -74,7 +74,9 @@ Every call now runs through your evaluators. The judge evaluator (default type) 
 
 With no `openbias.yaml`, `openbias serve` synthesizes a default judge evaluator, uses port `4000`, auto-detects the upstream model from your API key, and compiles project-local `rules.md` at startup.
 
-Want an editable config file instead? Run `openbias init` or `openbias init --quick`. Those commands scaffold optional YAML for teams that want explicit project settings checked into git.
+Want an editable config file instead? Run `openbias init` to pick an engine and a starter preset from the packaged library under `openbias/presets/rules`, or `openbias init --quick` to keep the legacy default starter. Those commands scaffold optional YAML for teams that want explicit project settings checked into git.
+
+The preset library is intentionally visible in-repo so you can browse, copy, and adapt the Markdown files directly. Compliance-oriented presets are starter guardrails, not legal advice or certification.
 
 ## Continuous Improvement
 
@@ -247,7 +249,7 @@ All hooks are wrapped in `safe_hook()` with configurable timeout (default 30s). 
 
 v0.3.0 -- alpha. The proxy layer, four evaluator engines (judge, FSM, LLM, NeMo), rules compiler, replay/improve tooling, and OpenTelemetry tracing all work. Zero-config startup plus optional YAML is in place, with auto-detection of models and API keys. API surface may change. Session state is in-memory only (not persistent across restarts).
 
-Missing: persistent session storage, dashboard UI, pre-built rules library, rate limiting. These are planned but not built.
+Missing: persistent session storage, dashboard UI, and rate limiting. These are planned but not built.
 
 ## Documentation
 

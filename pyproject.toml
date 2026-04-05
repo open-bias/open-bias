@@ -78,6 +78,14 @@ Repository = "https://github.com/open-bias/open-bias"
 
 [tool.hatch.build.targets.wheel]
 packages = ["openbias"]
+include = [
+    "openbias/presets/rules/**/*.md",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "openbias/presets/rules/**/*.md",
+]
 
 [tool.hatch.version]
 path = "openbias/__init__.py"
