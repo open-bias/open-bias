@@ -45,13 +45,21 @@ def render_review_pack(payload: dict[str, Any]) -> str:
             )
 
     for trace in traces:
-        if trace.get("delta_matched_rate", 0) > 0:
+        if trace.get("delta_matched_detection_rate", 0) > 0:
             wins.append(
-                f"`{trace['name']}` matched-rate improved by {trace['delta_matched_rate']:+.2%}."
+                f"`{trace['name']}` matched-detection-rate improved by {trace['delta_matched_detection_rate']:+.2%}."
             )
-        if trace.get("delta_matched_rate", 0) < 0:
+        if trace.get("delta_detection_rate", 0) > 0:
+            wins.append(
+                f"`{trace['name']}` detection-rate improved by {trace['delta_detection_rate']:+.2%}."
+            )
+        if trace.get("delta_matched_detection_rate", 0) < 0:
             regressions.append(
-                f"`{trace['name']}` matched-rate dropped by {trace['delta_matched_rate']:+.2%}."
+                f"`{trace['name']}` matched-detection-rate dropped by {trace['delta_matched_detection_rate']:+.2%}."
+            )
+        if trace.get("delta_detection_rate", 0) < 0:
+            regressions.append(
+                f"`{trace['name']}` detection-rate dropped by {trace['delta_detection_rate']:+.2%}."
             )
 
     lines = [

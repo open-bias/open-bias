@@ -22,10 +22,8 @@ class TraceComparison:
     name: str
     baseline: dict[str, Any]
     candidate: dict[str, Any]
-    delta_matched_rate: float
-    delta_intervention_rate: float
-    delta_block_rate: float
-    delta_pass_through_rate: float
+    delta_matched_detection_rate: float
+    delta_detection_rate: float
 
 
 @dataclass(frozen=True)

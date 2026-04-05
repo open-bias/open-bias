@@ -105,7 +105,7 @@ async def compare_policy_runs(
                 )
             )
 
-        replay_runner = ReplayRunner(runtime=runtime_config_from_settings(settings))
+        replay_runner = ReplayRunner(boundary=settings.replay.boundary)
         trace_results: list[TraceComparison] = []
         for path in trace_paths:
             dataset = load_trace_dataset(path)
@@ -118,18 +118,12 @@ async def compare_policy_runs(
                     name=dataset.name,
                     baseline=baseline_run.summary.__dict__,
                     candidate=candidate_run.summary.__dict__,
-                    delta_matched_rate=candidate_match_rate - baseline_match_rate,
-                    delta_intervention_rate=(
-                        candidate_run.summary.intervention_rate
-                        - baseline_run.summary.intervention_rate
+                    delta_matched_detection_rate=(
+                        candidate_match_rate - baseline_match_rate
                     ),
-                    delta_block_rate=(
-                        candidate_run.summary.block_rate
-                        - baseline_run.summary.block_rate
-                    ),
-                    delta_pass_through_rate=(
-                        candidate_run.summary.pass_through_rate
-                        - baseline_run.summary.pass_through_rate
+                    delta_detection_rate=(
+                        candidate_run.summary.detection_rate
+                        - baseline_run.summary.detection_rate
                     ),
                 )
             )
@@ -184,17 +178,17 @@ def build_comparison_result(
             improved = True
 
     for trace in traces:
-        if trace.delta_matched_rate < -trace_regression_budget:
+        if trace.delta_matched_detection_rate < -trace_regression_budget:
             gates.append(
                 ComparisonGate(
                     status="fail",
                     reason=(
                         f"Candidate exceeded the trace regression budget on {trace.name}: "
-                        f"matched-rate delta {trace.delta_matched_rate:.2%}."
+                        f"matched-detection-rate delta {trace.delta_matched_detection_rate:.2%}."
                     ),
                 )
             )
-        if trace.delta_matched_rate > 0:
+        if trace.delta_matched_detection_rate > 0 or trace.delta_detection_rate > 0:
             improved = True
 
     status = "fail" if any(gate.status == "fail" for gate in gates) else ("pass" if improved else "review")
@@ -256,9 +250,8 @@ def render_comparison_markdown(result: PolicyComparisonResult) -> str:
         for trace in result.traces:
             lines.append(
                 "- "
-                f"`{trace.name}` matched delta `{trace.delta_matched_rate:+.2%}`, "
-                f"intervene delta `{trace.delta_intervention_rate:+.2%}`, "
-                f"block delta `{trace.delta_block_rate:+.2%}`"
+                f"`{trace.name}` matched-detection delta `{trace.delta_matched_detection_rate:+.2%}`, "
+                f"detection delta `{trace.delta_detection_rate:+.2%}`"
             )
 
     lines.append("")

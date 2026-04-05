@@ -18,7 +18,13 @@ def test_render_review_pack_includes_status_checklist_and_repro():
                     "delta_false_positive_rate": -0.05,
                 }
             ],
-            "traces": [{"name": "prod", "delta_matched_rate": -0.1}],
+            "traces": [
+                {
+                    "name": "prod",
+                    "delta_matched_detection_rate": -0.1,
+                    "delta_detection_rate": 0.05,
+                }
+            ],
         }
     )
 
@@ -26,7 +32,8 @@ def test_render_review_pack_includes_status_checklist_and_repro():
     assert "Reviewer Checklist" in markdown
     assert "openbias compare --candidate rules.candidate.md" in markdown
     assert "Candidate provider: `file`" in markdown
-    assert "`prod` matched-rate dropped by -10.00%." in markdown
+    assert "`prod` matched-detection-rate dropped by -10.00%." in markdown
+    assert "`prod` detection-rate improved by +5.00%." in markdown
 
 
 def test_write_review_pack_persists_markdown(tmp_path: Path):
