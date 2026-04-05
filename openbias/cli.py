@@ -610,7 +610,7 @@ def replay(
 )
 @click.option(
     "--variant-count",
-    type=int,
+    type=click.IntRange(min=1),
     default=3,
     show_default=True,
     help="Number of generated candidate policy variants to evaluate alongside baseline",

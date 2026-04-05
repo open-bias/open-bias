@@ -8,7 +8,7 @@ from pathlib import Path
 
 from openbias.cli_ui import config_panel, key_value, spinner
 from openbias.config.settings import Settings
-from openbias.improve import run_improvement
+from openbias.improve import render_improvement_markdown, run_improvement
 
 
 def run_improve(
@@ -40,7 +40,7 @@ def run_improve(
     json_path = output_dir / "improvement.json"
     md_path = output_dir / "improvement.md"
     json_path.write_text(json.dumps(result.to_dict(), indent=2), encoding="utf-8")
-    md_path.write_text("", encoding="utf-8")
+    md_path.write_text(render_improvement_markdown(result), encoding="utf-8")
 
     config_panel(
         "Policy Improvement",
@@ -50,7 +50,14 @@ def run_improve(
             "Variants": str(len(result.variants)),
         },
     )
-    key_value("Winner", result.winner_variant_id or "(none)")
+    key_value(
+        "Winner",
+        (
+            f"{result.winner_variant_id} ({result.winner_policy_path})"
+            if result.winner_variant_id and result.winner_policy_path
+            else "(none)"
+        ),
+    )
     key_value("JSON Output", str(json_path))
     key_value("Markdown Output", str(md_path))
     return json_path, md_path

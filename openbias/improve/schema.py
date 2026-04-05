@@ -56,6 +56,8 @@ class ImprovementResult:
     instruction: str
     variants: list[ImprovementVariantResult] = field(default_factory=list)
     winner_variant_id: str | None = None
+    winner_policy_path: str | None = None
+    ranked_variant_ids: list[str] = field(default_factory=list)
     review_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
