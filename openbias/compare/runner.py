@@ -105,7 +105,7 @@ async def compare_policy_runs(
                 )
             )
 
-        replay_runner = ReplayRunner(fail_action=settings.fail_action)
+        replay_runner = ReplayRunner(runtime=runtime_config_from_settings(settings))
         trace_results: list[TraceComparison] = []
         for path in trace_paths:
             dataset = load_trace_dataset(path)
@@ -265,8 +265,13 @@ def render_comparison_markdown(result: PolicyComparisonResult) -> str:
     return "\n".join(lines)
 
 
-def _matched_rate(summary: dict[str, Any]) -> float:
-    supported_cases = int(summary.get("supported_cases", 0))
+def _matched_rate(summary: dict[str, Any] | Any) -> float:
+    if hasattr(summary, "supported_cases") and hasattr(summary, "matched_cases"):
+        supported_cases = int(summary.supported_cases)
+        matched_cases = int(summary.matched_cases)
+    else:
+        supported_cases = int(summary.get("supported_cases", 0))
+        matched_cases = int(summary.get("matched_cases", 0))
     if supported_cases == 0:
         return 0.0
-    return int(summary.get("matched_cases", 0)) / supported_cases
+    return matched_cases / supported_cases

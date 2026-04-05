@@ -51,6 +51,8 @@ The comparison and review pack surfaces are intentionally review-oriented:
 - `comparison.md` is a quick human summary of gates and metric deltas.
 - `review-pack.md` is the approval artifact with provenance, wins, regressions, and reproduction steps.
 
+Replay results are runtime-aware: they honor the configured evaluator phase, `mode`, `fail_action`, and intervention strategy so trace analysis stays aligned with live enforcement behavior.
+
 ## Nightly GitHub Actions Example
 
 An example nightly workflow lives at [`examples/github-actions/nightly-improvement.yml`](../examples/github-actions/nightly-improvement.yml).

@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from openbias.eval import EvalRuntimeConfig
 from openbias.policy.protocols import EvaluationResult, EvaluationStatus, ViolationRecord
 from openbias.replay import ReplayRunner
 from openbias.traces import TraceCase, TraceDataset, TraceMetadata
@@ -27,7 +28,12 @@ class FakeReplayEngine:
     async def initialize(self, config: dict[str, Any]) -> None:
         return None
 
-    async def evaluate_request(self, session_id: str, request_data: dict[str, Any], context: dict[str, Any] | None = None) -> EvaluationResult:
+    async def evaluate_request(
+        self,
+        session_id: str,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
+    ) -> EvaluationResult:
         del context
         self.sessions.setdefault(session_id, [])
         joined = " ".join(
@@ -42,8 +48,14 @@ class FakeReplayEngine:
             )
         return EvaluationResult(status=EvaluationStatus.ALLOW)
 
-    async def evaluate_response(self, session_id: str, response_data: Any, request_data: dict[str, Any], context: dict[str, Any] | None = None) -> EvaluationResult:
-        del request_data, context
+    async def evaluate_response(
+        self,
+        session_id: str,
+        response_data: Any,
+        request_data: dict[str, Any],
+        context: dict[str, Any] | None = None,
+    ) -> EvaluationResult:
+        del session_id, request_data, context
         joined = response_data.get("content", "") if isinstance(response_data, dict) else str(response_data)
         if self.response_rule and self.response_rule in joined:
             return EvaluationResult(
@@ -62,59 +74,136 @@ class FakeReplayEngine:
         self.sessions.clear()
 
 
-@pytest.mark.asyncio
-async def test_replay_runner_tracks_allow_and_intervene_actions():
-    dataset = TraceDataset(
-        name="smoke",
+def _dataset(*, final_action: str, user: str, assistant: str) -> TraceDataset:
+    return TraceDataset(
+        name="trace",
         cases=[
             TraceCase(
-                id="allow-case",
+                id=f"{final_action}-case",
                 session_id="sess-1",
                 messages=[
-                    {"role": "user", "content": "hello"},
-                    {"role": "assistant", "content": "hi"},
+                    {"role": "user", "content": user},
+                    {"role": "assistant", "content": assistant},
                 ],
-                metadata=TraceMetadata(final_action="allow"),
-            ),
-            TraceCase(
-                id="intervene-case",
-                session_id="sess-2",
-                messages=[
-                    {"role": "user", "content": "refund me"},
-                    {"role": "assistant", "content": "refund complete"},
-                ],
-                metadata=TraceMetadata(final_action="intervene"),
-            ),
-        ],
-    )
-    engine = FakeReplayEngine(response_rule="refund")
-    result = await ReplayRunner(fail_action="intervene").run(engine, dataset)
-
-    assert result.summary.total_cases == 2
-    assert result.summary.intervention_rate == 0.5
-    assert result.summary.pass_through_rate == 0.5
-    assert result.summary.matched_cases == 2
-    assert result.summary.per_rule_counts == {"refund": 1}
-
-
-@pytest.mark.asyncio
-async def test_replay_runner_maps_request_violations_to_block():
-    dataset = TraceDataset(
-        name="blocks",
-        cases=[
-            TraceCase(
-                id="request-block",
-                session_id="sess-1",
-                messages=[
-                    {"role": "user", "content": "unsafe request"},
-                    {"role": "assistant", "content": "blocked"},
-                ],
-                metadata=TraceMetadata(final_action="block"),
+                metadata=TraceMetadata(final_action=final_action),
             )
         ],
     )
+
+
+@pytest.mark.asyncio
+async def test_replay_runner_respects_pre_call_only_runtime():
+    dataset = _dataset(final_action="block", user="unsafe request", assistant="refund complete")
+    engine = FakeReplayEngine(request_rule="unsafe", response_rule="refund")
+    runner = ReplayRunner(
+        runtime=EvalRuntimeConfig(
+            request_phase_enabled=True,
+            response_phase_enabled=False,
+            mode="sync",
+            fail_action="block",
+        )
+    )
+
+    result = await runner.run(engine, dataset)
+
+    assert result.outcomes[0].observed_action == "block"
+    assert result.outcomes[0].violation_reasons == ("unsafe",)
+    assert result.outcomes[0].notes == ("request_violation",)
+
+
+@pytest.mark.asyncio
+async def test_replay_runner_respects_post_call_only_runtime():
+    dataset = _dataset(final_action="intervene", user="unsafe request", assistant="refund complete")
+    engine = FakeReplayEngine(request_rule="unsafe", response_rule="refund")
+    runner = ReplayRunner(
+        runtime=EvalRuntimeConfig(
+            request_phase_enabled=False,
+            response_phase_enabled=True,
+            mode="sync",
+            fail_action="intervene",
+        )
+    )
+
+    result = await runner.run(engine, dataset)
+
+    assert result.outcomes[0].observed_action == "intervene"
+    assert result.outcomes[0].violation_reasons == ("refund",)
+    assert result.outcomes[0].notes == ("response_violation",)
+
+
+@pytest.mark.asyncio
+async def test_replay_runner_sync_intervene_uses_pending_replay_signal():
+    dataset = _dataset(final_action="intervene", user="hello", assistant="refund complete")
+    engine = FakeReplayEngine(response_rule="refund")
+    runner = ReplayRunner(
+        runtime=EvalRuntimeConfig(
+            request_phase_enabled=False,
+            response_phase_enabled=True,
+            mode="sync",
+            fail_action="intervene",
+        )
+    )
+
+    result = await runner.run(engine, dataset)
+
+    assert result.outcomes[0].observed_action == "intervene"
+    assert result.outcomes[0].matched is True
+    assert result.summary.intervention_rate == 1.0
+
+
+@pytest.mark.asyncio
+async def test_replay_runner_async_intervene_drains_deferred_post_call_result():
+    dataset = _dataset(final_action="intervene", user="hello", assistant="refund complete")
+    engine = FakeReplayEngine(response_rule="refund")
+    runner = ReplayRunner(
+        runtime=EvalRuntimeConfig(
+            request_phase_enabled=False,
+            response_phase_enabled=True,
+            mode="async",
+            fail_action="intervene",
+        )
+    )
+
+    result = await runner.run(engine, dataset)
+
+    assert result.outcomes[0].observed_action == "intervene"
+    assert result.outcomes[0].violation_reasons == ("refund",)
+    assert result.outcomes[0].notes == ("async_response_violation",)
+
+
+@pytest.mark.asyncio
+async def test_replay_runner_sync_block_reports_block_action():
+    dataset = _dataset(final_action="block", user="unsafe request", assistant="blocked")
     engine = FakeReplayEngine(request_rule="unsafe")
-    result = await ReplayRunner(fail_action="block").run(engine, dataset)
+    runner = ReplayRunner(
+        runtime=EvalRuntimeConfig(
+            request_phase_enabled=True,
+            response_phase_enabled=False,
+            mode="sync",
+            fail_action="block",
+        )
+    )
+
+    result = await runner.run(engine, dataset)
 
     assert result.outcomes[0].observed_action == "block"
     assert result.summary.block_rate == 1.0
+
+
+@pytest.mark.asyncio
+async def test_replay_runner_preserves_shadow_mode_via_interceptor_mapping():
+    dataset = _dataset(final_action="shadow", user="unsafe request", assistant="ok")
+    engine = FakeReplayEngine(request_rule="unsafe")
+    runner = ReplayRunner(
+        runtime=EvalRuntimeConfig(
+            request_phase_enabled=True,
+            response_phase_enabled=False,
+            mode="sync",
+            fail_action="shadow",
+        )
+    )
+
+    result = await runner.run(engine, dataset)
+
+    assert result.outcomes[0].observed_action == "shadow"
+    assert result.summary.shadow_rate == 1.0

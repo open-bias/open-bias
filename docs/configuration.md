@@ -205,6 +205,8 @@ These datasets are the handoff point into the continuous-improvement loop:
 - `openbias compare --candidate ... --trace ...` measures baseline vs candidate deltas
 - `openbias review-pack --comparison ...` turns comparison output into a reviewer-facing artifact
 
+Replay and trace-backed comparison use the active runtime enforcement config, not a simplified direct-evaluation path. That means evaluator phase, `mode`, `fail_action`, and intervention strategy affect offline replay the same way they affect `openbias serve` and `openbias eval`.
+
 Candidate generation itself stays manual or external in OSS. Open Bias only handles capture, replay, comparison, and review packaging.
 
 ## Environment Variables

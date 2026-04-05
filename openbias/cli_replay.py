@@ -9,6 +9,7 @@ from typing import Any
 
 from openbias.cli_ui import config_panel, console, error, key_value, spinner
 from openbias.config.settings import Settings
+from openbias.eval import runtime_config_from_settings
 from openbias.policy.registry import PolicyEngineRegistry
 from openbias.replay import ReplayRunner
 from openbias.traces import load_trace_dataset
@@ -24,7 +25,7 @@ async def _run_replay_async(
         policy_config["type"],
         policy_config["config"],
     )
-    runner = ReplayRunner(fail_action=settings.fail_action)
+    runner = ReplayRunner(runtime=runtime_config_from_settings(settings))
     results: list[dict[str, Any]] = []
 
     try:
