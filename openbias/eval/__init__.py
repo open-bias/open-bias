@@ -8,6 +8,7 @@ from openbias.eval.adapters import (
     load_native_suite,
 )
 from openbias.eval.library import discover_native_suite_paths, load_native_suites
+from openbias.eval.runtime import runtime_config_from_settings
 from openbias.eval.runner import EvalRunner, EvalRuntimeConfig
 from openbias.eval.schema import (
     EvalCase,
@@ -38,4 +39,5 @@ __all__ = [
     "load_jsonl_suite",
     "load_native_suite",
     "load_native_suites",
+    "runtime_config_from_settings",
 ]

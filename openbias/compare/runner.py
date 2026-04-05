@@ -17,7 +17,7 @@ from openbias.compare.schema import (
     TraceComparison,
 )
 from openbias.config.settings import Settings
-from openbias.eval import EvalRunner, EvalRuntimeConfig, load_native_suites
+from openbias.eval import EvalRunner, load_native_suites, runtime_config_from_settings
 from openbias.policy.compiler.runtime import compile_runtime_config_for_evaluator
 from openbias.policy.registry import PolicyEngineRegistry
 from openbias.replay import ReplayRunner
@@ -48,26 +48,6 @@ async def build_engine_for_policy(
         rules_path=rules_path,
     )
     return await PolicyEngineRegistry.create_and_initialize(evaluator.type, compiled)
-
-
-def _eval_runtime_from_settings(settings: Settings) -> EvalRuntimeConfig:
-    evaluators = getattr(settings, "evaluators", [])
-    if isinstance(evaluators, list) and evaluators:
-        phase = evaluators[0].phase
-        request_phase_enabled = phase == "pre_call"
-        response_phase_enabled = phase == "post_call"
-    else:
-        request_phase_enabled = True
-        response_phase_enabled = True
-
-    return EvalRuntimeConfig(
-        request_phase_enabled=request_phase_enabled,
-        response_phase_enabled=response_phase_enabled,
-        mode=settings.mode,
-        fail_action=settings.fail_action,
-        strategy=settings.strategy,
-    )
-
 
 async def compare_policy_runs(
     *,
@@ -105,7 +85,7 @@ async def compare_policy_runs(
 
     try:
         suite_results: list[SuiteComparison] = []
-        eval_runner = EvalRunner(runtime=_eval_runtime_from_settings(settings))
+        eval_runner = EvalRunner(runtime=runtime_config_from_settings(settings))
         for suite in load_native_suites(base_dir / "evals" / "suites"):
             baseline_run = await eval_runner.run(baseline_engine, suite)
             candidate_run = await eval_runner.run(candidate_engine, suite)

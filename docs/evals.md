@@ -152,9 +152,11 @@ The import layer does not guess missing labels. If the dataset cannot explicitly
 ## Running From Python
 
 ```python
-from openbias.eval import EvalRunner, load_native_suites
+from openbias.config.settings import Settings
+from openbias.eval import EvalRunner, load_native_suites, runtime_config_from_settings
 
-runner = EvalRunner()
+settings = Settings()
+runner = EvalRunner(runtime=runtime_config_from_settings(settings))
 suites = load_native_suites("evals/suites")
 
 for suite in suites:
