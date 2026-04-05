@@ -83,7 +83,7 @@ Conversation where the assistant violates policy, gets corrected, and returns to
 evals/
 ├── <engine_type>/
 │   ├── openbias.yaml       # Engine config + eval settings
-│   ├── rules.md            # Authored policy for this eval fixture
+│   ├── RULES.md            # Authored policy for this eval fixture
 │   ├── happy_path.json
 │   ├── policy_violation.json
 │   └── edge_case.json
@@ -110,7 +110,7 @@ eval:
       - '{"scores": [{"criterion": "policy_compliance", "score": 1, "max_score": 1, "reasoning": "Clean response"}], "summary": "Pass"}'
 ```
 
-Put the authored policy text in sibling `rules.md`, for example:
+Put the authored policy text in sibling `RULES.md`, for example:
 
 ```md
 - Never provide financial advice.
@@ -128,7 +128,7 @@ Mock responses are consumed **sequentially across all scenarios, sorted alphabet
 - `score: 1` → `EvaluationStatus.ALLOW`
 - `score: 0` → `EvaluationStatus.VIOLATION`
 
-**FSM engine:** Uses real classification (tool call → regex → embeddings), no mock needed for most scenarios. Keep authored policy in `rules.md`; the eval runtime compiles it into the internal workflow automatically.
+**FSM engine:** Uses real classification (tool call → regex → embeddings), no mock needed for most scenarios. Keep authored policy in `RULES.md`; the eval runtime compiles it into the internal workflow automatically.
 
 ## Running Evals
 
