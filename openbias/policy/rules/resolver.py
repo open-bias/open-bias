@@ -9,7 +9,7 @@ _BULLET_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)(.+)$")
 _HEADING_RE = re.compile(r"^\s*#{1,6}\s*(.+?)\s*$")
 
 POLICY_FILENAME = "RULES.md"
-LEGACY_POLICY_FILENAME = "RULES.md"
+LEGACY_POLICY_FILENAME = "rules.md"
 
 
 def _segment_freeform_text(raw_text: str) -> list[str]:
