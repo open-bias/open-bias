@@ -595,6 +595,69 @@ def replay(
     help="Path to openbias.yaml config file",
 )
 @click.option(
+    "--trace",
+    "trace_paths",
+    type=click.Path(exists=True, path_type=Path),
+    multiple=True,
+    required=True,
+    help="Replayable trace JSONL dataset (repeatable)",
+)
+@click.option(
+    "--instruction",
+    type=str,
+    required=True,
+    help="How the generated policy variants should differ from baseline rules.md",
+)
+@click.option(
+    "--variant-count",
+    type=int,
+    default=3,
+    show_default=True,
+    help="Number of generated candidate policy variants to evaluate alongside baseline",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(path_type=Path),
+    default=Path(".openbias/reports/latest"),
+    help="Directory for improvement.json, improvement.md, and generated variants",
+)
+@click.option(
+    "--debug/--no-debug",
+    default=False,
+    help="Enable debug logging",
+)
+def improve(
+    config: Path | None,
+    trace_paths: tuple[Path, ...],
+    instruction: str,
+    variant_count: int,
+    output_dir: Path,
+    debug: bool,
+) -> None:
+    """Generate and replay policy variants, then recommend one for review."""
+    configure_logging(debug=debug)
+    _require_config(config)
+
+    from openbias.cli_improve import run_improve
+
+    run_improve(
+        config=config,
+        trace_paths=trace_paths,
+        instruction=instruction,
+        variant_count=variant_count,
+        output_dir=output_dir,
+    )
+
+
+@main.command()
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to openbias.yaml config file",
+)
+@click.option(
     "--candidate",
     "candidate_policy_path",
     type=click.Path(exists=True, path_type=Path),

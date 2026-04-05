@@ -8,9 +8,9 @@ import json
 from pathlib import Path
 
 from openbias.cli_ui import config_panel, error, key_value, spinner, success
-from openbias.compare import build_engine_for_policy
 from openbias.config.settings import Settings
 from openbias.eval import EvalRunner, discover_native_suite_paths, load_native_suite, runtime_config_from_settings
+from openbias.policy.build import build_engine_for_policy
 
 
 def _resolve_eval_suite_paths(

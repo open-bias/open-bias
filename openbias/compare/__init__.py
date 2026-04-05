@@ -2,7 +2,6 @@
 
 from openbias.compare.runner import (
     build_comparison_result,
-    build_engine_for_policy,
     compare_policy_runs,
     render_comparison_markdown,
 )
@@ -14,7 +13,6 @@ __all__ = [
     "SuiteComparison",
     "TraceComparison",
     "build_comparison_result",
-    "build_engine_for_policy",
     "compare_policy_runs",
     "render_comparison_markdown",
 ]

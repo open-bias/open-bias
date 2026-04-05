@@ -478,6 +478,39 @@ class TestCompareCommand:
                 mock_run_compare.assert_called_once()
 
 
+class TestImproveCommand:
+    def test_improve_requires_trace(self):
+        result, _ = _invoke(["improve", "--instruction", "tighten the policy"])
+        assert result.exit_code != 0
+
+    def test_improve_requires_instruction(self):
+        result, _ = _invoke(["improve"])
+        assert result.exit_code != 0
+
+    def test_improve_delegates_to_cli_improve_module(self):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n")
+            Path("openbias.yaml").write_text(
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: behavior\n"
+                "    type: judge\n"
+                "    phase: post_call\n"
+            )
+            Path("trace.jsonl").write_text(
+                '{"id":"trace-1","session_id":"sess-1","messages":[{"role":"user","content":"hello"},{"role":"assistant","content":"hi"}]}\n'
+            )
+
+            with patch("openbias.cli_improve.run_improve") as mock_run_improve:
+                result = runner.invoke(
+                    main,
+                    ["improve", "--trace", "trace.jsonl", "--instruction", "tighten the policy"],
+                )
+                assert result.exit_code == 0
+                mock_run_improve.assert_called_once()
+
+
 class TestReviewPackCommand:
     def test_review_pack_delegates_to_cli_review_module(self):
         runner = CliRunner()

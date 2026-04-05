@@ -18,36 +18,9 @@ from openbias.compare.schema import (
 )
 from openbias.config.settings import Settings
 from openbias.eval import EvalRunner, load_native_suites, runtime_config_from_settings
-from openbias.policy.compiler.runtime import compile_runtime_config_for_evaluator
-from openbias.policy.registry import PolicyEngineRegistry
+from openbias.policy.build import build_engine_for_policy
 from openbias.replay import ReplayRunner
 from openbias.traces import load_trace_dataset
-
-
-async def build_engine_for_policy(
-    *,
-    settings: Settings,
-    config_path: Path | None,
-    rules_path: Path,
-) -> Any:
-    if not settings.evaluators:
-        raise ValueError("Policy comparison requires at least one configured evaluator.")
-
-    evaluator = settings.evaluators[0]
-    evaluator_config = dict(evaluator.config)
-    settings.inject_default_model(
-        evaluator.type, evaluator_config, settings.proxy.default_model
-    )
-    base_dir = (config_path.parent if config_path else Path.cwd()).resolve()
-    compiled = await compile_runtime_config_for_evaluator(
-        evaluator_name=evaluator.name,
-        evaluator_type=evaluator.type,
-        evaluator_config=evaluator_config,
-        default_model=settings.proxy.default_model,
-        base_dir=base_dir,
-        rules_path=rules_path,
-    )
-    return await PolicyEngineRegistry.create_and_initialize(evaluator.type, compiled)
 
 async def compare_policy_runs(
     *,
