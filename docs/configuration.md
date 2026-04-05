@@ -186,7 +186,7 @@ When `tracing.type: langfuse`:
 
 ### JSONL Trace Sink
 
-When `tracing.type: jsonl`, Open Bias writes one replayable request/response pair per line to a local JSONL dataset. This is intended for offline replay and policy comparison workflows.
+When `tracing.type: jsonl`, Open Bias writes one replayable request/response pair per line to a local JSONL dataset. This is intended for offline replay and policy improvement workflows.
 
 ```yaml
 tracing:
@@ -202,12 +202,11 @@ tracing:
 These datasets are the handoff point into the continuous-improvement loop:
 
 - `openbias replay --trace ...` re-runs the current policy against captured traffic
-- `openbias compare --candidate ... --trace ...` measures baseline vs candidate deltas
-- `openbias review-pack --comparison ...` turns comparison output into a reviewer-facing artifact
+- `openbias improve --trace ... --instruction ...` generates variants, replays them, and writes reviewer-facing artifacts
 
-Replay and trace-backed comparison share the same `replay.boundary` setting. They evaluate one boundary only: `response` by default, or `request` when you want request-side detection.
+Replay and improvement share the same `replay.boundary` setting. They evaluate one boundary only: `response` by default, or `request` when you want request-side detection.
 
-Candidate generation itself stays manual or external in OSS. Open Bias only handles capture, replay, comparison, and review packaging.
+Variant generation happens inside `openbias improve`, but human review still decides whether any generated policy should replace `rules.md`.
 
 ## Environment Variables
 
@@ -274,7 +273,7 @@ The evaluators under test are determined by the top-level `evaluators` list.
 
 ## Replay
 
-Configure offline detection replay under the `replay:` section. `openbias replay` and trace-backed `openbias compare` both use this boundary selector.
+Configure offline detection replay under the `replay:` section. `openbias replay` and `openbias improve` both use this boundary selector.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|

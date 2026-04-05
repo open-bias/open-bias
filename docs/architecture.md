@@ -78,7 +78,7 @@ Async evaluator tracing follows a links-canonical model:
 - Next-request application emits `openbias.async.phase=applied` with `openbias.evaluator.phase=async_applied`.
 - Judge verdict details are attached to the active evaluator span only; no standalone fallback `judge_evaluation` span is created.
 
-Replayable JSONL tracing is also the artifact boundary for the offline improvement loop. Captured traffic can be replayed later, compared against a candidate policy, and converted into a review pack without changing the online enforcement path.
+Replayable JSONL tracing is also the artifact boundary for the offline improvement loop. Captured traffic can be replayed later across generated policy variants without changing the online enforcement path.
 
 ### Continuous Improvement Surfaces
 
@@ -86,9 +86,7 @@ The offline improvement loop is intentionally separate from the request path:
 
 - `openbias.traces` stores replayable request/response datasets in a stable JSONL-backed schema.
 - `openbias.replay` reruns captured traces against the current compiled policy.
-- `openbias.compare` runs repo-owned eval suites and optional traces against baseline vs candidate rules.
-- `openbias.review` turns comparison output into approval artifacts for PRs or issues.
-- `openbias.candidates` provides a narrow candidate-provider seam. OSS ships a file-backed provider only, leaving autonomous generation outside the repository.
+- `openbias.improve` generates policy variants from `rules.md`, replays them across captured traces, and writes review artifacts.
 
 This separation keeps runtime enforcement simple while still supporting policy evolution with evidence and human review.
 

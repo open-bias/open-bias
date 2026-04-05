@@ -13,10 +13,10 @@ permissions:
 
 env:
   OPENBIAS_CONFIG_PATH: openbias.yaml
-  OPENBIAS_CANDIDATE_PATH: rules.candidate.md
   OPENBIAS_EVAL_SUITES_PATH: evals/suites
   OPENBIAS_TRACE_GLOB: .openbias/traces/*.jsonl
   OPENBIAS_REPORT_DIR: .openbias/reports/nightly
+  OPENBIAS_IMPROVEMENT_INSTRUCTION: Tighten the policy around refund abuse while preserving benign support workflows.
 
 jobs:
   nightly-improvement:
@@ -36,7 +36,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install openbias
 
-      - name: Run eval, replay, compare, and review-pack flows
+      - name: Run eval, replay, and improve flows
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -62,19 +62,16 @@ jobs:
             printf '{"datasets": []}\n' > "$OPENBIAS_REPORT_DIR/replay.json"
           fi
 
-          if [ -f "$OPENBIAS_CANDIDATE_PATH" ]; then
-            openbias compare \
+          if [ ${#trace_args[@]} -gt 0 ]; then
+            openbias improve \
               --config "$OPENBIAS_CONFIG_PATH" \
-              --candidate "$OPENBIAS_CANDIDATE_PATH" \
               "${trace_args[@]}" \
+              --instruction "$OPENBIAS_IMPROVEMENT_INSTRUCTION" \
               --output-dir "$OPENBIAS_REPORT_DIR"
-            openbias review-pack \
-              --comparison "$OPENBIAS_REPORT_DIR/comparison.json" \
-              --output "$OPENBIAS_REPORT_DIR/review-pack.md"
           else
             printf '%s\n' \
-              "Candidate policy not found. Place a manual or externally generated file at $OPENBIAS_CANDIDATE_PATH to enable nightly comparison." \
-              > "$OPENBIAS_REPORT_DIR/comparison-skipped.txt"
+              "No replayable traces were found. Capture JSONL traces under $OPENBIAS_TRACE_GLOB to enable nightly improvement." \
+              > "$OPENBIAS_REPORT_DIR/improvement-skipped.txt"
           fi
 
       - name: Upload nightly artifacts

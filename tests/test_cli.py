@@ -451,33 +451,6 @@ class TestReplayCommand:
                 mock_run_replay.assert_called_once()
 
 
-class TestCompareCommand:
-    def test_compare_requires_candidate(self):
-        result, _ = _invoke(["compare"])
-        assert result.exit_code != 0
-
-    def test_compare_delegates_to_cli_compare_module(self):
-        runner = CliRunner()
-        with runner.isolated_filesystem():
-            Path("rules.md").write_text("- Be professional\n")
-            Path("rules.candidate.md").write_text("- Be safer\n")
-            Path("openbias.yaml").write_text(
-                "model: gpt-4o-mini\n"
-                "evaluators:\n"
-                "  - name: behavior\n"
-                "    type: judge\n"
-                "    phase: post_call\n"
-            )
-
-            with patch("openbias.cli_compare.run_compare") as mock_run_compare:
-                result = runner.invoke(
-                    main,
-                    ["compare", "--candidate", "rules.candidate.md"],
-                )
-                assert result.exit_code == 0
-                mock_run_compare.assert_called_once()
-
-
 class TestImproveCommand:
     def test_improve_requires_trace(self):
         result, _ = _invoke(["improve", "--instruction", "tighten the policy"])
@@ -511,22 +484,18 @@ class TestImproveCommand:
                 mock_run_improve.assert_called_once()
 
 
-class TestReviewPackCommand:
-    def test_review_pack_delegates_to_cli_review_module(self):
-        runner = CliRunner()
-        with runner.isolated_filesystem():
-            Path("comparison.json").write_text(
-                '{"status":"review","baseline_policy_path":"rules.md","candidate_policy_path":"rules.candidate.md","gates":[],"suites":[],"traces":[]}'
-            )
+class TestLegacyImprovementCommands:
+    def test_compare_command_is_removed(self):
+        result, output = _invoke(["compare"])
+        assert result.exit_code != 0
+        assert "No such command 'compare'" in output
 
-            with patch("openbias.cli_review.run_review_pack") as mock_run_review_pack:
-                result = runner.invoke(
-                    main,
-                    ["review-pack", "--comparison", "comparison.json"],
-                )
-                assert result.exit_code == 0
-                mock_run_review_pack.assert_called_once()
+    def test_review_pack_command_is_removed(self):
+        result, output = _invoke(["review-pack"])
+        assert result.exit_code != 0
+        assert "No such command 'review-pack'" in output
 
+class TestTriggerCommand:
     def test_trigger_success(self):
         """trigger with valid config should show ALLOW output."""
         runner = CliRunner()

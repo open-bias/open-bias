@@ -159,7 +159,7 @@ eval:
     # - ./evals/smoke/*.yaml
 
 # ---------------------------------------------------------------------------
-# Replay / Trace Compare — openbias replay + trace-backed openbias compare
+# Replay / Improvement — openbias replay + openbias improve
 # ---------------------------------------------------------------------------
 # Used by offline detection replay. This does not change serve-time behavior.
 replay:

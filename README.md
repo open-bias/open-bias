@@ -202,11 +202,12 @@ openbias serve -p 8080 -c custom.yaml
 openbias validate openbias.yaml
 openbias info openbias.yaml -v
 
-# Eval, replay, and compare
+# Eval, replay, and improve
 openbias eval
 openbias replay --trace .openbias/traces/2026-04-05.jsonl
-openbias compare --candidate rules.candidate.md --trace .openbias/traces/2026-04-05.jsonl
-openbias review-pack --comparison .openbias/reports/latest/comparison.json
+openbias improve \
+  --trace .openbias/traces/2026-04-05.jsonl \
+  --instruction "Tighten the policy around refund abuse without increasing harmless false positives."
 
 # Trigger / inspect
 openbias trigger
@@ -227,7 +228,7 @@ All hooks are wrapped in `safe_hook()` with configurable timeout (default 30s). 
 
 ## Status
 
-v0.3.0 -- alpha. The proxy layer, four evaluator engines (judge, FSM, LLM, NeMo), rules compiler, replay/compare/review tooling, and OpenTelemetry tracing all work. YAML-first configuration with auto-detection of models and API keys. API surface may change. Session state is in-memory only (not persistent across restarts).
+v0.3.0 -- alpha. The proxy layer, four evaluator engines (judge, FSM, LLM, NeMo), rules compiler, replay/improve tooling, and OpenTelemetry tracing all work. YAML-first configuration with auto-detection of models and API keys. API surface may change. Session state is in-memory only (not persistent across restarts).
 
 Missing: persistent session storage, dashboard UI, pre-built rules library, rate limiting. These are planned but not built.
 

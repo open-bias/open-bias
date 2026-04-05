@@ -108,21 +108,13 @@ openbias replay --trace .openbias/traces/2026-04-05.jsonl
 openbias replay --trace .openbias/traces/2026-04-05.jsonl --json-output replay.json
 ```
 
-### Policy Comparison
+### Policy Improvement
 
 ```bash
-# Compare current rules.md against a candidate policy file
-openbias compare --candidate rules.candidate.md
-
-# Include replayable production traces in the comparison
-openbias compare --candidate rules.candidate.md --trace .openbias/traces/2026-04-05.jsonl
-```
-
-### Review Package
-
-```bash
-# Turn comparison.json into a reviewer-friendly Markdown artifact
-openbias review-pack --comparison .openbias/reports/latest/comparison.json
+# Generate variants from rules.md and replay them across captured traces
+openbias improve \
+  --trace .openbias/traces/2026-04-05.jsonl \
+  --instruction "Tighten the policy around refund abuse while preserving benign support workflows."
 ```
 
 ### Nightly Improvement Workflow
@@ -137,9 +129,9 @@ The example assumes your application repo has:
 - a committed baseline `rules.md`
 - repo-owned eval suites under `evals/suites/`
 - replayable trace files under `.openbias/traces/`
-- an optional `rules.candidate.md` created manually or by an external generator
+- an improvement instruction that describes how policy variants should differ from the baseline
 
-It runs `openbias eval`, `openbias replay`, `openbias compare`, and `openbias review-pack`, then uploads the resulting artifacts.
+It runs `openbias eval`, `openbias replay`, and `openbias improve`, then uploads the resulting artifacts.
 
 Adjust the install step to match your repo. The example defaults to `pip install openbias` so it is easy to copy into an application repository that depends on Open Bias.
 

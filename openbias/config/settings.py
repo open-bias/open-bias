@@ -135,7 +135,7 @@ class EvalConfig(BaseModel):
 
 
 class ReplayConfig(BaseModel):
-    """Offline replay settings shared by replay and trace-backed compare."""
+    """Offline replay settings shared by replay and improve flows."""
 
     boundary: Literal["request", "response"] = "response"
 
