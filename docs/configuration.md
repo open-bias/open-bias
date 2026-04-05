@@ -1,6 +1,6 @@
 # Configuration Reference
 
-Open Bias can enforce rules with no `openbias.yaml` at all. If you have a project-local `rules.md`, the CLI can synthesize a working default evaluator and start the proxy immediately.
+Open Bias can enforce rules with no `openbias.yaml` at all. This repo ships a starter project-local `rules.md` at the root, so you can start the proxy immediately and edit the policy later.
 
 Use `openbias.yaml` when you want explicit project settings such as pinned models, multiple evaluators, tracing, replay boundary selection, or committed offline eval/improvement workflows.
 
@@ -18,7 +18,7 @@ When you run `openbias serve`, `openbias trigger`, `openbias validate`, or `open
 - tracing disabled
 - project-local `rules.md` as the canonical authored policy source
 
-You still need one provider API key in the environment and a local `rules.md` file.
+You still need one provider API key in the environment and a local `rules.md` file. In this repo, the root starter file already fills that role.
 
 ## Effective Settings Sources
 

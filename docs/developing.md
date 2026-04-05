@@ -24,7 +24,7 @@ openbias --help
 ## Running Locally
 
 ```bash
-# Zero-config first run: create rules.md, then start the proxy
+# Zero-config first run from the repo root: starter rules.md is already included
 openbias serve
 
 # Optional: scaffold editable project settings
@@ -36,7 +36,7 @@ openbias init --quick
 # base_url="http://localhost:4000/v1"
 ```
 
-For local enforcement work, `rules.md` is the required authored input. `openbias.yaml` is optional unless you want committed runtime settings or need the offline workflow commands.
+For local enforcement work, `rules.md` is the required authored input. This repo includes a starter one at the root so you can edit it instead of creating it from scratch. `openbias.yaml` is optional unless you want committed runtime settings or need the offline workflow commands.
 
 Override engine selection at startup:
 
@@ -125,7 +125,7 @@ openbias improve \
 
 The OSS repo ships a copyable GitHub Actions example at [`examples/github-actions/nightly-improvement.yml`](../examples/github-actions/nightly-improvement.yml).
 
-That workflow intentionally lives under `examples/` instead of `.github/workflows/` because this repository does not ship a runnable project-local `rules.md`, `openbias.yaml`, and trace history for itself.
+That workflow intentionally lives under `examples/` instead of `.github/workflows/` because this repository still does not ship a runnable project-local `openbias.yaml` and trace history for itself, even though it now includes a starter root `rules.md`.
 
 The example assumes your application repo has:
 
