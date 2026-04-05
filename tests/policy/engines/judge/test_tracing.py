@@ -24,7 +24,7 @@ async def test_trace_verdict_emits_rule_scoped_payload():
                 {"name": "judge-b", "model": "gpt-4.1-mini"},
             ],
             "_compiled_rules": ["Rule A"],
-            "_rules_source": "rules.md",
+            "_rules_source": "RULES.md",
         }
     )
 
@@ -50,7 +50,7 @@ async def test_trace_verdict_emits_rule_scoped_payload():
 
     assert tracer.calls
     trace_call = tracer.calls[0]
-    assert trace_call["rules_source"] == "rules.md"
+    assert trace_call["rules_source"] == "RULES.md"
     assert trace_call["evaluator_name"] == "judge"
     assert trace_call["scope"] == "turn"
     assert trace_call["action"] == "intervene"

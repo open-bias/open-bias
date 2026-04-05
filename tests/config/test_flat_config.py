@@ -218,7 +218,7 @@ class TestEvaluatorYamlMapping:
                     "name": "behavior",
                     "type": "judge",
                     "phase": "post_call",
-                    "rules_file": "./rules.md",
+                    "rules_file": "./RULES.md",
                 },
             ],
         })
@@ -240,7 +240,7 @@ class TestEvaluatorYamlMapping:
             source._map_evaluators(source._yaml_data)
 
         message = str(exc_info.value)
-        assert "project-local `rules.md`" in message
+        assert "project-local `RULES.md`" in message
         assert "not user-authored" in message
 
     def test_judge_extra_keys_in_config(self):
@@ -269,7 +269,7 @@ class TestEvaluatorYamlMapping:
                     "name": "workflow",
                     "type": "fsm",
                     "phase": "post_call",
-                    "rules_file": "./workflow-rules.md",
+                    "rules_file": "./workflow-RULES.md",
                 },
             ],
         })
@@ -284,7 +284,7 @@ class TestEvaluatorYamlMapping:
                     "name": "nemo-rails",
                     "type": "nemo",
                     "phase": "post_call",
-                    "rules_file": "./nemo-rules.md",
+                    "rules_file": "./nemo-RULES.md",
                 },
             ],
         })

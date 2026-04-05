@@ -326,7 +326,7 @@ class TestJudgeEngineConformance:
         await engine.initialize({
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "_compiled_rules": ["Be helpful", "Be safe"],
-            "_rules_source": "rules.md",
+            "_rules_source": "RULES.md",
         })
 
         async def mock_evaluate_rule(*, model_name, rule, **kwargs):

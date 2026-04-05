@@ -40,7 +40,7 @@ def test_run_improve_writes_artifacts_and_reports_winner(
             variant_id="candidate-1",
             policy_path=str(variant_path),
             provenance=VariantProvenance(
-                baseline_policy_path=str(tmp_path / "rules.md"),
+                baseline_policy_path=str(tmp_path / "RULES.md"),
                 instruction="tighten the policy",
                 variant_id="candidate-1",
                 generated_policy_path=str(variant_path),
@@ -49,7 +49,7 @@ def test_run_improve_writes_artifacts_and_reports_winner(
         return ImprovementResult(
             status="pass",
             boundary="request",
-            baseline_policy_path=str(tmp_path / "rules.md"),
+            baseline_policy_path=str(tmp_path / "RULES.md"),
             instruction="tighten the policy",
             variants=[
                 ImprovementVariantResult(

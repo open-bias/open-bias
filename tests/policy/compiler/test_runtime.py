@@ -18,11 +18,11 @@ from openbias.policy.compiler.runtime import compile_runtime_config_for_evaluato
 
 @pytest.mark.asyncio
 async def test_judge_compiles_from_project_rules_md_only(tmp_path: Path):
-    """Judge receives internal compiled rules from project rules.md."""
-    (tmp_path / "rules.md").write_text("- Be helpful\n- No secrets\n", encoding="utf-8")
+    """Judge receives internal compiled rules from project RULES.md."""
+    (tmp_path / "RULES.md").write_text("- Be helpful\n- No secrets\n", encoding="utf-8")
     fake_result = CompilationResult(
         success=True,
-        config={"_compiled_rules": ["Be helpful", "No secrets"], "_rules_source": "rules.md"},
+        config={"_compiled_rules": ["Be helpful", "No secrets"], "_rules_source": "RULES.md"},
     )
     mock_compiler = AsyncMock()
     mock_compiler.compile = AsyncMock(return_value=fake_result)
@@ -40,17 +40,17 @@ async def test_judge_compiles_from_project_rules_md_only(tmp_path: Path):
         )
 
     assert result["_compiled_rules"] == ["Be helpful", "No secrets"]
-    assert result["_rules_source"] == "rules.md"
+    assert result["_rules_source"] == "RULES.md"
     assert result["temperature"] == 0.2
 
 
 @pytest.mark.asyncio
 async def test_judge_uses_registered_compiler_and_merges_result(tmp_path: Path):
     """Judge follows the shared runtime compiler registry flow."""
-    (tmp_path / "rules.md").write_text("- Guard secrets\n- Stay on task\n", encoding="utf-8")
+    (tmp_path / "RULES.md").write_text("- Guard secrets\n- Stay on task\n", encoding="utf-8")
     fake_result = CompilationResult(
         success=True,
-        config={"_compiled_rules": ["Guard secrets", "Stay on task"], "_rules_source": "rules.md"},
+        config={"_compiled_rules": ["Guard secrets", "Stay on task"], "_rules_source": "RULES.md"},
     )
 
     mock_compiler = AsyncMock()
@@ -69,7 +69,7 @@ async def test_judge_uses_registered_compiler_and_merges_result(tmp_path: Path):
         )
 
     assert result["_compiled_rules"] == ["Guard secrets", "Stay on task"]
-    assert result["_rules_source"] == "rules.md"
+    assert result["_rules_source"] == "RULES.md"
     mock_compiler.compile.assert_awaited_once_with(
         "Guard secrets\nStay on task",
         context=None,
@@ -78,8 +78,8 @@ async def test_judge_uses_registered_compiler_and_merges_result(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_judge_without_project_rules_md_fails(tmp_path: Path):
-    """Judge fails fast when project rules.md is missing."""
-    with pytest.raises(ValueError, match="requires project rules.md"):
+    """Judge fails fast when project RULES.md is missing."""
+    with pytest.raises(ValueError, match="requires project RULES.md"):
         await compile_runtime_config_for_evaluator(
             evaluator_name="safety",
             evaluator_type="judge",
@@ -97,7 +97,7 @@ async def test_judge_without_project_rules_md_fails(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_fsm_compiles_with_workflow_context(tmp_path: Path):
     """FSM compilation passes simple_config context and stores workflow result."""
-    (tmp_path / "rules.md").write_text("Step 1: greet user", encoding="utf-8")
+    (tmp_path / "RULES.md").write_text("Step 1: greet user", encoding="utf-8")
     fake_workflow = {"name": "test", "states": []}
     fake_result = CompilationResult(success=True, config=fake_workflow)
 
@@ -131,7 +131,7 @@ async def test_fsm_compiles_with_workflow_context(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_nemo_compiles_and_exports(tmp_path: Path):
     """NeMo compilation exports to runtime dir and stores config_path."""
-    (tmp_path / "rules.md").write_text("Always be safe", encoding="utf-8")
+    (tmp_path / "RULES.md").write_text("Always be safe", encoding="utf-8")
     fake_result = CompilationResult(success=True, config={"rails": {}})
 
     mock_compiler = AsyncMock()
@@ -163,7 +163,7 @@ async def test_nemo_compiles_and_exports(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_compilation_failure_raises(tmp_path: Path):
     """A failed compilation raises ValueError with the evaluator name."""
-    (tmp_path / "rules.md").write_text("Be safe", encoding="utf-8")
+    (tmp_path / "RULES.md").write_text("Be safe", encoding="utf-8")
     with patch(
         "openbias.policy.compiler.runtime.PolicyCompilerRegistry.get",
         return_value=None,
@@ -180,7 +180,7 @@ async def test_compilation_failure_raises(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_no_registered_compiler_raises(tmp_path: Path):
     """Raises when no compiler is registered for the evaluator type."""
-    (tmp_path / "rules.md").write_text("Some rule", encoding="utf-8")
+    (tmp_path / "RULES.md").write_text("Some rule", encoding="utf-8")
     with patch(
         "openbias.policy.compiler.runtime.PolicyCompilerRegistry.get",
         return_value=None,
@@ -197,8 +197,8 @@ async def test_no_registered_compiler_raises(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_fallback_to_compiler_registry(tmp_path: Path):
-    """Compiler registry fallback still works with project rules.md."""
-    (tmp_path / "rules.md").write_text("Be safe", encoding="utf-8")
+    """Compiler registry fallback still works with project RULES.md."""
+    (tmp_path / "RULES.md").write_text("Be safe", encoding="utf-8")
     fake_result = CompilationResult(success=True, config={"compiled": True})
     mock_compiler = AsyncMock()
     mock_compiler.compile = AsyncMock(return_value=fake_result)
@@ -224,7 +224,7 @@ async def test_fallback_to_compiler_registry(tmp_path: Path):
     [
         (
             "judge",
-            {"_compiled_rules": ["Rule one", "Rule two"], "_rules_source": "rules.md"},
+            {"_compiled_rules": ["Rule one", "Rule two"], "_rules_source": "RULES.md"},
         ),
         ("fsm", {"states": [{"name": "start"}]}),
         ("llm", {"steps": [{"name": "guard"}]}),
@@ -236,8 +236,8 @@ async def test_shared_runtime_flow_uses_project_rules_md_for_all_engines(
     evaluator_type: str,
     compiled_config: dict,
 ):
-    """Every registered engine compiles from project rules.md only."""
-    (tmp_path / "rules.md").write_text("- Rule one\n- Rule two\n", encoding="utf-8")
+    """Every registered engine compiles from project RULES.md only."""
+    (tmp_path / "RULES.md").write_text("- Rule one\n- Rule two\n", encoding="utf-8")
     fake_result = CompilationResult(success=True, config=compiled_config)
 
     mock_compiler = AsyncMock()
@@ -274,7 +274,7 @@ async def test_shared_runtime_flow_uses_project_rules_md_for_all_engines(
 
     if evaluator_type == "judge":
         assert result["_compiled_rules"] == ["Rule one", "Rule two"]
-        assert result["_rules_source"] == "rules.md"
+        assert result["_rules_source"] == "RULES.md"
     elif evaluator_type in {"fsm", "llm"}:
         assert result["workflow"] == compiled_config
     else:
@@ -292,10 +292,10 @@ async def test_runtime_preserves_allowed_runtime_knobs_without_legacy_rule_input
     tmp_path: Path,
 ):
     """Valid runtime config keeps allowed knobs and never reintroduces legacy rule inputs."""
-    (tmp_path / "rules.md").write_text("Rule one", encoding="utf-8")
+    (tmp_path / "RULES.md").write_text("Rule one", encoding="utf-8")
     fake_result = CompilationResult(
         success=True,
-        config={"_compiled_rules": ["Rule one"], "_rules_source": "rules.md"},
+        config={"_compiled_rules": ["Rule one"], "_rules_source": "RULES.md"},
     )
     mock_compiler = AsyncMock()
     mock_compiler.compile = AsyncMock(return_value=fake_result)
@@ -323,8 +323,8 @@ async def test_runtime_preserves_allowed_runtime_knobs_without_legacy_rule_input
 async def test_all_runtime_engines_require_project_rules_md(
     tmp_path: Path, evaluator_type: str
 ):
-    """Missing rules.md should fail before any engine-specific compile step runs."""
-    with pytest.raises(ValueError, match="requires project rules.md"):
+    """Missing RULES.md should fail before any engine-specific compile step runs."""
+    with pytest.raises(ValueError, match="requires project RULES.md"):
         await compile_runtime_config_for_evaluator(
             evaluator_name="missing-rules",
             evaluator_type=evaluator_type,

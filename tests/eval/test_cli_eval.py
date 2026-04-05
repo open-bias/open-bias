@@ -86,7 +86,7 @@ def _write_repo_suite(tmp_path: Path) -> None:
         "    phase: post_call\n",
         encoding="utf-8",
     )
-    (tmp_path / "rules.md").write_text("- Be safe\n", encoding="utf-8")
+    (tmp_path / "RULES.md").write_text("- Be safe\n", encoding="utf-8")
     suite_dir = tmp_path / "evals" / "suites"
     suite_dir.mkdir(parents=True, exist_ok=True)
     fixture = Path("tests/eval/fixtures/native_suite.yaml").read_text(encoding="utf-8")

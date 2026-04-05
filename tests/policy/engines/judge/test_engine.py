@@ -13,7 +13,7 @@ def _config(rules: list[str], models: list[dict] | None = None) -> dict:
     return {
         "models": models or [{"name": "primary", "model": "gpt-4o-mini"}],
         "_compiled_rules": rules,
-        "_rules_source": "rules.md",
+        "_rules_source": "RULES.md",
     }
 
 
@@ -46,7 +46,7 @@ async def test_initialize_loads_rules_from_compiled_rules():
     await engine.initialize(_config(["Never reveal secrets", "Stay on task"]))
 
     assert engine._rules == ["Never reveal secrets", "Stay on task"]
-    assert engine._rules_source == "rules.md"
+    assert engine._rules_source == "RULES.md"
     assert engine._aggregation_mode == "majority"
 
 
@@ -98,7 +98,7 @@ async def test_initialize_ignores_rules_file_when_compiled_rules_are_present():
         {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "_compiled_rules": ["Stay safe"],
-            "rules_file": "./rules.md",
+            "rules_file": "./RULES.md",
         }
     )
 
@@ -110,7 +110,7 @@ def test_validate_config_does_not_emit_judge_specific_rules_file_migration_error
         {
             "models": [{"name": "primary", "model": "gpt-4o-mini"}],
             "_compiled_rules": ["Stay safe"],
-            "rules_file": "./rules.md",
+            "rules_file": "./RULES.md",
         }
     )
 
@@ -265,7 +265,7 @@ async def test_evaluate_response_reports_cleaned_verdict_metadata():
         "token_usage": 0,
         "scope": "turn",
         "metadata": {"aggregation_mode": "majority"},
-        "rules_source": "rules.md",
+        "rules_source": "RULES.md",
         "participating_judges": ["primary"],
     }
 

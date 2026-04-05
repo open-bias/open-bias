@@ -94,7 +94,7 @@ def _policy_variant(
 ) -> PolicyVariant:
     variants_dir = tmp_path / "reports" / "variants"
     variants_dir.mkdir(parents=True, exist_ok=True)
-    baseline_path = tmp_path / "rules.md"
+    baseline_path = tmp_path / "RULES.md"
     if not baseline_path.exists():
         baseline_path.write_text("- Baseline\n", encoding="utf-8")
     policy_path = variants_dir / f"{variant_id}.md"
@@ -137,7 +137,7 @@ async def test_generate_variants_includes_baseline_instruction_and_output_files(
 ):
     config_path = tmp_path / "openbias.yaml"
     config_path.write_text("model: gpt-4o-mini\n", encoding="utf-8")
-    (tmp_path / "rules.md").write_text("- Keep responses safe\n", encoding="utf-8")
+    (tmp_path / "RULES.md").write_text("- Keep responses safe\n", encoding="utf-8")
 
     async def _fake_request_variant_documents(**kwargs) -> list[str]:
         assert kwargs["instruction"] == "tighten the policy"
@@ -327,7 +327,7 @@ def test_render_improvement_markdown_includes_winner_and_ranking(tmp_path: Path)
         ImprovementResult(
             status="pass",
             boundary="request",
-            baseline_policy_path=str(tmp_path / "rules.md"),
+            baseline_policy_path=str(tmp_path / "RULES.md"),
             instruction="tighten the policy",
             winner_variant_id="candidate-1",
             winner_policy_path=variant.policy_path,

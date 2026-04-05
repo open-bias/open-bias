@@ -101,14 +101,14 @@ class TestConfigValidation:
         ("disallowed_key", "value"),
         [
             ("rules", ["Do not leak secrets"]),
-            ("rules_file", "./rules.md"),
+            ("rules_file", "./RULES.md"),
             ("workflow", {"states": []}),
         ],
     )
     def test_validate_rejects_user_authored_policy_keys_in_evaluator_config(
         self, disallowed_key, value
     ):
-        """Direct Settings config must enforce the same rules.md-only contract as YAML."""
+        """Direct Settings config must enforce the same RULES.md-only contract as YAML."""
         settings = Settings(
             evaluators=[
                 {
@@ -144,7 +144,7 @@ class TestConfigValidation:
             _env_file=None,
         )
 
-        with pytest.raises(ValueError, match="project-local `rules.md`"):
+        with pytest.raises(ValueError, match="project-local `RULES.md`"):
             settings.validate()
 
     def test_invalid_replay_boundary_is_rejected(self):

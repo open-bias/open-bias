@@ -96,7 +96,7 @@ class TestAsyncEvalSpanNesting:
             ) as evaluator_span:
                 tracer.log_judge_evaluation(
                     session_id=session_id,
-                    rules_source="rules.md",
+                    rules_source="RULES.md",
                     scope="turn",
                     action="pass",
                     participating_judges=["judge-a"],
@@ -135,7 +135,7 @@ class TestAsyncEvalSpanNesting:
         assert evaluator.parent.span_id == phase.context.span_id
 
         # judge details are attached directly to evaluator span
-        assert evaluator.attributes["openbias.judge.rules_source"] == "rules.md"
+        assert evaluator.attributes["openbias.judge.rules_source"] == "RULES.md"
         assert evaluator.attributes["openbias.judge.action"] == "pass"
         assert evaluator.attributes["openbias.judge.scope"] == "turn"
         assert evaluator.attributes["openbias.judge.rules_count"] == 1
@@ -223,7 +223,7 @@ class TestAsyncEvalSpanNesting:
             ) as eval_span:
                 tracer.log_judge_evaluation(
                     session_id=session_id,
-                    rules_source="rules.md",
+                    rules_source="RULES.md",
                     scope="turn",
                     action="pass",
                     participating_judges=["judge-a"],
@@ -245,7 +245,7 @@ class TestAsyncEvalSpanNesting:
 
         tracer.log_judge_evaluation(
             session_id=session_id,
-            rules_source="rules.md",
+            rules_source="RULES.md",
             scope="turn",
             action="intervene",
             participating_judges=["judge-x"],
