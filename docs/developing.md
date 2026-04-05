@@ -24,15 +24,19 @@ openbias --help
 ## Running Locally
 
 ```bash
-# Initialize config (creates openbias.yaml)
-openbias init
-
-# Start the proxy
+# Zero-config first run: create rules.md, then start the proxy
 openbias serve
+
+# Optional: scaffold editable project settings
+openbias init
+# or
+openbias init --quick
 
 # Point any OpenAI-compatible client at the proxy
 # base_url="http://localhost:4000/v1"
 ```
+
+For local enforcement work, `rules.md` is the required authored input. `openbias.yaml` is optional unless you want committed runtime settings or need the offline workflow commands.
 
 Override engine selection at startup:
 

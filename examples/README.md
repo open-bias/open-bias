@@ -1,6 +1,6 @@
 # Examples
 
-Each example is a self-contained directory with an `openbias.yaml` config, a project-local `rules.md`, and a Python client script. Start the proxy in one terminal, run the client in another.
+Each example is a self-contained directory with an `openbias.yaml` config, a project-local `rules.md`, and a Python client script. The examples pin explicit configs so each scenario is reproducible, but the product itself does not require YAML for a first run. If you are just trying Open Bias, you can start in any directory with `rules.md` plus `openbias serve`.
 
 **Provider-agnostic**: every example auto-detects the model from whichever API key you have set. Set exactly one of `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `ANTHROPIC_API_KEY`.
 

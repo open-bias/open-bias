@@ -2,6 +2,8 @@
 
 Open Bias is not just a response-time enforcement layer. It also gives you a reviewable improvement loop for business rules that change over time.
 
+This workflow is intentionally more structured than the zero-config first run. `openbias eval`, `openbias replay`, and `openbias improve` require a committed `openbias.yaml` alongside your baseline `rules.md`.
+
 The OSS boundary is deliberate:
 
 - `rules.md` stays the only human-edited source of truth.
@@ -30,6 +32,9 @@ This creates replayable datasets that feed `openbias replay` and `openbias impro
 ## Local Walkthrough
 
 ```bash
+# 0. If you started zero-config, add project settings once (for example:)
+openbias init --quick
+
 # 1. Capture replayable traces while serving traffic
 openbias serve
 

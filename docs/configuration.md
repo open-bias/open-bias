@@ -1,10 +1,31 @@
 # Configuration Reference
 
-OpenBias reads configuration from three sources, applied in this order (highest priority wins):
+Open Bias can enforce rules with no `openbias.yaml` at all. If you have a project-local `rules.md`, the CLI can synthesize a working default evaluator and start the proxy immediately.
 
-1. `openbias.yaml` (or `openbias.yml`) in the working directory
-2. API key environment variables (e.g., `OPENAI_API_KEY`)
-3. Built-in defaults
+Use `openbias.yaml` when you want explicit project settings such as pinned models, multiple evaluators, tracing, replay boundary selection, or committed offline eval/improvement workflows.
+
+## Zero-Config Defaults
+
+When you run `openbias serve`, `openbias trigger`, `openbias validate`, or `openbias info` without a config file, Open Bias resolves:
+
+- a synthesized `judge` evaluator
+- `mode: sync`
+- `fail_action: intervene`
+- `strategy: user_message_inject`
+- proxy port `4000`
+- tracing disabled
+- project-local `rules.md` as the canonical authored policy source
+
+You still need one provider API key in the environment and a local `rules.md` file.
+
+## Effective Settings Sources
+
+Open Bias resolves runtime behavior from these sources:
+
+1. CLI flags for the active command (for example `openbias serve --port 8080`)
+2. `openbias.yaml` (or `openbias.yml`) when present
+3. API key environment variables and `.env` files for provider credentials
+4. Built-in defaults / synthesized evaluator settings
 
 API keys are always read from environment variables or `.env` files. Never put keys in YAML.
 
@@ -21,6 +42,8 @@ If none are found, all settings use defaults.
 
 ## Minimal Config
 
+This file is optional. If you do want to commit project settings, the smallest useful config is:
+
 ```yaml
 evaluators:
   - type: judge
@@ -32,6 +55,21 @@ evaluators:
 ```
 
 This uses a single judge evaluator, project-local `rules.md`, runtime-compiled rules, an auto-detected model, and the default port 4000.
+
+## Command Expectations
+
+These CLI commands can run from synthesized defaults plus local `rules.md`:
+
+- `openbias serve`
+- `openbias trigger`
+- `openbias validate`
+- `openbias info`
+
+These commands currently require `openbias.yaml` because they depend on committed offline project settings:
+
+- `openbias eval`
+- `openbias replay`
+- `openbias improve`
 
 ## Global Settings
 
@@ -288,7 +326,7 @@ Offline replay and improvement currently build a single engine from the first en
 
 ## Config Validation
 
-The `openbias serve` command validates configuration at startup:
+The `openbias serve` command validates configuration at startup, whether settings came from YAML or synthesized defaults:
 
 - Checks that required project policy files such as `rules.md` are present when compilation is needed
 - Verifies that the required API key is present for the configured model (skipped for `fsm`, which is local-only)
