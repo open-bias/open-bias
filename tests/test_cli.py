@@ -71,7 +71,7 @@ class TestValidateCommand:
         result, _ = _invoke(["validate", "nonexistent.yaml"])
         assert result.exit_code != 0
 
-
+    @patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True)
     def test_validate_good_judge_config(self):
         """validate with a valid openbias.yaml should show summary."""
         runner = CliRunner()
@@ -127,7 +127,7 @@ class TestValidateCommand:
 
             combined = result.output + buf.getvalue()
             assert result.exit_code != 0
-            assert "No model configured" in combined
+            assert "No LLM API keys detected" in combined
 
     def test_validate_judge_config_missing_rules_md(self):
         """validate fails when project rules.md is missing."""
@@ -155,12 +155,14 @@ class TestValidateCommand:
 
             combined = result.output + buf.getvalue()
             assert result.exit_code != 0
-            assert "requires project rules.md" in combined
+            assert "Missing required project policy file: rules.md" in combined
 
+    @patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True)
     def test_validate_llm_config_reports_evaluator_engine_type(self):
         """Evaluator-only configs should summarize the active evaluator type."""
         runner = CliRunner()
         with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n")
             Path("openbias.yaml").write_text(
                 "model: gpt-4o-mini\n"
                 "evaluators:\n"
@@ -240,21 +242,26 @@ class TestServeCommand:
         result, _ = _invoke(["serve", "--config", "nonexistent.yaml"])
         assert result.exit_code != 0
 
-    def test_serve_no_yaml_prompts_init(self):
-        """serve without an openbias.yaml should tell user to run openbias init."""
+    @patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True)
+    def test_serve_no_yaml_uses_zero_config_defaults(self):
+        """serve should boot from synthesized defaults when only rules.md exists."""
         runner = CliRunner()
         with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n")
             buf = StringIO()
             from openbias.cli_ui import console
             old_file = console.file
             console.file = buf
             try:
-                result = runner.invoke(main, ["serve"])
+                with patch("openbias.proxy.server.start_proxy"):
+                    result = runner.invoke(main, ["serve"])
             finally:
                 console.file = old_file
             combined = result.output + buf.getvalue()
-            assert result.exit_code != 0
-            assert "openbias init" in combined
+            assert result.exit_code == 0
+            assert "Using built-in defaults" in combined
+            assert "judge" in combined
+            assert "gpt-4o-mini" in combined
 
     def test_serve_with_yaml_proceeds(self):
         """serve with an openbias.yaml should pass the gate and attempt startup."""
@@ -276,6 +283,25 @@ class TestServeCommand:
             # Should NOT fail with the init-gate error
             combined = result.output
             assert "openbias init" not in combined or result.exit_code == 0
+
+    @patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True)
+    def test_serve_missing_rules_md_prints_starter_guidance(self):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            buf = StringIO()
+            from openbias.cli_ui import console
+
+            old_file = console.file
+            console.file = buf
+            try:
+                result = runner.invoke(main, ["serve"])
+            finally:
+                console.file = old_file
+
+            combined = result.output + buf.getvalue()
+            assert result.exit_code != 0
+            assert "Missing required project policy file: rules.md" in combined
+            assert "Starter rules.md" in combined
 
     def test_serve_compiles_rules_before_start(self):
         runner = CliRunner()
@@ -408,21 +434,25 @@ class TestTriggerCommand:
         assert result.exit_code == 0
         assert "usage" in output.lower() or "Usage" in output
 
-    def test_trigger_no_config(self):
-        """trigger without openbias.yaml should show error with openbias init hint."""
+    @patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True)
+    def test_trigger_no_config_uses_zero_config_defaults(self):
+        """trigger should resolve synthesized defaults with only rules.md present."""
         runner = CliRunner()
         with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be professional\n")
             buf = StringIO()
             from openbias.cli_ui import console
             old_file = console.file
             console.file = buf
             try:
-                result = runner.invoke(main, ["trigger"])
+                with patch("openbias.cli_trigger.run_trigger") as mock_run_trigger:
+                    result = runner.invoke(main, ["trigger"])
             finally:
                 console.file = old_file
             combined = result.output + buf.getvalue()
-            assert result.exit_code != 0
-            assert "openbias init" in combined
+            assert result.exit_code == 0
+            assert "Using built-in defaults" in combined
+            mock_run_trigger.assert_called_once()
 
 
 class TestReplayCommand:
@@ -719,3 +749,68 @@ class TestHelpOutput:
         assert "info" in result.output
         assert "version" in result.output
         assert "trigger" in result.output
+
+
+class TestResolvedConfigCommands:
+    @patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True)
+    def test_validate_no_arg_succeeds_with_zero_config(self):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be safe\n", encoding="utf-8")
+
+            result, output = _invoke(["validate"])
+
+            assert result.exit_code == 0
+            assert "Valid Configuration" in output
+            assert "Using built-in defaults" in output
+            assert "gpt-4o-mini" in output
+
+    @patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True)
+    def test_validate_yaml_without_evaluators_synthesizes_default_judge(self):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be safe\n", encoding="utf-8")
+            Path("openbias.yaml").write_text("model: gpt-4o-mini\n", encoding="utf-8")
+
+            result, output = _invoke(["validate"])
+
+            assert result.exit_code == 0
+            assert "Valid Configuration" in output
+            assert "judge" in output
+
+    @patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True)
+    def test_info_no_arg_reports_synthesized_defaults(self):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be safe\n", encoding="utf-8")
+
+            result, output = _invoke(["info"])
+
+            assert result.exit_code == 0
+            assert "Open Bias Info" in output
+            assert "Defaults Synthesized" in output
+            assert "True" in output
+            assert "Mode" in output
+            assert "sync" in output
+
+    @patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True)
+    def test_info_reports_explicit_evaluators_without_synthesis(self):
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            Path("rules.md").write_text("- Be safe\n", encoding="utf-8")
+            Path("openbias.yaml").write_text(
+                "model: gpt-4o-mini\n"
+                "evaluators:\n"
+                "  - name: custom\n"
+                "    type: llm\n"
+                "    phase: pre_call\n",
+                encoding="utf-8",
+            )
+
+            result, output = _invoke(["info"])
+
+            assert result.exit_code == 0
+            assert "Evaluator Synthesized" in output
+            assert "False" in output
+            assert "llm" in output
+            assert "pre_call" in output
