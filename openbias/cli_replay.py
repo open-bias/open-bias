@@ -9,7 +9,6 @@ from typing import Any
 
 from openbias.cli_ui import config_panel, console, error, key_value, spinner
 from openbias.config.settings import Settings
-from openbias.eval import runtime_config_from_settings
 from openbias.policy.registry import PolicyEngineRegistry
 from openbias.replay import ReplayRunner
 from openbias.traces import load_trace_dataset
@@ -25,7 +24,7 @@ async def _run_replay_async(
         policy_config["type"],
         policy_config["config"],
     )
-    runner = ReplayRunner(runtime=runtime_config_from_settings(settings))
+    runner = ReplayRunner(boundary=settings.replay.boundary)
     results: list[dict[str, Any]] = []
 
     try:
@@ -70,19 +69,29 @@ def run_replay(
         config_panel(
             f"Replay: {result['dataset_name']}",
             {
+                "Boundary": (
+                    result["outcomes"][0]["boundary"]
+                    if result["outcomes"]
+                    else settings.replay.boundary
+                ),
                 "Cases": str(summary["total_cases"]),
                 "Supported": str(summary["supported_cases"]),
                 "Matched": str(summary["matched_cases"]),
-                "Intervene Rate": f"{summary['intervention_rate']:.2%}",
-                "Block Rate": f"{summary['block_rate']:.2%}",
-                "Pass-through Rate": f"{summary['pass_through_rate']:.2%}",
+                "Detection Rate": f"{summary['detection_rate']:.2%}",
+                "Expected Coverage": f"{summary['expected_detection_coverage']:.2%}",
             },
         )
         if verbose:
             for outcome in result["outcomes"]:
                 key_value(
                     outcome["case_id"],
-                    f"expected={outcome['expected_action']} observed={outcome['observed_action']}",
+                    " ".join(
+                        (
+                            f"boundary={outcome['boundary']}",
+                            f"expected_detection={outcome['expected_detection']}",
+                            f"observed_detection={outcome['observed_detection']}",
+                        )
+                    ),
                 )
 
     if json_output is not None:

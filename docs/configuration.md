@@ -205,7 +205,7 @@ These datasets are the handoff point into the continuous-improvement loop:
 - `openbias compare --candidate ... --trace ...` measures baseline vs candidate deltas
 - `openbias review-pack --comparison ...` turns comparison output into a reviewer-facing artifact
 
-Replay and trace-backed comparison use the active runtime enforcement config, not a simplified direct-evaluation path. That means evaluator phase, `mode`, `fail_action`, and intervention strategy affect offline replay the same way they affect `openbias serve` and `openbias eval`.
+Replay and trace-backed comparison share the same `replay.boundary` setting. They evaluate one boundary only: `response` by default, or `request` when you want request-side detection.
 
 Candidate generation itself stays manual or external in OSS. Open Bias only handles capture, replay, comparison, and review packaging.
 
@@ -271,6 +271,19 @@ eval:
 If `eval.suites` is omitted, `openbias eval` falls back to `evals/suites/` in the current project.
 
 The evaluators under test are determined by the top-level `evaluators` list.
+
+## Replay
+
+Configure offline detection replay under the `replay:` section. `openbias replay` and trace-backed `openbias compare` both use this boundary selector.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `replay.boundary` | string | `response` | Which trace boundary to evaluate offline: `request` or `response` |
+
+```yaml
+replay:
+  boundary: response
+```
 
 ## Config Validation
 
