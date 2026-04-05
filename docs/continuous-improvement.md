@@ -50,6 +50,8 @@ The improvement surfaces are intentionally review-oriented:
 
 Replay results are runtime-aware for the configured replay boundary, so trace analysis stays aligned with the offline detection contract defined in `replay.boundary`.
 
+For simplicity, `openbias replay` and `openbias improve` currently build a single engine from the first entry in your `evaluators` list. Projects with multiple configured evaluators should put the one they want exercised offline first.
+
 ## Nightly GitHub Actions Example
 
 An example nightly workflow lives at [`examples/github-actions/nightly-improvement.yml`](../examples/github-actions/nightly-improvement.yml).

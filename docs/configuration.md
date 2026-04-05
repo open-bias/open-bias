@@ -284,6 +284,8 @@ replay:
   boundary: response
 ```
 
+Offline replay and improvement currently build a single engine from the first entry in `evaluators` for simplicity. If you configure multiple evaluators, reorder the list so the one you want exercised offline is listed first.
+
 ## Config Validation
 
 The `openbias serve` command validates configuration at startup:
