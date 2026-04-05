@@ -8,7 +8,7 @@ from openbias.eval.adapters import (
     load_native_suite,
 )
 from openbias.eval.library import discover_native_suite_paths, load_native_suites
-from openbias.eval.runner import EvalRunner
+from openbias.eval.runner import EvalRunner, EvalRuntimeConfig
 from openbias.eval.schema import (
     EvalCase,
     EvalCaseOutcome,
@@ -26,6 +26,7 @@ __all__ = [
     "EvalLabels",
     "EvalPolicyTarget",
     "EvalRunResult",
+    "EvalRuntimeConfig",
     "EvalRunner",
     "EvalSuite",
     "EvalSummary",

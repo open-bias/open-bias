@@ -10,7 +10,26 @@ from pathlib import Path
 from openbias.cli_ui import config_panel, error, key_value, spinner, success
 from openbias.compare import build_engine_for_policy
 from openbias.config.settings import Settings
-from openbias.eval import EvalRunner, discover_native_suite_paths, load_native_suite
+from openbias.eval import EvalRunner, EvalRuntimeConfig, discover_native_suite_paths, load_native_suite
+
+
+def _runtime_config_from_settings(settings: Settings) -> EvalRuntimeConfig:
+    evaluators = getattr(settings, "evaluators", [])
+    if isinstance(evaluators, list) and evaluators:
+        phase = evaluators[0].phase
+        request_phase_enabled = phase == "pre_call"
+        response_phase_enabled = phase == "post_call"
+    else:
+        request_phase_enabled = True
+        response_phase_enabled = True
+
+    return EvalRuntimeConfig(
+        request_phase_enabled=request_phase_enabled,
+        response_phase_enabled=response_phase_enabled,
+        mode=settings.mode,
+        fail_action=settings.fail_action,
+        strategy=settings.strategy,
+    )
 
 
 def _resolve_eval_suite_paths(
@@ -68,7 +87,7 @@ async def _run_eval_async(
         config_path=config,
         rules_path=rules_path,
     )
-    runner = EvalRunner()
+    runner = EvalRunner(runtime=_runtime_config_from_settings(settings))
 
     try:
         results = []

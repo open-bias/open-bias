@@ -2,6 +2,8 @@
 
 The rebuilt eval harness powers both the `openbias eval` CLI and the Python API for running one initialized policy engine against canonical native suites.
 
+The suite files stay policy-focused. Runtime enforcement details such as evaluator phase, `mode`, and `fail_action` come from the active Open Bias config, so `openbias eval` now tracks `openbias serve` more closely without requiring per-suite rewrites when enforcement behavior changes.
+
 ## Canonical, Native, And Import
 
 - Canonical format: the internal contract the runner understands. Every suite becomes this shape after loading.
@@ -99,6 +101,16 @@ The older repo-owned `openbias.yaml` manifest pattern is gone. New repo suites s
 - The runner compares observed engine behavior to the suite labels.
 
 That separation is intentional: it lets us run the same suite library against different engines or models while holding the policy target constant.
+
+## Runtime Behavior
+
+`openbias eval` does not hard-code async/intervene behavior anymore. It uses the active runtime config to decide which boundaries are actually evaluated and how repair verification behaves:
+
+- If the configured evaluator phase is `pre_call`, request-boundary detection is exercised and response-only checks are not.
+- If the configured evaluator phase is `post_call`, response-boundary detection is exercised and request-only cases can miss, matching `serve`.
+- Repair verification uses the configured `mode` and `fail_action`, so `sync + intervene`, `async + intervene`, and `sync + block` no longer collapse into the same eval path.
+
+This keeps the suite contract stable while letting eval results move with real runtime enforcement behavior.
 
 We keep one shared eval policy file for the current suite library instead of one rule file per category because the current categories are different slices of the same policy. Duplicating rules across `safe`, `request`, `response`, `repair`, and `false_positive_guards` would create drift without adding much value yet.
 

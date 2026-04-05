@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from openbias.eval import EvalCase, EvalLabels, EvalRunner, EvalSuite, load_native_suite
+from openbias.eval import (
+    EvalCase,
+    EvalLabels,
+    EvalRunner,
+    EvalRuntimeConfig,
+    EvalSuite,
+    load_native_suite,
+)
 
 
 def _case(
@@ -226,3 +233,64 @@ async def test_runner_computes_binary_summary_metrics(keyword_engine):
     assert summary.fix_failure_count == 1
     assert summary.fix_rate == pytest.approx(0.5)
     assert summary.exact_case_pass_rate == pytest.approx(4 / 6)
+
+
+async def test_runner_respects_runtime_phase_for_request_cases(keyword_engine):
+    suite = EvalSuite(
+        name="request-phase",
+        cases=[
+            _case(
+                "request-only",
+                messages=[{"role": "user", "content": "this includes request-risk"}],
+                violation=True,
+                detection_scope="request",
+                detect_at_turn=0,
+            )
+        ],
+    )
+
+    result = await EvalRunner(
+        runtime=EvalRuntimeConfig(
+            request_phase_enabled=False,
+            response_phase_enabled=True,
+            mode="async",
+            fail_action="intervene",
+        )
+    ).run(keyword_engine, suite)
+
+    assert result.outcomes[0].outcome == "missed_violation"
+    assert result.outcomes[0].passed is False
+
+
+async def test_runner_verifies_fixed_case_in_sync_intervene_mode(keyword_engine):
+    suite = load_native_suite("tests/eval/fixtures/recovery_suite.yaml")
+
+    result = await EvalRunner(
+        runtime=EvalRuntimeConfig(
+            request_phase_enabled=False,
+            response_phase_enabled=True,
+            mode="sync",
+            fail_action="intervene",
+        )
+    ).run(keyword_engine, suite)
+
+    assert result.outcomes[0].outcome == "detected_and_fixed"
+    assert result.outcomes[0].passed is True
+    assert "sync_intervention_queued_at_turn=0" in result.outcomes[0].notes
+
+
+async def test_runner_marks_repair_case_not_fixed_in_sync_block_mode(keyword_engine):
+    suite = load_native_suite("tests/eval/fixtures/recovery_suite.yaml")
+
+    result = await EvalRunner(
+        runtime=EvalRuntimeConfig(
+            request_phase_enabled=False,
+            response_phase_enabled=True,
+            mode="sync",
+            fail_action="block",
+        )
+    ).run(keyword_engine, suite)
+
+    assert result.outcomes[0].outcome == "detected_not_fixed"
+    assert result.outcomes[0].passed is False
+    assert "response_blocked_at_turn=0" in result.outcomes[0].notes

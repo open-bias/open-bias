@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from openbias.core.interceptor import Interceptor
@@ -37,8 +37,22 @@ class _RepairVerification:
     notes: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class EvalRuntimeConfig:
+    """Runtime enforcement knobs that affect offline eval behavior."""
+
+    request_phase_enabled: bool = True
+    response_phase_enabled: bool = True
+    mode: Literal["sync", "async"] = "async"
+    fail_action: Literal["intervene", "block", "shadow"] = "intervene"
+    strategy: Literal["system_prompt_append", "user_message_inject"] = "user_message_inject"
+
+
 class EvalRunner:
     """Run one initialized engine against one canonical eval suite."""
+
+    def __init__(self, runtime: EvalRuntimeConfig | None = None):
+        self._runtime = runtime or EvalRuntimeConfig()
 
     async def run(self, engine: PolicyEngine, suite: EvalSuite) -> EvalRunResult:
         outcomes: list[EvalCaseOutcome] = []
@@ -71,13 +85,16 @@ class EvalRunner:
         try:
             for turn in turns:
                 request_data = self._request_data(turn.request_messages)
-                request_eval = await engine.evaluate_request(
-                    session_id=session_id,
-                    request_data=request_data,
-                )
+                if self._runtime.request_phase_enabled:
+                    request_eval = await engine.evaluate_request(
+                        session_id=session_id,
+                        request_data=request_data,
+                    )
+                else:
+                    request_eval = EvaluationResult(status=EvaluationStatus.ALLOW)
                 response_data = self._response_data(turn.assistant_message)
                 response_eval = None
-                if response_data is not None:
+                if response_data is not None and self._runtime.response_phase_enabled:
                     response_eval = await engine.evaluate_response(
                         session_id=session_id,
                         response_data=response_data,
@@ -163,15 +180,17 @@ class EvalRunner:
 
         turns = build_turn_blueprint(case.messages)
         interceptor = Interceptor(
-            pre_call_evaluators=[engine] if labels.detection_scope in {"request", "either"} else [],
-            post_call_evaluators=[engine] if labels.detection_scope in {"response", "either"} else [],
-            mode="async",
-            fail_action="intervene",
+            pre_call_evaluators=[engine] if self._runtime.request_phase_enabled else [],
+            post_call_evaluators=[engine] if self._runtime.response_phase_enabled else [],
+            mode=self._runtime.mode,
+            default_strategy=self._runtime.strategy,
+            fail_action=self._runtime.fail_action,
         )
         session_id = self._session_id(case.id, "repair")
         notes: list[str] = []
         intervention_applied = False
         compliance_status = EvaluationStatus.ALLOW
+        pending_repair_request: dict[str, Any] | None = None
 
         try:
             for turn in turns:
@@ -185,6 +204,14 @@ class EvalRunner:
                 if pre_result.modified_data is not None:
                     intervention_applied = True
                     notes.append(f"intervention_applied_at_turn={turn.index}")
+
+                if (
+                    turn.index == labels.repair_verified_at_turn
+                    and pre_result.modified_data is None
+                    and pending_repair_request is not None
+                ):
+                    effective_request = copy.deepcopy(pending_repair_request)
+                    notes.append(f"sync_replay_context_used_at_turn={turn.index}")
 
                 if turn.index == labels.repair_verified_at_turn:
                     response_data = self._response_data(turn.assistant_message)
@@ -202,14 +229,23 @@ class EvalRunner:
 
                 response_data = self._response_data(turn.assistant_message)
                 if response_data is not None:
-                    await interceptor.run_post_call(
+                    post_result = await interceptor.run_post_call(
                         session_id=session_id,
                         request_data=effective_request,
                         response_data=response_data,
                         user_request_id=f"{case.id}:turn:{turn.index}:post",
                     )
+                    if not post_result.allowed:
+                        notes.append(f"response_blocked_at_turn={turn.index}")
+                    if post_result.pending_intervention is not None:
+                        intervention_applied = True
+                        notes.append(f"sync_intervention_queued_at_turn={turn.index}")
+                        pending_request = post_result.pending_intervention.get("request_data")
+                        if isinstance(pending_request, dict):
+                            pending_repair_request = copy.deepcopy(pending_request)
         finally:
             await engine.reset_session(session_id)
+            await interceptor.shutdown()
 
         if not intervention_applied:
             notes.append("repair_turn_reached_without_intervention")

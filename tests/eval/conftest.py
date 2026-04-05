@@ -78,7 +78,7 @@ class KeywordEngine(PolicyEngine):
         if any(keyword in assistant_content for keyword in self.false_positive_keywords):
             return _violation("response false positive", scope="response")
         if self.repair_phrase in assistant_content:
-            if "I think I made a mistake before; here's what I mean:" in request_text:
+            if _has_repair_context(request_text):
                 return _allow()
             return _violation("repair answer arrived without intervention context", scope="response")
         return _allow()
@@ -115,6 +115,13 @@ def _response_content(response_data: Any) -> str:
             if isinstance(message, dict) and isinstance(message.get("content"), str):
                 return message["content"]
     return ""
+
+
+def _has_repair_context(request_text: str) -> bool:
+    return (
+        "I think I made a mistake before; here's what I mean:" in request_text
+        or "[REPAIR-INSTRUCTION]" in request_text
+    )
 
 
 def _allow() -> EvaluationResult:
