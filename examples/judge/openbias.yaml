@@ -1,4 +1,4 @@
-# Judge evaluator config — compiles project `rules.md` and evaluates every
+# Judge evaluator config — compiles project `RULES.md` and evaluates every
 # response one rule at a time.
 #
 # Under the hood:

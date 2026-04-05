@@ -1,6 +1,6 @@
 # Configuration Reference
 
-Open Bias can enforce rules with no `openbias.yaml` at all. This repo ships a starter project-local `rules.md` at the root, so you can start the proxy immediately and edit the policy later.
+Open Bias can enforce rules with no `openbias.yaml` at all. This repo ships a starter project-local `RULES.md` at the root, so you can start the proxy immediately and edit the policy later.
 
 Use `openbias.yaml` when you want explicit project settings such as pinned models, multiple evaluators, tracing, replay boundary selection, or committed offline eval/improvement workflows.
 
@@ -16,9 +16,9 @@ When you run `openbias serve`, `openbias trigger`, `openbias validate`, or `open
 - `strategy: user_message_inject`
 - proxy port `4000`
 - tracing disabled
-- project-local `rules.md` as the canonical authored policy source
+- project-local `RULES.md` as the canonical authored policy source
 
-You still need one provider API key in the environment and a local `rules.md` file. In this repo, the root starter file already fills that role.
+You still need one provider API key in the environment and a local `RULES.md` file. In this repo, the root starter file already fills that role.
 
 ## Effective Settings Sources
 
@@ -56,11 +56,11 @@ evaluators:
 - Be professional.
 ```
 
-This uses a single judge evaluator, project-local `rules.md`, runtime-compiled rules, an auto-detected model, and the default port 4000.
+This uses a single judge evaluator, project-local `RULES.md`, runtime-compiled rules, an auto-detected model, and the default port 4000.
 
 ## Command Expectations
 
-These CLI commands can run from synthesized defaults plus local `rules.md`:
+These CLI commands can run from synthesized defaults plus local `RULES.md`:
 
 - `openbias serve`
 - `openbias trigger`
@@ -106,7 +106,7 @@ Every evaluator entry supports these three fields:
 
 ### Canonical Rule Source
 
-All evaluators compile from the project-local `rules.md` file. Keep rule text there rather than setting evaluator-specific `rules`, `rules_file`, `workflow`, or `config_path` keys in `openbias.yaml`.
+All evaluators compile from the project-local `RULES.md` file. Keep rule text there rather than setting evaluator-specific `rules`, `rules_file`, `workflow`, or `config_path` keys in `openbias.yaml`.
 
 Legacy user-facing keys like `policy`, `policies`, and `rubric` are no longer supported.
 
@@ -127,7 +127,7 @@ evaluators:
 | `models` | list[object] | injected from global default model when omitted | Explicit judge model list for multi-judge evaluation. Each entry follows `{name, model, temperature?, max_tokens?, timeout?}`. |
 | `aggregation_mode` | string | `majority` | How to aggregate binary results when multiple judges evaluate the same compiled rule. Supported values: `majority`, `all`, `any`. |
 
-Pre-call evaluation is controlled by setting `phase: pre_call` on the evaluator entry. Policy text still comes from project `rules.md`; Open Bias compiles that file into `_compiled_rules` internally, then judges each compiled rule independently with a binary pass/fail result. If you need to pin specific judge models instead of using the global default model, set `models` explicitly on the evaluator.
+Pre-call evaluation is controlled by setting `phase: pre_call` on the evaluator entry. Policy text still comes from project `RULES.md`; Open Bias compiles that file into `_compiled_rules` internally, then judges each compiled rule independently with a binary pass/fail result. If you need to pin specific judge models instead of using the global default model, set `models` explicitly on the evaluator.
 
 ## LLM Engine
 
@@ -202,7 +202,7 @@ evaluators:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `fail_closed` | bool | `false` | If `true`, block on NeMo evaluation errors. If `false` (default), warn and allow. |
-| `rails` | list | all configured | Which rails to enable. Omit to use every rail from the compiled NeMo runtime config generated from project `rules.md`. |
+| `rails` | list | all configured | Which rails to enable. Omit to use every rail from the compiled NeMo runtime config generated from project `RULES.md`. |
 
 ## Tracing
 
@@ -246,7 +246,7 @@ These datasets are the handoff point into the continuous-improvement loop:
 
 Replay and improvement share the same `replay.boundary` setting. They evaluate one boundary only: `response` by default, or `request` when you want request-side detection.
 
-Variant generation happens inside `openbias improve`, but human review still decides whether any generated policy should replace `rules.md`.
+Variant generation happens inside `openbias improve`, but human review still decides whether any generated policy should replace `RULES.md`.
 
 ## Environment Variables
 
@@ -330,7 +330,7 @@ Offline replay and improvement currently build a single engine from the first en
 
 The `openbias serve` command validates configuration at startup, whether settings came from YAML or synthesized defaults:
 
-- Checks that required project policy files such as `rules.md` are present when compilation is needed
+- Checks that required project policy files such as `RULES.md` are present when compilation is needed
 - Verifies that the required API key is present for the configured model (skipped for `fsm`, which is local-only)
 - Applies defaults before evaluator-specific overrides
 - Eagerly initializes all evaluators in the pipeline, failing fast on bad configuration instead of deferring errors to the first request

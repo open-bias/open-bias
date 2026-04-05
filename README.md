@@ -18,9 +18,9 @@
   <!-- <a href="https://github.com/open-bias/open-bias/actions"><img src="https://img.shields.io/github/actions/workflow/status/open-bias/open-bias/ci.yml" alt="CI"></a> -->
 </p>
 
-Open Bias is a business-logic enforcement layer for AI agents. It ships a proxy you point your LLM client at, evaluates every request and response against project-local `rules.md`, captures replayable traces, and supports a human-reviewed policy-improvement loop instead of auto-applying generated rules.
+Open Bias is a business-logic enforcement layer for AI agents. It ships a proxy you point your LLM client at, evaluates every request and response against project-local `RULES.md`, captures replayable traces, and supports a human-reviewed policy-improvement loop instead of auto-applying generated rules.
 
-The easiest first run is zero-config: use the bundled repo-root `rules.md`, export one provider API key, and start the proxy. You can edit `rules.md` whenever you want. `openbias.yaml` is optional until you want to pin models, tracing, ports, or offline improvement workflows.
+The easiest first run is zero-config: use the bundled repo-root `RULES.md`, export one provider API key, and start the proxy. You can edit `RULES.md` whenever you want. `openbias.yaml` is optional until you want to pin models, tracing, ports, or offline improvement workflows.
 
 ```
 Your App  ──▶  Open Bias  ──▶  LLM Provider
@@ -37,7 +37,7 @@ pip install openbias
 export ANTHROPIC_API_KEY=sk-ant-...    # or GEMINI_API_KEY, OPENAI_API_KEY
 ```
 
-This repo already ships a starter [`rules.md`](rules.md), so from the project root you can start the proxy immediately. Edit it whenever you want, or replace it with your own policy later:
+This repo already ships a starter [`RULES.md`](RULES.md), so from the project root you can start the proxy immediately. Edit it whenever you want, or replace it with your own policy later:
 
 ```md
 # Evaluation Rules
@@ -72,9 +72,9 @@ response = client.chat.completions.create(
 )
 ```
 
-Every call now runs through your evaluators. The judge evaluator (default type) compiles your local `rules.md`, evaluates one rule at a time with a sidecar LLM, and maps failed aggregated rules to `intervene`, `block`, or log-only `shadow` behavior according to `fail_action`. Model, port, and tracing are all auto-configured with smart defaults.
+Every call now runs through your evaluators. The judge evaluator (default type) compiles your local `RULES.md`, evaluates one rule at a time with a sidecar LLM, and maps failed aggregated rules to `intervene`, `block`, or log-only `shadow` behavior according to `fail_action`. Model, port, and tracing are all auto-configured with smart defaults.
 
-With no `openbias.yaml`, `openbias serve` synthesizes a default judge evaluator, uses port `4000`, auto-detects the upstream model from your API key, and compiles project-local `rules.md` at startup.
+With no `openbias.yaml`, `openbias serve` synthesizes a default judge evaluator, uses port `4000`, auto-detects the upstream model from your API key, and compiles project-local `RULES.md` at startup.
 
 Want an editable config file instead? Run `openbias init` to pick an engine and a starter preset from the packaged library under `openbias/presets/rules`, or `openbias init --quick` to keep the legacy default starter. Those commands scaffold optional YAML for teams that want explicit project settings checked into git.
 
@@ -84,13 +84,13 @@ The preset library is intentionally visible in-repo so you can browse, copy, and
 
 Open Bias is built for teams whose rules change as product behavior changes.
 
-1. Author the current business rules in `rules.md`.
+1. Author the current business rules in `RULES.md`.
 2. Capture replayable JSONL traces from real traffic.
 3. Replay traces and run repo-owned eval suites against the baseline policy.
-4. Compare `rules.md` against a candidate policy file such as `rules.candidate.md`.
+4. Compare `RULES.md` against a candidate policy file such as `rules.candidate.md`.
 5. Generate a review pack and let a human decide whether to promote the candidate.
 
-This keeps the approval boundary explicit: OSS Open Bias helps you gather evidence, but it does not auto-merge policy updates into `rules.md`.
+This keeps the approval boundary explicit: OSS Open Bias helps you gather evidence, but it does not auto-merge policy updates into `RULES.md`.
 
 The improvement loop is YAML-backed: `openbias eval`, `openbias replay`, and `openbias improve` require `openbias.yaml` because they use committed project settings and offline workflow configuration.
 
@@ -142,7 +142,7 @@ Four evaluator types, same interface. Mix and match.
 
 ### Judge engine (default)
 
-Write rules in plain English in `rules.md`. Open Bias compiles them into runtime rules, then the judge LLM evaluates each rule independently with a binary pass/fail result. If you configure multiple judge models, their results are aggregated per rule with `majority` by default.
+Write rules in plain English in `RULES.md`. Open Bias compiles them into runtime rules, then the judge LLM evaluates each rule independently with a binary pass/fail result. If you configure multiple judge models, their results are aggregated per rule with `majority` by default.
 
 ```yaml
 evaluators:
@@ -154,7 +154,7 @@ Runs async by default — zero latency on the critical path. The response goes b
 
 ### NeMo Guardrails engine
 
-Wraps [NVIDIA NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails) for content safety, dialog rails, and topical control. Useful when you need NeMo-style jailbreak detection, moderation, or topical guardrails while still authoring policy in project `rules.md`.
+Wraps [NVIDIA NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails) for content safety, dialog rails, and topical control. Useful when you need NeMo-style jailbreak detection, moderation, or topical guardrails while still authoring policy in project `RULES.md`.
 
 ```yaml
 evaluators:
@@ -166,11 +166,11 @@ Full engine documentation: [docs/engines.md](docs/engines.md)
 
 ## Configuration
 
-Authored policy lives in project-local `rules.md`. Runtime settings can live in optional `openbias.yaml`.
+Authored policy lives in project-local `RULES.md`. Runtime settings can live in optional `openbias.yaml`.
 
 Zero-config startup defaults:
 
-- The bundled repo-root `rules.md` is enough for a first run, and teams can edit it later.
+- The bundled repo-root `RULES.md` is enough for a first run, and teams can edit it later.
 - A default `judge` evaluator is synthesized when no `evaluators:` list exists.
 - The upstream model is auto-detected from your API key.
 - `serve`, `trigger`, `validate`, and `info` work without YAML.
@@ -209,7 +209,7 @@ Full reference: [docs/configuration.md](docs/configuration.md)
 ## CLI
 
 ```bash
-# Zero-config commands (repo-root rules.md included, no YAML required)
+# Zero-config commands (repo-root RULES.md included, no YAML required)
 openbias serve
 openbias trigger
 openbias validate

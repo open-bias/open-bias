@@ -24,7 +24,7 @@ openbias --help
 ## Running Locally
 
 ```bash
-# Zero-config first run from the repo root: starter rules.md is already included
+# Zero-config first run from the repo root: starter RULES.md is already included
 openbias serve
 
 # Optional: scaffold editable project settings
@@ -36,7 +36,7 @@ openbias init --quick
 # base_url="http://localhost:4000/v1"
 ```
 
-For local enforcement work, `rules.md` is the required authored input. This repo includes a starter one at the root so you can edit it instead of creating it from scratch. `openbias.yaml` is optional unless you want committed runtime settings or need the offline workflow commands.
+For local enforcement work, `RULES.md` is the required authored input. This repo includes a starter one at the root so you can edit it instead of creating it from scratch. `openbias.yaml` is optional unless you want committed runtime settings or need the offline workflow commands.
 
 Override engine selection at startup:
 
@@ -44,7 +44,7 @@ Override engine selection at startup:
 openbias serve --config custom_config.yaml
 ```
 
-For the trace-backed improvement loop, keep `openbias.yaml`, `rules.md`, repo-owned eval suites under `evals/suites/`, and replayable JSONL traces under `.openbias/traces/`.
+For the trace-backed improvement loop, keep `openbias.yaml`, `RULES.md`, repo-owned eval suites under `evals/suites/`, and replayable JSONL traces under `.openbias/traces/`.
 
 ## Code Conventions
 
@@ -115,7 +115,7 @@ openbias replay --trace .openbias/traces/2026-04-05.jsonl --json-output replay.j
 ### Policy Improvement
 
 ```bash
-# Generate variants from rules.md and replay them across captured traces
+# Generate variants from RULES.md and replay them across captured traces
 openbias improve \
   --trace .openbias/traces/2026-04-05.jsonl \
   --instruction "Tighten the policy around refund abuse while preserving benign support workflows."
@@ -125,12 +125,12 @@ openbias improve \
 
 The OSS repo ships a copyable GitHub Actions example at [`examples/github-actions/nightly-improvement.yml`](../examples/github-actions/nightly-improvement.yml).
 
-That workflow intentionally lives under `examples/` instead of `.github/workflows/` because this repository still does not ship a runnable project-local `openbias.yaml` and trace history for itself, even though it now includes a starter root `rules.md`.
+That workflow intentionally lives under `examples/` instead of `.github/workflows/` because this repository still does not ship a runnable project-local `openbias.yaml` and trace history for itself, even though it now includes a starter root `RULES.md`.
 
 The example assumes your application repo has:
 
 - a committed `openbias.yaml`
-- a committed baseline `rules.md`
+- a committed baseline `RULES.md`
 - repo-owned eval suites under `evals/suites/`
 - replayable trace files under `.openbias/traces/`
 - an improvement instruction that describes how policy variants should differ from the baseline
@@ -412,7 +412,7 @@ The state machine uses `asyncio.Lock` per session. Sessions are stored in memory
 ## Troubleshooting
 
 **"No workflow configured - running in pass-through mode"**
-Ensure the project has a `rules.md` file and that your evaluator is declared in `openbias.yaml`.
+Ensure the project has a `RULES.md` file and that your evaluator is declared in `openbias.yaml`.
 
 **"Failed to load embedding model"**
 Install `sentence-transformers` and check disk space. The model downloads ~100MB on first use.
@@ -421,10 +421,10 @@ Install `sentence-transformers` and check disk space. The model downloads ~100MB
 The intervention name in a constraint must match a key in the internal workflow definition produced by compilation.
 
 **"Workflow has no initial state"**
-Update `rules.md` so the compiled workflow has a clear starting step or state.
+Update `RULES.md` so the compiled workflow has a clear starting step or state.
 
 **"Constraint references unknown state"**
-Check the corresponding rules in `rules.md`; every referenced trigger/target must compile to a real workflow state.
+Check the corresponding rules in `RULES.md`; every referenced trigger/target must compile to a real workflow state.
 
 **"Unknown policy engine type: '...'"**
 The `type` field on an evaluator entry in `openbias.yaml` must match a registered engine key (e.g. `judge`, `fsm`, `llm`, `nemo`). Ensure the engine module is imported in `openbias/policy/engines/__init__.py` so its `@register_engine` decorator runs.
@@ -432,7 +432,7 @@ The `type` field on an evaluator entry in `openbias.yaml` must match a registere
 ### NeMo-Specific
 
 **"API key not valid (400)"**
-Check the model configured in `openbias.yaml` and ensure the matching API key is present in your environment. NeMo runtime artifacts are compiled internally from `rules.md`.
+Check the model configured in `openbias.yaml` and ensure the matching API key is present in your environment. NeMo runtime artifacts are compiled internally from `RULES.md`.
 
 **"TypeError: 'function' object is not subscriptable"**
 Pydantic v1/v2 conflict between LangChain and OpenBias. Pin compatible versions.

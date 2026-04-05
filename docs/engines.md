@@ -20,7 +20,7 @@ Do you need deterministic, auditable enforcement?
 
 | Property | Judge | FSM | LLM | NeMo |
 |----------|-------|-----|-----|------|
-| What it does | Evaluates `rules.md`-compiled rules one at a time with a separate LLM | Enforces state machine workflows with temporal constraints | Classifies state and detects drift using a sidecar LLM | Runs NVIDIA NeMo Guardrails input/output rails |
+| What it does | Evaluates `RULES.md`-compiled rules one at a time with a separate LLM | Enforces state machine workflows with temporal constraints | Classifies state and detects drift using a sidecar LLM | Runs NVIDIA NeMo Guardrails input/output rails |
 | Deterministic | No | Yes | No | No |
 | Requires LLM calls | Yes (judge model) | No (tool calls, regex, local embeddings) | Yes (classification + constraint eval) | Yes (NeMo's LLM) |
 | Stateful | Per-turn with optional session context | Full FSM with state history | Full with drift tracking and evidence memory | Minimal (NeMo manages internally) |
@@ -32,7 +32,7 @@ Do you need deterministic, auditable enforcement?
 
 **Evaluator type**: `judge`
 
-Uses an LLM to evaluate compiled rules from project `rules.md`. At startup, Open Bias compiles authored policy into runtime `_compiled_rules`. For each turn, the judge engine evaluates one compiled rule at a time against the current message and produces a binary pass/fail result. Failed aggregated rules are returned as violations and then mapped to the configured `fail_action`.
+Uses an LLM to evaluate compiled rules from project `RULES.md`. At startup, Open Bias compiles authored policy into runtime `_compiled_rules`. For each turn, the judge engine evaluates one compiled rule at a time against the current message and produces a binary pass/fail result. Failed aggregated rules are returned as violations and then mapped to the configured `fail_action`.
 
 ### When to use it
 
@@ -43,7 +43,7 @@ Uses an LLM to evaluate compiled rules from project `rules.md`. At startup, Open
 
 ### How it works
 
-1. Open Bias compiles project `rules.md` into runtime `_compiled_rules`
+1. Open Bias compiles project `RULES.md` into runtime `_compiled_rules`
 2. On each evaluation, the engine picks the current message under review: latest user message for `phase: pre_call`, latest assistant response for `phase: post_call`
 3. For each compiled rule, one or more judge models evaluate that rule independently and return binary pass/fail results
 4. If multiple judges are configured, their results are aggregated per rule with `aggregation_mode: majority` by default
@@ -73,7 +73,7 @@ evaluators:
 
 Full configuration reference: [docs/configuration.md](configuration.md#judge-engine)
 
-`openbias serve` compiles project `rules.md` into judge runtime config automatically at startup.
+`openbias serve` compiles project `RULES.md` into judge runtime config automatically at startup.
 
 Deep dive: [openbias/policy/engines/judge/README.md](../openbias/policy/engines/judge/README.md)
 
@@ -83,7 +83,7 @@ Deep dive: [openbias/policy/engines/judge/README.md](../openbias/policy/engines/
 
 **Evaluator type**: `fsm`
 
-Models allowed agent behavior as a finite state machine compiled internally from project `rules.md`. It classifies each LLM response to a workflow state using a three-tier cascade (tool call matching, regex, semantic embeddings), evaluates temporal constraints based on LTL-lite, and triggers interventions on violations.
+Models allowed agent behavior as a finite state machine compiled internally from project `RULES.md`. It classifies each LLM response to a workflow state using a three-tier cascade (tool call matching, regex, semantic embeddings), evaluates temporal constraints based on LTL-lite, and triggers interventions on violations.
 
 ### When to use it
 
@@ -94,7 +94,7 @@ Models allowed agent behavior as a finite state machine compiled internally from
 
 ### How it works
 
-1. `openbias serve` compiles your authored `rules.md` into an internal workflow definition
+1. `openbias serve` compiles your authored `RULES.md` into an internal workflow definition
 2. On each agent response, the classifier determines which workflow state the response belongs to
 3. The constraint evaluator checks all active temporal constraints against the state history
 4. If a constraint is violated, the intervention handler schedules a correction for the next turn
@@ -138,7 +138,7 @@ evaluators:
 
 Full configuration reference: [docs/configuration.md](configuration.md#fsm-engine)
 
-`openbias serve` compiles project `rules.md` into FSM runtime workflow config automatically at startup.
+`openbias serve` compiles project `RULES.md` into FSM runtime workflow config automatically at startup.
 
 Deep dive: [openbias/policy/engines/fsm/README.md](../openbias/policy/engines/fsm/README.md)
 
@@ -148,7 +148,7 @@ Deep dive: [openbias/policy/engines/fsm/README.md](../openbias/policy/engines/fs
 
 **Evaluator type**: `llm`
 
-Uses a lightweight sidecar LLM for state classification, drift detection, and soft constraint evaluation. Like the other engines, it compiles from project-local `rules.md` at startup, then runs against the generated runtime workflow internally. It trades determinism for the ability to handle ambiguous, conversational workflows where tool calls and regex are insufficient.
+Uses a lightweight sidecar LLM for state classification, drift detection, and soft constraint evaluation. Like the other engines, it compiles from project-local `RULES.md` at startup, then runs against the generated runtime workflow internally. It trades determinism for the ability to handle ambiguous, conversational workflows where tool calls and regex are insufficient.
 
 ### When to use it
 
@@ -185,7 +185,7 @@ evaluators:
     model: anthropic/claude-sonnet-4-5
 ```
 
-`openbias serve` compiles project `rules.md` into a `WorkflowDefinition` automatically at startup.
+`openbias serve` compiles project `RULES.md` into a `WorkflowDefinition` automatically at startup.
 
 Full configuration reference: [docs/configuration.md](configuration.md#llm-engine)
 
@@ -197,7 +197,7 @@ Deep dive: [openbias/policy/engines/llm/README.md](../openbias/policy/engines/ll
 
 **Evaluator type**: `nemo`
 
-Wraps NVIDIA's [NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails) as an evaluator engine. Runs requests through input rails (pre-call) and responses through output rails (post-call) for jailbreak detection, PII filtering, toxicity checks, and programmable dialog flows via Colang, while keeping `rules.md` as the only authored policy source.
+Wraps NVIDIA's [NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails) as an evaluator engine. Runs requests through input rails (pre-call) and responses through output rails (post-call) for jailbreak detection, PII filtering, toxicity checks, and programmable dialog flows via Colang, while keeping `RULES.md` as the only authored policy source.
 
 ### When to use it
 

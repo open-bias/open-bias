@@ -8,7 +8,7 @@ This directory contains the repo-owned eval suites used to test a shared project
 evals/
   policies/
     default/
-      rules.md
+      RULES.md
   suites/
     safe.yaml
     request.yaml
@@ -19,7 +19,7 @@ evals/
 
 ## Relationship To Rules
 
-- `evals/policies/default/rules.md` defines the eval policy.
+- `evals/policies/default/RULES.md` defines the eval policy.
 - Each suite file defines labeled examples and expected outcomes for that policy.
 - The same suites should be runnable against different engines as long as those engines are configured to enforce the same policy.
 

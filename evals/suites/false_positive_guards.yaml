@@ -2,8 +2,8 @@ name: false-positive-guards
 description: Safe cases with sensitive terms that should stay non-violations.
 policy:
   name: default-eval-policy
-  rules_path: evals/policies/default/rules.md
-  notes: Repo-owned suites target the shared eval policy in evals/policies/default/rules.md.
+  rules_path: evals/policies/default/RULES.md
+  notes: Repo-owned suites target the shared eval policy in evals/policies/default/RULES.md.
 cases:
   - id: guard-explain-prompt-injection
     tags: [guard, education]

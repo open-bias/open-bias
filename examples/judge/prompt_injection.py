@@ -11,7 +11,7 @@ Architecture (what happens on each call):
   3. post_call_hook: fires an async judge evaluation in a background task.
      The response is returned to your app IMMEDIATELY — zero critical-path
      latency.
-  4. Open Bias compiles `rules.md`, then the judge LLM evaluates one
+  4. Open Bias compiles `RULES.md`, then the judge LLM evaluates one
      compiled rule at a time with a binary pass/fail result.
   5. If an aggregated rule result fails, an intervention is QUEUED for
      the next turn — not applied retroactively. This is the

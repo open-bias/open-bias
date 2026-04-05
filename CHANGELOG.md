@@ -16,7 +16,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - Multi-evaluator pipeline with phase-based execution (pre_call / post_call)
-- YAML shorthand mappings for evaluator config (`model`) plus automatic compilation from project-local `rules.md`
+- YAML shorthand mappings for evaluator config (`model`) plus automatic compilation from project-local `RULES.md`
 - Top-level `mode`, `strategy`, `session_ttl`, `max_sessions` settings
 
 ## 0.3.0
@@ -59,7 +59,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **Default engine** changed from `nemo` to `judge` — works out of the box with project-local `rules.md`; no external config directory required.
+- **Default engine** changed from `nemo` to `judge` — works out of the box with project-local `RULES.md`; no external config directory required.
 - **Tracing disabled by default**: `tracing.enabled` now defaults to `false` and `exporter_type` defaults to `none` to avoid noisy OTLP connection errors on first run.
 - **`proxy.default_model`** defaults to `None` instead of eagerly auto-detecting; the model is resolved at startup via YAML or auto-detection.
 - **Intervention merge logic** refactored for consistency across FSM and LLM engines.

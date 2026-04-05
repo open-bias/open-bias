@@ -1,7 +1,7 @@
 # Customer Support Agent Workflow
 #
 # Illustrative internal workflow shape for the FSM example.
-# The runnable example authors policy in `rules.md`; this file shows the kind of
+# The runnable example authors policy in `RULES.md`; this file shows the kind of
 # compiled workflow the FSM runtime operates on after compilation.
 #
 # This file is not wired directly through `openbias.yaml`.

@@ -1,6 +1,6 @@
 # Architecture
 
-Open Bias is a transparent proxy between your application and LLM providers. It intercepts every call, evaluates it against a pipeline of evaluators, and intervenes when violations are detected. User-authored policy lives in project-local `rules.md`; engine-native workflow and rails artifacts are compiled internally at runtime.
+Open Bias is a transparent proxy between your application and LLM providers. It intercepts every call, evaluates it against a pipeline of evaluators, and intervenes when violations are detected. User-authored policy lives in project-local `RULES.md`; engine-native workflow and rails artifacts are compiled internally at runtime.
 
 ```
 ┌─────────────┐    ┌───────────────────────────────────────────┐    ┌─────────────┐
@@ -86,7 +86,7 @@ The offline improvement loop is intentionally separate from the request path:
 
 - `openbias.traces` stores replayable request/response datasets in a stable JSONL-backed schema.
 - `openbias.replay` reruns captured traces against the current compiled policy.
-- `openbias.improve` generates policy variants from `rules.md`, replays them across captured traces, and writes review artifacts.
+- `openbias.improve` generates policy variants from `RULES.md`, replays them across captured traces, and writes review artifacts.
 
 This separation keeps runtime enforcement simple while still supporting policy evolution with evidence and human review.
 

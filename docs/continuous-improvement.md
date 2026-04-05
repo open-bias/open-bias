@@ -2,22 +2,22 @@
 
 Open Bias is not just a response-time enforcement layer. It also gives you a reviewable improvement loop for business rules that change over time.
 
-This workflow is intentionally more structured than the zero-config first run. `openbias eval`, `openbias replay`, and `openbias improve` require a committed `openbias.yaml` alongside your baseline `rules.md`.
+This workflow is intentionally more structured than the zero-config first run. `openbias eval`, `openbias replay`, and `openbias improve` require a committed `openbias.yaml` alongside your baseline `RULES.md`.
 
 The OSS boundary is deliberate:
 
-- `rules.md` stays the only human-edited source of truth.
+- `RULES.md` stays the only human-edited source of truth.
 - `openbias improve` can generate a small set of policy variants plus a replay-backed recommendation.
 - Open Bias does not auto-apply policy changes.
 
 ## The Loop
 
-1. Author your current business logic in project-local `rules.md`.
+1. Author your current business logic in project-local `RULES.md`.
 2. Enable replayable tracing so production traffic is captured to local JSONL datasets.
 3. Run repo-owned eval suites plus trace replay against the baseline policy.
 4. Run `openbias improve` with one or more trace datasets plus an instruction describing how the policy should vary.
 5. Review the generated variants and replay scores in `.openbias/reports/latest/`.
-6. Have a human reviewer approve the change before copying or merging any variant into `rules.md`.
+6. Have a human reviewer approve the change before copying or merging any variant into `RULES.md`.
 
 ## Recommended Trace Config
 
@@ -38,7 +38,7 @@ openbias init --quick
 # 1. Capture replayable traces while serving traffic
 openbias serve
 
-# 2. Replay one or more trace datasets against the current rules.md
+# 2. Replay one or more trace datasets against the current RULES.md
 openbias replay --trace .openbias/traces/2026-04-05.jsonl
 
 # 3. Generate variants, replay them, and write a review artifact

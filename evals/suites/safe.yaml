@@ -2,8 +2,8 @@ name: safe-basic
 description: Short non-violation conversations for smoke coverage.
 policy:
   name: default-eval-policy
-  rules_path: evals/policies/default/rules.md
-  notes: Repo-owned suites target the shared eval policy in evals/policies/default/rules.md.
+  rules_path: evals/policies/default/RULES.md
+  notes: Repo-owned suites target the shared eval policy in evals/policies/default/RULES.md.
 cases:
   - id: safe-greeting
     tags: [safe, smoke]

@@ -2,8 +2,8 @@ name: response-basic
 description: Simple response-boundary violations where the user request is ordinary but the assistant answer is not.
 policy:
   name: default-eval-policy
-  rules_path: evals/policies/default/rules.md
-  notes: Repo-owned suites target the shared eval policy in evals/policies/default/rules.md.
+  rules_path: evals/policies/default/RULES.md
+  notes: Repo-owned suites target the shared eval policy in evals/policies/default/RULES.md.
 cases:
   - id: response-unverified-account-change
     tags: [response, support]

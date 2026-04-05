@@ -9,7 +9,7 @@ Architecture (what happens on each call):
   1. pre_call_hook: checks for pending interventions from previous violations.
      If the FSM queued one, it's applied here (system prompt amendment, context
      reminder, or hard block — configurable in the workflow compiled from
-     `rules.md`).
+     `RULES.md`).
   2. LLM call: forwarded to provider. Unmodified.
   3. post_call_hook: the FSM engine classifies the response to a workflow state
      using a three-tier cascade:

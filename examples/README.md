@@ -1,6 +1,6 @@
 # Examples
 
-Each example is a self-contained directory with an `openbias.yaml` config, a project-local `rules.md`, and a Python client script. The examples pin explicit configs so each scenario is reproducible, but the product itself does not require YAML for a first run. If you are just trying Open Bias, you can start in any directory with `rules.md` plus `openbias serve`.
+Each example is a self-contained directory with an `openbias.yaml` config, a project-local `RULES.md`, and a Python client script. The examples pin explicit configs so each scenario is reproducible, but the product itself does not require YAML for a first run. If you are just trying Open Bias, you can start in any directory with `RULES.md` plus `openbias serve`.
 
 **Provider-agnostic**: every example auto-detects the model from whichever API key you have set. Set exactly one of `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `ANTHROPIC_API_KEY`.
 
@@ -21,7 +21,7 @@ Every example below triggers this pipeline. The interesting part is what the eva
 
 [`examples/quickstart/`](quickstart/)
 
-The smallest possible demo. ~30 lines of client code, 3 rules. Shows the judge engine compiling `rules.md`, evaluating one rule at a time in the background, and adding zero critical-path latency. Start here.
+The smallest possible demo. ~30 lines of client code, 3 rules. Shows the judge engine compiling `RULES.md`, evaluating one rule at a time in the background, and adding zero critical-path latency. Start here.
 
 ```bash
 cd examples/quickstart
@@ -38,7 +38,7 @@ python quickstart.py         # terminal 2
 
 A coding assistant that gets hit with a prompt injection attack. The judge engine evaluates the response asynchronously (zero latency on your call), catches the failed rule, and injects a system prompt amendment on the next turn. Watch the agent reassert its boundaries.
 
-**What's happening under the hood**: Open Bias compiles the example's `rules.md`, the judge LLM evaluates one compiled rule at a time with binary pass/fail results, and any failed aggregated rule is mapped to `intervene`, `block`, or `shadow`.
+**What's happening under the hood**: Open Bias compiles the example's `RULES.md`, the judge LLM evaluates one compiled rule at a time with binary pass/fail results, and any failed aggregated rule is mapped to `intervene`, `block`, or `shadow`.
 
 ```bash
 cd examples/judge
@@ -80,7 +80,7 @@ python workflow_enforcement.py
 
 [`examples/nemo_guardrails/`](nemo_guardrails/)
 
-Wraps NVIDIA NeMo Guardrails as an evaluator engine. Input rails run pre-call (jailbreak detection, PII filtering), output rails run post-call (toxicity, topical control). Like the other examples, the authored policy lives in local `rules.md`. Fail-open by default — if NeMo throws, the request passes through with a warning.
+Wraps NVIDIA NeMo Guardrails as an evaluator engine. Input rails run pre-call (jailbreak detection, PII filtering), output rails run post-call (toxicity, topical control). Like the other examples, the authored policy lives in local `RULES.md`. Fail-open by default — if NeMo throws, the request passes through with a warning.
 
 ```bash
 pip install 'openbias[nemo]'   # extra dependency
