@@ -4,7 +4,7 @@
 
 ## Overview
 
-The FSM engine is Open Bias' **deterministic** policy engine. It models allowed agent behavior as a finite state machine compiled internally from project `rules.md`, then classifies each LLM response to a workflow state, evaluates temporal constraints, and triggers interventions when deviations are detected.
+The FSM engine is Open Bias' **deterministic** policy engine. It models allowed agent behavior as a finite state machine compiled internally from project `RULES.md`, then classifies each LLM response to a workflow state, evaluates temporal constraints, and triggers interventions when deviations are detected.
 
 **Key characteristics:**
 - **Zero LLM overhead** — Classification uses tool-call matching, regex, and local embeddings (no external API calls)
@@ -54,7 +54,7 @@ fsm/
 
 In `openbias.yaml`, user-facing evaluator config should only include evaluator
 identity (`name`, `type`, `phase`). The runtime compiler derives FSM workflow
-data from project `rules.md` and passes internal workflow config to the engine.
+data from project `RULES.md` and passes internal workflow config to the engine.
 
 ### Internal Workflow Shape
 
@@ -124,7 +124,7 @@ constraints:
     description: Session must eventually reach resolution
 ```
 
-This YAML illustrates the internal workflow structure produced by the compiler. End users should author policy in `rules.md`, not supply workflow YAML in `openbias.yaml`.
+This YAML illustrates the internal workflow structure produced by the compiler. End users should author policy in `RULES.md`, not supply workflow YAML in `openbias.yaml`.
 
 ### Constraint Types (LTL-Lite)
 

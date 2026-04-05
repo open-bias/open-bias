@@ -30,6 +30,7 @@ from openbias.cli_ui import (
     spinner,
 )
 from openbias.logging import configure_logging
+from openbias.policy.rules import POLICY_FILENAME, resolve_project_rules_path
 
 if TYPE_CHECKING:
     from openbias.config.settings import Settings
@@ -145,7 +146,7 @@ def _resolve_cli_settings(
         config_source=str(config_path) if config_path else "built-in defaults",
         synthesized_defaults=not has_yaml,
         synthesized_evaluator=synthesized_evaluator,
-        rules_path=rules_root / "rules.md",
+        rules_path=resolve_project_rules_path(rules_root),
     )
 
 
@@ -157,18 +158,18 @@ def _print_startup_source(resolved: ResolvedCLIConfig) -> None:
 
 
 def _require_rules_md(resolved: ResolvedCLIConfig) -> None:
-    """Fail with concise guidance when enforcement is enabled without rules.md."""
+    """Fail with concise guidance when enforcement is enabled without RULES.md."""
     if not resolved.settings.evaluators:
         return
     if resolved.rules_path.is_file():
         return
 
     error(
-        "Missing required project policy file: rules.md",
-        hint="Create rules.md in the working directory before running enforcement.",
+        f"Missing required project policy file: {POLICY_FILENAME}",
+        hint=f"Create {POLICY_FILENAME} in the working directory before running enforcement.",
     )
     console.print()
-    console.print("  [bold]Starter rules.md[/]")
+    console.print(f"  [bold]Starter {POLICY_FILENAME}[/]")
     for line in RULES_MD_STARTER.strip().splitlines():
         console.print(f"  {line}")
     raise SystemExit(1)
@@ -232,7 +233,7 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
     Point your LLM client's base_url to http://HOST:PORT/v1
 
     Configure runtime settings via openbias.yaml or CLI flags, or run with
-    built-in defaults plus project-local rules.md:
+    built-in defaults plus project-local RULES.md:
         openbias serve -c openbias.yaml
         openbias serve --port 4000
         openbias serve
@@ -283,7 +284,7 @@ def serve(ctx: click.Context, port: int, host: str, config: Path, debug: bool) -
     except SystemExit:
         raise
     except Exception as e:
-        error(str(e), hint="Check your config, API key, and project-local rules.md.")
+        error(str(e), hint=f"Check your config, API key, and project-local {POLICY_FILENAME}.")
         if debug:
             import traceback
 
@@ -372,7 +373,7 @@ def trigger(config: Path, message: str, debug: bool) -> None:
     except SystemExit:
         raise
     except Exception as e:
-        error(str(e), hint="Check your config, API key, and project-local rules.md.")
+        error(str(e), hint=f"Check your config, API key, and project-local {POLICY_FILENAME}.")
         if debug:
             import traceback
             traceback.print_exc()
@@ -395,7 +396,7 @@ def init(quick: bool) -> None:
     """Generate optional Open Bias scaffolding.
 
     Creates an editable openbias.yaml in the current directory.
-    You can also run Open Bias without YAML using project-local rules.md.
+    You can also run Open Bias without YAML using project-local RULES.md.
     Without flags, runs an interactive wizard with arrow-key selection.
 
     Examples:
@@ -546,7 +547,9 @@ def info(config_path: Path | None, verbose: bool) -> None:
 
         evaluator = settings.evaluators[0] if settings.evaluators else None
         tracing_type = settings.otel.exporter_type or "none"
-        rules_source = "project-local rules.md" if resolved.rules_path.exists() else "(missing)"
+        rules_source = (
+            f"project-local {resolved.rules_path.name}" if resolved.rules_path.exists() else "(missing)"
+        )
 
         config_panel(
             "Open Bias Info",
@@ -720,7 +723,7 @@ def replay(
     "--instruction",
     type=str,
     required=True,
-    help="How the generated policy variants should differ from baseline rules.md",
+    help="How the generated policy variants should differ from baseline RULES.md",
 )
 @click.option(
     "--variant-count",

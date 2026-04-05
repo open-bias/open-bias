@@ -1,4 +1,4 @@
-"""Resolve user-authored rules from project-local rules.md."""
+"""Resolve user-authored rules from project-local RULES.md."""
 
 from __future__ import annotations
 
@@ -7,6 +7,9 @@ from pathlib import Path
 
 _BULLET_RE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)(.+)$")
 _HEADING_RE = re.compile(r"^\s*#{1,6}\s*(.+?)\s*$")
+
+POLICY_FILENAME = "RULES.md"
+LEGACY_POLICY_FILENAME = "RULES.md"
 
 
 def _segment_freeform_text(raw_text: str) -> list[str]:
@@ -40,9 +43,6 @@ def _segment_freeform_text(raw_text: str) -> list[str]:
         heading_match = _HEADING_RE.match(line)
         if heading_match:
             flush_paragraph()
-            heading = heading_match.group(1).strip()
-            if heading:
-                segments.append(heading)
             continue
 
         bullet_match = _BULLET_RE.match(line)
@@ -59,13 +59,27 @@ def _segment_freeform_text(raw_text: str) -> list[str]:
     return [item for item in segments if item]
 
 
+def resolve_project_rules_path(base_dir: Path | None = None) -> Path:
+    """Return the preferred policy path, falling back to the legacy filename."""
+    root = base_dir or Path.cwd()
+    canonical = root / POLICY_FILENAME
+    if canonical.exists():
+        return canonical
+
+    legacy = root / LEGACY_POLICY_FILENAME
+    if legacy.exists():
+        return legacy
+
+    return canonical
+
+
 def resolve_rules_payload(
     *,
     base_dir: Path | None = None,
     auto_discover_rules_md: bool = True,
     rules_path: Path | None = None,
 ) -> list[str]:
-    """Resolve normalized rules from project-local rules.md only."""
+    """Resolve normalized rules from project-local RULES.md only."""
     root = base_dir or Path.cwd()
     resolved: list[str] = []
 
@@ -73,7 +87,7 @@ def resolve_rules_payload(
         if rules_path.exists():
             resolved.extend(_segment_freeform_text(rules_path.read_text(encoding="utf-8")))
     elif auto_discover_rules_md:
-        autodiscovered = root / "rules.md"
+        autodiscovered = resolve_project_rules_path(root)
         if autodiscovered.exists():
             resolved.extend(_segment_freeform_text(autodiscovered.read_text(encoding="utf-8")))
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from openbias.policy.compiler import PolicyCompilerRegistry
-from openbias.policy.rules import resolve_rules_payload
+from openbias.policy.rules import POLICY_FILENAME, resolve_project_rules_path, resolve_rules_payload
 
 
 async def compile_runtime_config_for_evaluator(
@@ -25,9 +25,10 @@ async def compile_runtime_config_for_evaluator(
         rules_path=rules_path,
     )
     if not normalized_rules:
+        expected_path = resolve_project_rules_path(base_dir)
         raise ValueError(
-            f"Evaluator '{evaluator_name}' requires project rules.md. "
-            f"Expected file at: {base_dir / 'rules.md'}"
+            f"Evaluator '{evaluator_name}' requires project {POLICY_FILENAME}. "
+            f"Expected file at: {expected_path}"
         )
 
     cleaned = dict(evaluator_config)

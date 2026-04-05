@@ -7,7 +7,7 @@ Configuration can be provided via:
 3. .env file
 4. Direct instantiation
 
-Evaluator policy is always authored in project-local ``rules.md``.
+Evaluator policy is always authored in project-local ``RULES.md``.
 Do not configure evaluator-level ``rules``, ``rules_file``, ``workflow``,
 or ``config_path`` in ``openbias.yaml``.
 
@@ -119,7 +119,7 @@ class ClassifierConfig(BaseModel):
 class EvaluatorConfig(BaseModel):
     """Configuration for a single evaluator in the pipeline.
 
-    User-authored policy comes from project-local ``rules.md``. Any values in
+    User-authored policy comes from project-local ``RULES.md``. Any values in
     ``config`` are runtime knobs, not alternate evaluator policy sources.
     """
     name: str
@@ -252,14 +252,14 @@ class YamlConfigSource(PydanticBaseSettingsSource):
     def _legacy_key_error(key: str) -> ValueError:
         return ValueError(
             f"Legacy key `{key}` is no longer supported. Use `evaluators` plus "
-            "project-local `rules.md` as the only user-authored evaluator policy input."
+            "project-local `RULES.md` as the only user-authored evaluator policy input."
         )
 
     @staticmethod
     def _rules_contract_error(key: str) -> ValueError:
         return ValueError(
             f"Evaluator key `{key}` is not allowed. All evaluators compile from "
-            "project-local `rules.md`; engine-native runtime config is internal "
+            "project-local `RULES.md`; engine-native runtime config is internal "
             "and not user-authored."
         )
 

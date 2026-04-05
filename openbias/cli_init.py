@@ -25,6 +25,7 @@ from openbias.cli_ui import (
     yaml_preview,
 )
 from openbias.presets.library import RulesPreset, discover_rules_presets, get_rules_preset
+from openbias.policy.rules import POLICY_FILENAME, resolve_project_rules_path
 
 
 _DEFAULT_RULES_CONTENT = textwrap.dedent(
@@ -45,13 +46,14 @@ def get_yaml_dumper():  # type: ignore[no-untyped-def]
 
 
 def _ensure_rules_md(content: str) -> bool:
-    """Create ``rules.md`` when missing and return whether it was created."""
-    rules_path = Path("rules.md")
+    """Create ``RULES.md`` when missing and return whether it was created."""
+    rules_path = resolve_project_rules_path()
     if rules_path.exists():
         return False
 
+    rules_path = Path(POLICY_FILENAME)
     rules_path.write_text(content, encoding="utf-8")
-    success("Created project-local evaluator policy file: rules.md")
+    success(f"Created project-local evaluator policy file: {POLICY_FILENAME}")
     return True
 
 
@@ -78,13 +80,13 @@ def _select_rules_preset() -> RulesPreset:
 
 
 def _scaffold_rules_from_preset(preset: RulesPreset) -> None:
-    """Create rules.md from a packaged preset or preserve an existing file."""
+    """Create RULES.md from a packaged preset or preserve an existing file."""
     created = _ensure_rules_md(preset.content)
     if created:
         dim(f"Starter source: {preset.package_path}")
         return
 
-    warning("rules.md already exists — leaving it unchanged")
+    warning(f"{resolve_project_rules_path().name} already exists — leaving it unchanged")
     dim(
         "Preset files live in the repo/package under "
         f"{preset.package_path} for manual review and customization."
@@ -150,8 +152,8 @@ def run_interactive_init() -> None:
     # 4. Engine-Specific Configuration
     # -----------------------------------------------------------------------
     heading(f"Configure {engine_type.upper()} Engine", step=4, total=6)
-    dim("All evaluators compile from project-local rules.md.")
-    dim("rules.md is the only user-authored evaluator policy input.")
+    dim(f"All evaluators compile from project-local {POLICY_FILENAME}.")
+    dim(f"{POLICY_FILENAME} is the only user-authored evaluator policy input.")
 
     config_data: dict = {}
 
@@ -253,7 +255,7 @@ def run_interactive_init() -> None:
     success(f"Configuration saved to {config_path}")
     next_steps([
         "openbias serve",
-        "Edit project-local rules.md for your evaluator policy",
+        f"Edit project-local {resolve_project_rules_path().name} for your evaluator policy",
     ])
 
 
@@ -291,7 +293,7 @@ def run_quick_init() -> None:
     success(f"Configuration saved to {config_path}")
 
     next_steps([
-        "Edit project-local rules.md for your evaluator policy",
+        f"Edit project-local {POLICY_FILENAME} for your evaluator policy",
         "openbias serve",
     ])
 

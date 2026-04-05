@@ -15,16 +15,17 @@ from openbias.improve.schema import (
 )
 from openbias.policy.build import build_engine_for_policy
 from openbias.policy.engines.llm.llm_client import LLMClient
+from openbias.policy.rules import POLICY_FILENAME, resolve_project_rules_path
 from openbias.replay import ReplayRunner
 from openbias.traces import load_trace_dataset
 
-_SYSTEM_PROMPT = """You rewrite Open Bias rules.md policy files.
+_SYSTEM_PROMPT = """You rewrite Open Bias RULES.md policy files.
 Return strict JSON with this shape:
 {"variants":[{"policy_markdown":"..."}]}
 
 Requirements:
 - Produce exactly the requested number of variants.
-- Each variant must be a complete standalone replacement for rules.md.
+- Each variant must be a complete standalone replacement for RULES.md.
 - Preserve Markdown format and policy clarity.
 - Apply the instruction in meaningfully different ways across variants.
 - Do not include commentary outside the JSON response."""
@@ -41,9 +42,9 @@ async def generate_variants(
     """Generate baseline plus candidate policy variants and persist them."""
 
     base_dir = (config_path.parent if config_path else Path.cwd()).resolve()
-    baseline_policy_path = base_dir / "rules.md"
+    baseline_policy_path = resolve_project_rules_path(base_dir)
     if not baseline_policy_path.is_file():
-        raise ValueError(f"Baseline rules.md not found at {baseline_policy_path}")
+        raise ValueError(f"Baseline {POLICY_FILENAME} not found at {baseline_policy_path}")
 
     baseline_text = baseline_policy_path.read_text(encoding="utf-8")
     variants_dir = output_dir / "variants"
@@ -187,7 +188,7 @@ async def _request_variant_documents(
         user_prompt=(
             f"Instruction:\n{instruction}\n\n"
             f"Variant count: {variant_count}\n\n"
-            "Baseline rules.md:\n"
+            f"Baseline {POLICY_FILENAME}:\n"
             "```markdown\n"
             f"{baseline_text}\n"
             "```"

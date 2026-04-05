@@ -7,11 +7,12 @@ from typing import Any
 
 from openbias.policy.compiler.protocol import CompilationResult, PolicyCompiler
 from openbias.policy.compiler.registry import register_compiler
+from openbias.policy.rules import POLICY_FILENAME
 
 
 @register_compiler("judge")
 class JudgeRuntimeCompiler(PolicyCompiler):
-    """Compile canonical `rules.md` text into Judge runtime config."""
+    """Compile canonical ``RULES.md`` text into Judge runtime config."""
 
     @property
     def engine_type(self) -> str:
@@ -32,7 +33,7 @@ class JudgeRuntimeCompiler(PolicyCompiler):
             success=True,
             config={
                 "_compiled_rules": compiled_rules,
-                "_rules_source": "rules.md",
+                "_rules_source": POLICY_FILENAME,
             },
         )
 

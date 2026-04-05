@@ -10,7 +10,7 @@ The LLM engine is Open Bias' **intelligence-based** policy engine. Instead of re
 - **LLM-powered** — Uses a sidecar LLM for nuanced classification and evaluation
 - **Confidence-tiered** — Three-tier confidence system (CONFIDENT / UNCERTAIN / LOST)
 - **Drift detection** — Combines temporal and semantic drift signals
-- **Same internal workflow schema** — Reuses `WorkflowDefinition` from FSM engine after compilation from `rules.md`
+- **Same internal workflow schema** — Reuses `WorkflowDefinition` from FSM engine after compilation from `RULES.md`
 - **Evidence memory** — Accumulates constraint evaluation evidence across turns
 
 ```
@@ -62,7 +62,7 @@ llm/
 In `openbias.yaml`, user-facing evaluator config should only include evaluator
 identity (`name`, `type`, `phase`) plus optional model/runtime tuning fields
 such as `llm_model`, `temperature`, and thresholds. Workflow inputs are
-compiled internally from project `rules.md`; do not set `workflow` or
+compiled internally from project `RULES.md`; do not set `workflow` or
 `config_path` in user config.
 
 ### Initialization

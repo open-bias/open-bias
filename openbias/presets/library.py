@@ -37,7 +37,7 @@ _DESCRIPTION_FALLBACKS: dict[str, str] = {
 
 @dataclass(frozen=True)
 class RulesPreset:
-    """A packaged starter ``rules.md`` preset."""
+    """A packaged starter ``RULES.md`` preset."""
 
     slug: str
     title: str
@@ -110,7 +110,7 @@ def _extract_description(content: str, slug: str) -> str:
     if paragraph_lines:
         return " ".join(paragraph_lines)
 
-    return _DESCRIPTION_FALLBACKS.get(slug, "Starter preset for project-local rules.md.")
+    return _DESCRIPTION_FALLBACKS.get(slug, "Starter preset for project-local RULES.md.")
 
 
 def _is_list_line(line: str) -> bool:

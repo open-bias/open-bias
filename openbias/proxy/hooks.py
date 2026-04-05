@@ -52,6 +52,7 @@ from openbias.core.interceptor import Interceptor, SYNC_POST_REPLAY_KIND
 from openbias.core.intervention.pipelines.cleanup import ResponseCleanupStage
 from openbias.logging import session_id_var, request_id_var
 from openbias.policy.protocols import PolicyEngine
+from openbias.policy.rules import resolve_project_rules_path
 from openbias.proxy.middleware import SessionExtractor
 
 logger = logging.getLogger(__name__)
@@ -510,7 +511,7 @@ class Callback(CustomLogger):
 
     @staticmethod
     def _policy_hash() -> str | None:
-        rules_path = Path.cwd() / "rules.md"
+        rules_path = resolve_project_rules_path(Path.cwd())
         if not rules_path.is_file():
             return None
         return hashlib.sha256(rules_path.read_bytes()).hexdigest()

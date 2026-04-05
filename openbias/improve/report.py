@@ -39,7 +39,7 @@ def render_improvement_markdown(result: ImprovementResult) -> str:
         [
             "",
             "## Reviewer Check",
-            "- Review the winning variant in `variants/` before promoting any policy changes into `rules.md`.",
+            "- Review the winning variant in `variants/` before promoting any policy changes into `RULES.md`.",
             "- Spot-check mismatches and replay failures in `improvement.json` when the winner is close or coverage is limited.",
             "",
         ]

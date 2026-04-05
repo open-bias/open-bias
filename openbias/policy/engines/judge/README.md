@@ -1,12 +1,12 @@
 # LLM-as-a-Judge Policy Engine
 
-> A judge evaluator that checks the latest request or response against runtime-compiled rules from project `rules.md`.
+> A judge evaluator that checks the latest request or response against runtime-compiled rules from project `RULES.md`.
 
 ## Overview
 
 The judge engine is the simplest policy evaluator in Open Bias: it asks a judge model whether the current turn follows the compiled project rules. The public contract is:
 
-- User policy lives in project `rules.md`.
+- User policy lives in project `RULES.md`.
 - Open Bias compiles that file into runtime `_compiled_rules`.
 - The judge engine receives those compiled rules plus model settings.
 - Each judge evaluates one rule at a time with a binary pass/fail result.
@@ -23,7 +23,7 @@ judge/
 ├── client.py       # JudgeClient model management
 ├── models.py       # JudgeRuleResult, AggregatedRuleResult, JudgeVerdict
 ├── prompts.py      # Prompt templates for compiled-rule evaluation
-├── compiler.py     # Runtime compiler wiring for project rules.md
+├── compiler.py     # Runtime compiler wiring for project RULES.md
 └── __init__.py     # Exports and registration
 ```
 
@@ -33,7 +33,7 @@ judge/
 
 - `models`: judge model configs
 - `_compiled_rules`: non-empty list of plain-text rules
-- `_rules_source`: optional source label such as `rules.md`
+- `_rules_source`: optional source label such as `RULES.md`
 
 Any authored policy input is resolved before engine initialization. The engine rejects legacy `rules_file` input because user-facing policy is no longer configured directly on the evaluator.
 
@@ -78,7 +78,7 @@ await engine.initialize(
             "Do not reveal secrets.",
             "Stay on task.",
         ],
-        "_rules_source": "rules.md",
+        "_rules_source": "RULES.md",
     }
 )
 ```
@@ -87,4 +87,4 @@ await engine.initialize(
 
 - Update `prompts.py` if the judge instructions need to change.
 - Update `compiler.py` if runtime compilation into `_compiled_rules` changes.
-- Keep authored policy in `rules.md`; do not add evaluator-specific rubric files.
+- Keep authored policy in `RULES.md`; do not add evaluator-specific rubric files.

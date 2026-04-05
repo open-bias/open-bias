@@ -49,7 +49,7 @@ The NeMo engine is intentionally compact — most of the heavy lifting is done b
 In `openbias.yaml`, user-facing evaluator config should only include evaluator
 identity (`name`, `type`, `phase`) and optional runtime flags like
 `fail_closed`/`rails`. NeMo rails config is compiled internally from project
-`rules.md`; do not set evaluator-level `config_path` or inline `config`.
+`RULES.md`; do not set evaluator-level `config_path` or inline `config`.
 
 ### Prerequisites
 
@@ -93,7 +93,7 @@ nemo_config/
     └── custom.py       # Custom Python actions
 ```
 
-This directory shape represents compiled NeMo runtime artifacts. End users should continue to author policy in project `rules.md` rather than wiring directory paths into `openbias.yaml`.
+This directory shape represents compiled NeMo runtime artifacts. End users should continue to author policy in project `RULES.md` rather than wiring directory paths into `openbias.yaml`.
 
 ---
 

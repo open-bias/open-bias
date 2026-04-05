@@ -8,7 +8,7 @@ descriptions into engine-specific configurations:
 - NeMo: Natural language → Colang + config
 
 Compilation happens automatically during ``openbias serve`` startup.
-Rules are loaded from project ``rules.md`` and compiled into
+Rules are loaded from project ``RULES.md`` and compiled into
 engine-native config before engine init.
 
 Programmatic usage:

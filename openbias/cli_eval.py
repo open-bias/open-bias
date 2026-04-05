@@ -11,6 +11,7 @@ from openbias.cli_ui import config_panel, error, key_value, spinner, success
 from openbias.config.settings import Settings
 from openbias.eval import EvalRunner, discover_native_suite_paths, load_native_suite, runtime_config_from_settings
 from openbias.policy.build import build_engine_for_policy
+from openbias.policy.rules import POLICY_FILENAME, resolve_project_rules_path
 
 
 def _resolve_eval_suite_paths(
@@ -59,9 +60,9 @@ async def _run_eval_async(
     suites: list[Path],
 ) -> list[dict[str, object]]:
     base_dir = (config.parent if config else Path.cwd()).resolve()
-    rules_path = base_dir / "rules.md"
+    rules_path = resolve_project_rules_path(base_dir)
     if not rules_path.is_file():
-        raise ValueError(f"Baseline rules.md not found at {rules_path}")
+        raise ValueError(f"Baseline {POLICY_FILENAME} not found at {rules_path}")
 
     engine = await build_engine_for_policy(
         settings=settings,
