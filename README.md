@@ -80,7 +80,6 @@ Put rules like these in `RULES.md`:
 
 Then run Open Bias between your app and your LLM provider:
 
-- [`examples/fsm_workflow/`](examples/fsm_workflow/) shows a support workflow where identity verification must happen before account action. Open Bias intervenes before the bad step reaches the user and corrects or blocks the out-of-order behavior.
 - [`examples/judge/`](examples/judge/) shows a hidden-instructions attack. Open Bias can steer the next turn or deny immediately in sync block mode, but the broader point is runtime enforcement, not just prompt-injection filtering.
 
 If you want the shortest path to "I get it," start with [`examples/README.md`](examples/README.md).
@@ -181,8 +180,8 @@ Every hook is wrapped in `safe_hook()` with a configurable timeout (default 30s)
                    │  ┌────────────────────────────────────┐   │
                    │  │        Evaluator Engines           │   │
                    │  │  ┌───────┐ ┌─────┐ ┌─────┐ ┌────┐  │   │
-                   │  │  │ Judge │ │ FSM │ │ LLM │ │NeMo│  │   │
-                   │  │  └───────┘ └─────┘ └─────┘ └────┘  │   │
+                   │  │  │ Judge │ │NeMo│ │ ... │          │   │
+                   │  │  └───────┘ └────┘ └─────┘          │   │
                    │  └────────────────────────────────────┘   │
                    │        │                                  │
                    │        ▼                                  │
@@ -194,14 +193,12 @@ Every hook is wrapped in `safe_hook()` with a configurable timeout (default 30s)
 
 ## Engines
 
-Four evaluator types, same interface. Mix and match.
-
 | Engine | Mechanism | Critical-path latency |
 |--------|-----------|----------------------|
 | `judge` | Sidecar LLM evaluates compiled rules one at a time | **0ms** (async, deferred intervention) |
-| `fsm` | State machine with LTL-lite temporal constraints | **<1ms** tool call match, **~1ms** regex, **~50ms** embedding fallback |
-| `llm` | LLM-based state classification and drift detection | **100-500ms** |
 | `nemo` | NVIDIA NeMo Guardrails for content safety and dialog rails | **200-800ms** |
+| `fsm` | State machine with LTL-lite temporal constraints | *experimental* |
+| `llm` | LLM-based state classification and drift detection | *experimental* |
 
 ### Judge engine (default)
 
@@ -306,13 +303,11 @@ The proxy adds zero latency to your LLM calls in the default configuration:
 -   **LLM call**: Forwarded directly to provider via LiteLLM. No modification.
 -   **Async post-call**: Response evaluation runs in a background `asyncio.Task`. The response is returned to your app immediately.
 
-FSM classification overhead (when sync): tool call matching is instant, regex is ~1ms, embedding fallback is ~50ms on CPU. ONNX backend available for faster inference.
-
 All hooks are wrapped in `safe_hook()` with configurable timeout (default 30s). If a hook throws or times out, the request passes through — fail-open by design. Only `WorkflowViolationError` (intentional hard blocks) propagates.
 
 ## Status
 
-v0.3.0 -- alpha. The proxy layer, four evaluator engines (judge, FSM, LLM, NeMo), rules compiler, replay/improve tooling, and OpenTelemetry tracing all work. Zero-config startup plus optional YAML is in place, with auto-detection of models and API keys. API surface may change. Session state is in-memory only (not persistent across restarts).
+v0.3.0 -- alpha. The proxy layer, judge and NeMo evaluator engines, rules compiler, replay/improve tooling, and OpenTelemetry tracing all work. Two additional engines (FSM, LLM) are experimental. Zero-config startup plus optional YAML is in place, with auto-detection of models and API keys. API surface may change. Session state is in-memory only (not persistent across restarts).
 
 Missing: persistent session storage, dashboard UI, and rate limiting. These are planned but not built.
 
