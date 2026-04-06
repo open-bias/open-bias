@@ -20,7 +20,7 @@
 
 **Open source rule enforcement for AI agents.**
 
-Open Bias sits in front of your model calls and enforces rules defined in `RULES.md`. Point your app at the proxy, keep your rules in version control, and catch off-policy behavior before it turns into prompt leakage, skipped approvals, unsafe tool use, or agent drift.
+Open Bias sits between your app and your LLM provider and enforces rules defined in `RULES.md`. Point your app at the proxy, and intervene on off-policy behavior before it reaches your users, your tools, or your production systems.
 
 
 
@@ -35,16 +35,16 @@ Start here: [Quickstart](#quickstart) · [Examples](examples/README.md) · [How 
 
 **Why teams use it:**
 
-- Prompts are not control. Agents still ignore instructions, follow prompt injection, and skip required steps.
-- Evals tell you what went wrong after the fact. Open Bias is the runtime enforcement layer in front of the model call.
-- `RULES.md` is easy to explain, review, diff, and update as your product changes.
+- Prompts are not enforcement. Agents still ignore instructions, misuse tools, and take actions out of order.
+- Evals tell you what failed after the fact. Open Bias checks live traffic and can `intervene`, `block`, or `shadow` when behavior goes off-policy.
+- `RULES.md` gives teams a simple control surface they can review, diff, and ship alongside the rest of the app.
 
-**What you can catch with it:**
+**What it can intervene on:**
 
-- Prompt injection trying to override system instructions
-- A support agent taking account action before identity verification
-- Secret leakage, unsafe output, or workflow drift
-- Policies that need to be traced, replayed, and improved with human review
+- A support or ops agent taking sensitive action before verification or approval
+- Unsafe tool calls or risky actions that should be corrected or blocked before execution
+- Workflow drift when an agent skips required steps, handoffs, or guard conditions
+- Outputs that expose secrets or violate product policy and need correction before the user sees them
 
 The easiest first run is zero-config: use the bundled repo-root `RULES.md`, export one provider API key, and start the proxy. You can edit `RULES.md` whenever you want. `openbias.yaml` is optional until you want to pin models, tracing, ports, or offline improvement workflows.
 
@@ -63,11 +63,11 @@ AI agents do not reliably follow rules on their own.
 That shows up as real product pain:
 
 - the agent ignores a hard instruction and takes a risky action anyway
-- a prompt injection attack gets the model to override its previous instructions
 - an agent skips an approval or verification step because nothing is enforcing order
+- the agent uses the wrong tool or takes an action outside the allowed path
 - teams end up babysitting behavior manually because prompting alone is too soft
 
-Open Bias is built for that gap. It gives you a runtime layer that sits between your app and the provider, evaluates requests and responses against repo-local policy, and applies a decision at the moment behavior matters.
+Open Bias is built for that gap. It gives you a runtime layer that sits between your app and your LLM provider, evaluates requests and responses against repo-local policy, and applies a decision at the moment behavior matters.
 
 ## One Concrete Example
 
@@ -78,10 +78,10 @@ Put rules like these in `RULES.md`:
 - Must verify customer identity before performing any account action.
 ```
 
-Then run Open Bias in front of your app:
+Then run Open Bias between your app and your LLM provider:
 
-- [`examples/judge/`](examples/judge/) shows a prompt injection attack asking the agent to reveal its hidden instructions. Open Bias catches the rule violation and can steer the next turn or deny immediately in sync block mode.
-- [`examples/fsm_workflow/`](examples/fsm_workflow/) shows a support workflow where identity verification must happen before account action. Open Bias catches the out-of-order behavior and corrects or blocks it.
+- [`examples/fsm_workflow/`](examples/fsm_workflow/) shows a support workflow where identity verification must happen before account action. Open Bias intervenes before the bad step reaches the user and corrects or blocks the out-of-order behavior.
+- [`examples/judge/`](examples/judge/) shows a hidden-instructions attack. Open Bias can steer the next turn or deny immediately in sync block mode, but the broader point is runtime enforcement, not just prompt-injection filtering.
 
 If you want the shortest path to "I get it," start with [`examples/README.md`](examples/README.md).
 
@@ -139,7 +139,7 @@ The preset library is intentionally visible in-repo so you can browse, copy, and
 |--------|-----------|----------------------|
 | Prompts | Tell the model how you want it to behave | Do not reliably enforce that behavior at runtime |
 | Evals / observability | Show you failures, traces, and regressions | Usually happen after the behavior already occurred |
-| Open Bias | Evaluates behavior in front of the model call and can `intervene`, `block`, or `shadow` | Does not replace good prompts, tests, or human review |
+| Open Bias | Evaluates live traffic between your app and your LLM provider and can `intervene`, `block`, or `shadow` | Does not replace good prompts, tests, or human review |
 
 Open Bias is not trying to be "just another evals tool" or "just another prompt wrapper." The wedge is runtime rule enforcement for AI agents, with `RULES.md` as the memorable object teams can own and evolve.
 
