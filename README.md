@@ -202,6 +202,12 @@ v0.3.0 -- alpha. The proxy layer, judge and NeMo engines, rules compiler, replay
 - [Examples](examples/)
 ---
 
+## Contributing
+
+We'd love your help making Open Bias better — open an issue, submit a PR, or share how you're using it.
+
+---
+
 ## License
 
 Apache 2.0
