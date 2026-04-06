@@ -88,8 +88,8 @@ If Open Bias is useful, consider [starring the repo](https://github.com/open-bia
 - **System prompts and `AGENTS.md` files stop working at scale.** The more rules you add to a prompt, the less reliably the model follows any of them. Complex policies, multi-step workflows, and cross-agent constraints need enforcement that does not depend on the model choosing to comply.
 - **Evals and observability tell you what went wrong. Open Bias prevents it.** Evals run after the fact. Dashboards show you the failure. Open Bias evaluates live traffic and can `intervene`, `block`, or `shadow` in real time -- before the bad behavior reaches your users.
 - **`RULES.md` is a control surface your whole team can own.** Plain Markdown that lives in your repo. Review it in a PR, diff it across deploys, version it alongside your code. No vendor dashboard, no policy DSL, no separate system to maintain.
-- **Plug in different engines for different concerns.** Content safety, workflow enforcement, and domain-specific rules do not all need the same evaluator. Open Bias lets you run multiple engines side by side -- use a small specialized model for fast classification, a judge LLM for nuanced policy, or NeMo Guardrails for content safety. You are not locked into burning tokens on your primary provider for every check.
-- **Zero latency by default.** The policy engines can run async -- your response is returned immediately, violations are applied on the next turn. The proxy never becomes the bottleneck.
+- **Plug in different engines for different concerns.** Workflow enforcement, domain-specific rules, and content safety do not all need the same evaluator. Open Bias lets you run multiple engines side by side -- use a small specialized model for fast classification, a judge LLM for nuanced policy, or Nvidia's NeMo for content safety. You are not locked into burning tokens on your primary provider for every check.
+- **Zero latency by default.** Non-critical violations evaluate async and apply on the next turn. Critical violations are blocked and fixed immediately. The proxy never becomes the bottleneck.
 
 ---
 
@@ -137,7 +137,7 @@ Open Bias sits between your app and your LLM provider, evaluating every request 
                    └───────────────────────────────────────────┘
 ```
 
-Three hooks fire on every request: **pre-call** applies pending interventions (microseconds), **LLM call** forwards to the provider unmodified, **post-call** evaluates the response async. Violations queue corrections for the next turn. Critical violations block immediately.
+Three hooks fire on every request: **pre-call** applies pending interventions (microseconds), **LLM call** forwards to the provider unmodified, **post-call** evaluates the response. Critical violations can be caught and blocked synchronously. Non-critical violations evaluate async and queue corrections for the next turn, preserving latency.
 
 All hooks are fail-open with configurable timeout -- the proxy never becomes the bottleneck.
 
