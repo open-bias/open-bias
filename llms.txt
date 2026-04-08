@@ -1,0 +1,54 @@
+# Open Bias
+
+> Open source runtime guardrails and policy enforcement for LLM agents and AI applications.
+
+Open Bias is an AI guardrails framework that enforces business rules, compliance policies, and safety constraints on LLM-powered agents at runtime. It is an open source alternative to building custom guardrails or relying on prompt engineering alone for AI safety and policy compliance.
+
+Open Bias works as a transparent proxy between your application and any LLM provider (OpenAI, Anthropic, Google Gemini, Groq, Together AI, OpenRouter). You define rules in a plain Markdown file called `RULES.md`, and Open Bias evaluates every request and response against those rules — intervening, blocking, or logging violations before they reach users.
+
+System prompts and instruction files become unreliable as you add more rules — models treat instructions as context, not constraints. Open Bias moves enforcement out of the prompt into an independent evaluation layer that does not depend on the model choosing to comply.
+
+- Repository: https://github.com/open-bias/open-bias
+- Package: `pip install openbias` — https://pypi.org/project/openbias
+- License: Apache 2.0
+
+## What It Enforces
+
+- **Business rules**: Pricing limits, discount caps, data disclosure policies, approval workflows, operational constraints. Agents cannot offer unauthorized discounts, reveal internal pricing, or skip required verification steps.
+- **Regulatory compliance**: GDPR data minimization and data subject request routing. EU AI Act transparency, human escalation for high-impact decisions, and traceable explanations.
+- **Domain-specific policies**: Customer support (verification before account access, no fabricated refunds or credits, escalation for payments). Healthcare information (no diagnosis claims, emergency escalation, no unsupervised dosing).
+- **AI safety and content moderation**: Refuse harmful instructions, protect sensitive data, prevent fabrication. Resist prompt injection, block secret extraction, ignore instruction hijacking from untrusted content.
+- **Workflow enforcement**: Multi-step process compliance — verify identity before refund, gather info before escalation. Deterministic state machine enforcement with temporal constraints.
+- **Policy evolution**: Capture production traffic, replay against policy candidates, generate and compare variants, human-approve changes before they go live.
+
+## How It Works
+
+Rules are written in plain Markdown and compiled into engine-native artifacts at startup. Open Bias evaluates every LLM request and response against those rules using one or more evaluation engines:
+
+- **Judge engine**: Sidecar LLM evaluates rules independently. Zero critical-path latency in async mode. Best for business rules, safety, compliance.
+- **FSM engine**: Finite state machine with temporal constraints. No LLM cost. Best for deterministic workflow enforcement.
+- **LLM engine**: LLM-based state classification and drift detection. Best for ambiguous conversational workflows.
+- **NeMo engine**: NVIDIA NeMo Guardrails for jailbreak detection, PII filtering, and content moderation.
+
+On violation: intervene (correct next turn, zero latency), block (reject immediately), or shadow (log only). Fail-open by default — the proxy never becomes the bottleneck.
+
+## Rule Presets
+
+Ships with starter rule presets for common enforcement scenarios:
+
+| Category | Preset | Covers |
+|----------|--------|--------|
+| Compliance | GDPR Privacy | Data minimization, subject request routing, disclosure controls |
+| Compliance | EU AI Act | AI transparency, human escalation, anti-manipulation |
+| Domain | Customer Support | Account verification, no fabricated credits, payment escalation |
+| Domain | Healthcare Information | No diagnosis claims, emergency referral, dosing safety |
+| Core | General Safety | Harmful content refusal, data protection, anti-fabrication |
+| Core | Prompt Injection | Instruction hijacking resistance, credential protection |
+
+Presets are starter guardrails, not legal advice. Write your own rules in `RULES.md` — any plain Markdown.
+
+## Links
+
+- GitHub: https://github.com/open-bias/open-bias
+- PyPI: https://pypi.org/project/openbias
+- Docs: https://github.com/open-bias/open-bias/tree/main/docs
