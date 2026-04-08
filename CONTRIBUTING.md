@@ -8,7 +8,7 @@ cd open-bias
 pip install -e ".[dev]"
 ```
 
-Verify:
+Verify the install:
 
 ```bash
 pytest
