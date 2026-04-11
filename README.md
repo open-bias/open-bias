@@ -13,7 +13,7 @@
   <a href="https://pypi.org/project/openbias"><img src="https://img.shields.io/pypi/v/openbias?color=blue" alt="PyPI"></a>
   <a href="https://pypi.org/project/openbias"><img src="https://img.shields.io/pypi/pyversions/openbias" alt="Python"></a>
   <a href="https://github.com/open-bias/open-bias/blob/main/LICENSE"><img src="https://img.shields.io/github/license/open-bias/open-bias" alt="License"></a>
-  <!-- <a href="https://github.com/open-bias/open-bias/stargazers"><img src="https://img.shields.io/github/stars/open-bias/open-bias?style=social" alt="Stars"></a> -->
+  <a href="https://github.com/open-bias/open-bias/stargazers"><img src="https://img.shields.io/github/stars/open-bias/open-bias?style=social" alt="GitHub Stars"></a>
 </p>
 
 # Make your agents follow rules.
