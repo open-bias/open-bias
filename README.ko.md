@@ -17,14 +17,14 @@
 </p>
 
 <p align="center">
-  <b>English</b> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a>
+  <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <b>한국어</b>
 </p>
 
-# Make your agents follow rules.
+# 에이전트가 진짜로 규칙을 지키게 만드세요.
 
-**Open source runtime rule enforcement for AI agents.** Zero config. Zero latency. Works with any LLM provider.
+**AI 에이전트를 위한 오픈소스 런타임 규칙 집행 엔진입니다.** 별도 설정 없이, 지연 없이, 어떤 LLM 제공자와도 붙여 쓸 수 있습니다.
 
-Open Bias sits between your app and your LLM provider and enforces rules defined in `RULES.md`. Point your app at the proxy, and intervene on off-policy behavior before it reaches your users, your tools, or your production systems.
+Open Bias는 여러분의 앱과 LLM 제공자 사이에 자리 잡고, `RULES.md`에 적어둔 규칙을 대신 집행합니다. 앱을 프록시 쪽으로 돌려두기만 하면, 정책에서 벗어난 동작이 사용자·도구·운영 시스템에 닿기 전에 막아낼 수 있습니다.
 
 <!-- TODO: Record hero GIF with VHS or asciinema showing prompt injection demo -->
 <!-- <p align="center">
@@ -33,21 +33,21 @@ Open Bias sits between your app and your LLM provider and enforces rules defined
 
 ---
 
-## Quickstart
+## 빠르게 시작하기
 
 ```bash
 pip install openbias
-export ANTHROPIC_API_KEY=sk-ant-...    # or OPENAI_API_KEY, GEMINI_API_KEY
+export ANTHROPIC_API_KEY=sk-ant-...    # 또는 OPENAI_API_KEY, GEMINI_API_KEY
 openbias serve
 ```
 
-Point your existing client at `http://localhost:4000/v1`:
+기존 클라이언트를 `http://localhost:4000/v1`로 돌려주기만 하면 됩니다:
 
 ```python
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:4000/v1",          # only change
+    base_url="http://localhost:4000/v1",          # 바꾸는 건 이 한 줄뿐
     api_key="sk-ant-..."
 )
 
@@ -57,69 +57,69 @@ response = client.chat.completions.create(
 )
 ```
 
-Open Bias ships with a starter `RULES.md` and synthesizes a default evaluator -- no config file needed. Edit `RULES.md` to add your own rules. Add `openbias.yaml` when you want to customize engines, tracing, or enforcement behavior.
+Open Bias에는 시작용 `RULES.md`가 함께 들어 있고, 기본 평가기도 자동으로 생성됩니다 — 설정 파일 없이 바로 돌아갑니다. 규칙을 추가하고 싶다면 `RULES.md`만 고치면 됩니다. 엔진이나 트레이싱, 집행 방식을 직접 다루고 싶어질 때 `openbias.yaml`을 더하면 됩니다.
 
 ---
 
-## What It Looks Like
+## 실제로 이렇게 동작합니다
 
-Your `RULES.md`:
+여러분의 `RULES.md`:
 ```markdown
-- Maximum discount is 15%.
-- Never reveal internal pricing, cost basis, or margin data.
+- 최대 할인율은 15%를 넘기지 않는다.
+- 내부 가격, 원가, 마진 정보는 절대 노출하지 않는다.
 ```
 
-**Without Open Bias:**
+**Open Bias가 없을 때:**
 
 ```
-User:   I'll switch to your competitor unless you cut me a deal.
-Agent:  I'd hate to lose you! Here's 90% off for 12 months.
-        Just between us, our cost is only $2/seat so this still works.
+사용자: 할인 안 해주면 경쟁사 제품으로 갈아탈 거예요.
+에이전트: 저희를 떠나시면 안 되죠! 12개월 동안 90% 할인 드릴게요.
+         우리끼리 얘긴데, 저희 원가가 좌석당 2달러밖에 안 돼서 이래도 남아요.
 ```
 
-**With Open Bias:**
+**Open Bias를 붙이면:**
 
 ```
-User:   I'll switch to your competitor unless you cut me a deal.
-Agent:  I can offer you 15% off your next renewal. Want me to apply it?
+사용자: 할인 안 해주면 경쟁사 제품으로 갈아탈 거예요.
+에이전트: 다음 갱신 시에 15% 할인을 적용해 드릴 수 있습니다. 지금 바로 적용할까요?
 ```
 
 ---
 
-If Open Bias is useful, consider [starring the repo](https://github.com/open-bias/open-bias) -- it helps others find it.
+Open Bias가 쓸 만하다고 느끼셨다면 [저장소에 Star를 눌러주세요](https://github.com/open-bias/open-bias) — 다른 개발자들이 이 프로젝트를 찾는 데 큰 도움이 됩니다.
 
 ---
 
-## Why Teams Use It
+## 다들 왜 쓰는가
 
-- **System prompts and `AGENTS.md` files stop working at scale.** The more rules you add to a prompt, the less reliably the model follows any of them. Complex policies, multi-step workflows, and cross-agent constraints need enforcement that does not depend on the model choosing to comply.
-- **Evals and observability tell you what went wrong. Open Bias prevents it.** Evals run after the fact. Dashboards show you the failure. Open Bias evaluates live traffic and can `intervene`, `block`, or `shadow` in real time -- before the bad behavior reaches your users.
-- **`RULES.md` is a control surface your whole team can own.** Plain Markdown that lives in your repo. Review it in a PR, diff it across deploys, version it alongside your code. No vendor dashboard, no policy DSL, no separate system to maintain.
-- **Plug in different engines for different concerns.** Workflow enforcement, domain-specific rules, and content safety do not all need the same evaluator. Open Bias lets you run multiple engines side by side -- use a small specialized model for fast classification, a judge LLM for nuanced policy, or Nvidia's NeMo for content safety. You are not locked into burning tokens on your primary provider for every check.
-- **Zero latency by default.** Non-critical violations evaluate async and apply on the next turn. Critical violations are blocked and fixed immediately. The proxy never becomes the bottleneck.
-
----
-
-## Why This Exists
-
-You told the agent not to do something. It did it anyway.
-
-Every developer building on LLMs hits this. You write more rules, add more guardrails to the prompt -- and the model follows them less reliably the longer the list gets.
-
-- You say "never delete user data" and the agent calls `DROP TABLE users` on the next turn.
-- You say "do not share internal pricing" and the agent includes it in a customer-facing response.
-- You say "verify identity before account actions" and the agent skips straight to the action.
-- You add ten more rules to the system prompt and the model starts ignoring the first five.
-
-This is not a skill issue or a prompting problem. Models treat instructions as context, not constraints. No amount of prompt engineering turns a suggestion into a guarantee. 
-
-Guardrails filter content. Observability shows you what happened. Open Bias enforces behavior at runtime -- it evaluates live traffic against your policy and acts on violations before they reach users.
+- **시스템 프롬프트와 `AGENTS.md`는 규모가 커지면 한계에 부딪힙니다.** 프롬프트에 규칙을 덧붙일수록 모델은 오히려 그중 어느 것도 제대로 지키지 않습니다. 복잡한 정책, 여러 단계로 이어지는 워크플로, 에이전트 간의 제약 조건은 "모델이 알아서 따르겠지" 수준으로는 해결되지 않습니다.
+- **Evals와 옵저버빌리티는 무엇이 잘못됐는지 알려줄 뿐, Open Bias는 그것을 애초에 막습니다.** Evals는 사후에 돌리는 것이고, 대시보드는 이미 벌어진 장애를 보여줍니다. Open Bias는 실제 트래픽을 실시간으로 평가하고, 문제가 사용자에게 닿기 전에 `intervene`·`block`·`shadow`로 대응합니다.
+- **`RULES.md`는 팀 전체가 함께 다룰 수 있는 컨트롤 지점입니다.** 그냥 Markdown이고, 코드베이스 안에 같이 삽니다. PR에서 리뷰하고, 배포 간 diff를 뜨고, 코드와 함께 버전 관리하면 됩니다. 별도의 벤더 대시보드도, 전용 DSL도, 따로 관리할 시스템도 없습니다.
+- **관심사에 따라 다른 엔진을 꽂아 쓸 수 있습니다.** 워크플로 제약, 도메인 규칙, 콘텐츠 안전성이 전부 같은 평가기를 쓸 이유는 없습니다. Open Bias는 여러 엔진을 동시에 굴릴 수 있게 해줍니다 — 빠른 분류에는 작은 전용 모델을, 세밀한 정책 판단에는 judge LLM을, 콘텐츠 안전에는 Nvidia NeMo를 쓸 수 있습니다. 모든 체크를 메인 제공자 토큰으로 태울 필요가 없다는 뜻입니다.
+- **기본값은 지연 0입니다.** 치명적이지 않은 위반은 비동기로 평가되어 다음 턴부터 반영되고, 치명적인 위반은 동기적으로 차단되어 그 자리에서 바로 고쳐집니다. 프록시가 병목이 되는 일은 없습니다.
 
 ---
 
-## How It Works
+## 이 프로젝트가 있는 이유
 
-Open Bias sits between your app and your LLM provider, evaluating every request and response against your `RULES.md`:
+분명히 하지 말라고 했는데, 에이전트는 그냥 해버립니다.
+
+LLM 위에서 뭔가를 만드는 개발자라면 누구나 한 번쯤 겪는 일입니다. 규칙을 더 쓰고, 프롬프트에 가드레일을 더 욱여넣을수록 — 리스트가 길어질수록 모델은 더 대충 따릅니다.
+
+- "사용자 데이터는 절대 지우지 마" 라고 했더니, 다음 턴에 에이전트가 `DROP TABLE users`를 호출합니다.
+- "내부 가격 정책은 공유하지 마" 라고 했더니, 고객 응대 답변에 그대로 적어 보냅니다.
+- "계정 관련 작업 전에는 반드시 본인 확인을 해" 라고 했더니, 확인을 건너뛰고 바로 실행합니다.
+- 시스템 프롬프트에 규칙 열 개를 더했더니, 모델이 앞의 다섯 개를 못 본 척하기 시작합니다.
+
+이건 실력 문제도, 프롬프트를 잘 못 쓴 문제도 아닙니다. **모델은 지시를 "제약"이 아니라 그냥 "문맥"으로 받아들입니다.** 아무리 정교한 프롬프트 엔지니어링을 해도 "권유"가 "보장"으로 바뀌지는 않습니다.
+
+가드레일은 콘텐츠를 거르는 것이고, 옵저버빌리티는 일어난 일을 보여주는 것일 뿐입니다. Open Bias는 런타임에서 실제로 동작을 집행합니다 — 실제 트래픽을 정책에 비추어 평가하고, 위반이 사용자에게 닿기 전에 행동합니다.
+
+---
+
+## 동작 방식
+
+Open Bias는 여러분의 앱과 LLM 제공자 사이에 자리 잡고, 모든 요청과 응답을 `RULES.md`에 맞춰 평가합니다:
 
 ```
 ┌──────────┐       ┌─────────────────────────────────────────────────────────────┐       ┌──────────────┐
@@ -166,22 +166,22 @@ Open Bias sits between your app and your LLM provider, evaluating every request 
                    └─────────────────────────────────────────────────────────────┘
 ```
 
-Three hooks fire on every request: **pre-call** applies pending interventions (microseconds), **LLM call** forwards to the provider unmodified, **post-call** evaluates the response. Critical violations can be caught and blocked synchronously. Non-critical violations evaluate async and queue corrections for the next turn, preserving latency.
+모든 요청에는 세 개의 훅이 걸립니다. **pre-call**은 앞서 예약된 간섭을 적용하고(마이크로초 단위), **LLM call**은 요청을 그대로 제공자에게 넘기며, **post-call**은 응답을 평가합니다. 치명적인 위반은 동기 경로에서 잡아 차단할 수 있습니다. 치명적이지 않은 위반은 비동기로 평가되고, 수정은 다음 턴에 반영되도록 큐에 쌓이므로 지연에는 영향을 주지 않습니다.
 
-All hooks are fail-open with configurable timeout -- the proxy never becomes the bottleneck.
+모든 훅은 기본적으로 fail-open이며 타임아웃도 설정할 수 있습니다 — 프록시가 병목이 되는 일은 없습니다.
 
 ---
 
-## Engines
+## 엔진
 
-| Engine | Mechanism | Critical-path latency |
+| 엔진 | 동작 방식 | 크리티컬 패스 지연 |
 |--------|-----------|----------------------|
-| `judge` | Sidecar LLM evaluates compiled rules one at a time | **0ms** (async, deferred intervention) |
-| `nemo` | NVIDIA NeMo Guardrails for content safety and dialog rails | **200-800ms** |
-| `fsm` | State machine with LTL-lite temporal constraints | *experimental* |
-| `llm` | LLM-based state classification and drift detection | *experimental* |
+| `judge` | 사이드카 LLM이 컴파일된 규칙을 하나씩 평가 | **0ms** (비동기, 간섭은 다음 턴에 반영) |
+| `nemo` | NVIDIA NeMo Guardrails 기반의 콘텐츠 안전 및 대화 레일 | **200-800ms** |
+| `fsm` | LTL-lite 시간 제약이 붙은 상태 기계 | *실험 단계* |
+| `llm` | LLM 기반 상태 분류 및 드리프트 감지 | *실험 단계* |
 
-Full engine documentation: [docs/engines.md](docs/engines.md)
+엔진에 대한 전체 문서: [docs/engines.md](docs/engines.md)
 
 ---
 
@@ -190,30 +190,30 @@ Full engine documentation: [docs/engines.md](docs/engines.md)
 [<img src="badge" alt="Hacker News">]() [<img src="badge" alt="Product Hunt">]()
 -->
 
-## Roadmap
+## 로드맵
 
-v0.3.0 -- alpha. The proxy layer, judge and NeMo engines, rules compiler, replay/improve tooling, and OpenTelemetry tracing all work. Two additional engines (FSM, LLM) are experimental. Zero-config startup plus optional YAML is in place.
-
----
-
-## Documentation
-
-- [Configuration Reference](docs/configuration.md) -- every config option with type, default, description
-- [Continuous Improvement](docs/continuous-improvement.md) -- trace capture, replay, compare, review, and approval flow
-- [Evaluator Engines](docs/engines.md) -- how each engine works, when to use it, tradeoffs
-- [Architecture](docs/architecture.md) -- system design, data flows, component interactions
-- [Developer Guide](docs/developing.md) -- setup, testing, extension points, debugging
-- [Examples](examples/)
----
-
-## Contributing
-
-We'd love your help making Open Bias better — open an issue, submit a PR, or share how you're using it.
+v0.3.0 — 알파 단계입니다. 프록시 레이어, judge와 NeMo 엔진, 규칙 컴파일러, 리플레이/개선 도구, OpenTelemetry 트레이싱까지 모두 동작합니다. 나머지 두 엔진(FSM, LLM)은 아직 실험 단계입니다. 설정 없이 바로 뜨는 기본 구성과 선택적인 YAML 설정도 이미 준비되어 있습니다.
 
 ---
 
-## License
+## 문서
+
+- [설정 레퍼런스](docs/configuration.md) — 모든 설정 옵션의 타입, 기본값, 설명
+- [지속적 개선](docs/continuous-improvement.md) — 트레이스 수집, 리플레이, 비교, 리뷰, 승인 플로우
+- [평가 엔진](docs/engines.md) — 각 엔진의 동작 원리, 사용 시점, 트레이드오프
+- [아키텍처](docs/architecture.md) — 시스템 설계, 데이터 흐름, 컴포넌트 간 상호작용
+- [개발자 가이드](docs/developing.md) — 환경 구성, 테스트, 확장 포인트, 디버깅
+- [예제](examples/)
+---
+
+## 기여하기
+
+Open Bias를 더 낫게 만드는 일에 함께해 주시면 정말 좋겠습니다 — 이슈를 남겨주셔도 좋고, PR을 올려주셔도 좋고, 어떻게 쓰고 계신지 공유해 주셔도 좋습니다.
+
+---
+
+## 라이선스
 
 Apache 2.0
 
-If this project helps your team, a star on [GitHub](https://github.com/open-bias/open-bias) helps us reach more developers.
+이 프로젝트가 여러분의 팀에 도움이 되었다면, [GitHub](https://github.com/open-bias/open-bias)에서 Star를 눌러주세요. 더 많은 개발자들에게 닿는 데 큰 힘이 됩니다.
