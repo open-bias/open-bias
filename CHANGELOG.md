@@ -4,20 +4,36 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## 0.4.0
 
 ### Breaking
 - Replaced top-level `engine`, `policy`, `judge`, `fsm`, `llm`, `nemo` config keys with `evaluators` list — each evaluator entry specifies `name`, `type`, and `phase`
 - Removed `PolicyEngineConfig`, `PolicyConfig`, and `_map_to_settings()`
 - Interceptor constructor now takes `pre_call_evaluators` and `post_call_evaluators` instead of a single `engines` list
+- `rules_file` and inline `rules` keys removed from evaluator config — `RULES.md` is now the sole policy input
+- `ViolationRecord` no longer includes `rule_id`, `rule_name`, or `evidence` fields
+- `rubric_name` replaced by `rules_source` in judge evaluator config
 
 ### Removed
-- Removed `max_intervention_attempts` setting and the repeated-intervention→block escalation mechanism — interventions now remain interventions regardless of how many times they occur
+- Removed `max_intervention_attempts` and intervention escalation — interventions remain interventions regardless of frequency
+- `ResponseModificationStrategy` removed — use sync intervention instead
 
 ### Added
 - Multi-evaluator pipeline with phase-based execution (pre_call / post_call)
 - YAML shorthand mappings for evaluator config (`model`) plus automatic compilation from project-local `RULES.md`
 - Top-level `mode`, `strategy`, `session_ttl`, `max_sessions` settings
+- `openbias trigger` — evaluate a single message against policy with structured output
+- `openbias replay` — replay a JSONL trace dataset against a policy offline
+- `openbias improve` — generate and replay policy variants, recommend one for review
+- Judge engine: per-rule binary evaluation, `target_role` support, multi-judge verdict aggregation
+- Sync post-call enforcement (block/intervene inline without async defer)
+- Zero-config `openbias init` with synthesized defaults, RULES.md gate, and preset rules library
+- `log_format` setting (`text`/`json`) for structured logging
+- JSONL trace sink for replayable policy traces (`tracing.sink: jsonl`)
+- `async+block` config automatically normalized to `intervene`
+
+### Changed
+- `checker` renamed to `evaluator` in all metadata keys
 
 ## 0.3.0
 
@@ -95,5 +111,5 @@ Initial release.
 
 - Session state is in-memory only. Not persistent across restarts.
 - No dashboard UI.
-- No pre-built rules library.
+- No pre-built rules library. *(Resolved in 0.4.0)*
 - No rate limiting.
