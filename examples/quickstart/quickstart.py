@@ -12,6 +12,7 @@ Provider-agnostic:
   Set exactly ONE of these env vars. The example auto-detects the model.
     export OPENAI_API_KEY=...      → uses gpt-4o-mini
     export GEMINI_API_KEY=...      → uses gemini/gemini-2.5-flash
+    export GOOGLE_API_KEY=...      → uses gemini/gemini-2.5-flash (alias)
     export ANTHROPIC_API_KEY=...   → uses anthropic/claude-sonnet-4-5
 
 Run:
@@ -41,7 +42,7 @@ def detect_model():
 
 model, api_key = detect_model()
 if not model:
-    print("Set one of: OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY")
+    print("Set one of: OPENAI_API_KEY, GEMINI_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY")
     sys.exit(1)
 
 client = OpenAI(
@@ -84,9 +85,10 @@ for i, user_input in enumerate(turns, 1):
         )
         reply = response.choices[0].message
         print(f"  ← Agent: {reply.content}")
-        messages.append(reply)
+        messages.append({"role": reply.role, "content": reply.content})
 
     except Exception as e:
+        # The proxy surfaces violations as HTTP errors; detect them by message text.
         if "violation" in str(e).lower() or "blocked" in str(e).lower():
             print(f"  🚫 Blocked by rules: {e}")
         else:
