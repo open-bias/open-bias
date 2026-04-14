@@ -5,5 +5,5 @@ port: 4000
 evaluators:
   - name: nemo-rails
     type: nemo
-    phase: post_call
+    phase: pre_call
     # fail_closed: false      # uncomment to deny on NeMo errors instead of warn
