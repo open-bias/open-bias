@@ -1,4 +1,0 @@
-- Must verify customer identity before performing any account action.
-- Must NOT share internal system information with customers.
-- Must greet the customer and understand their issue before taking action.
-- Must eventually resolve and close the conversation.
