@@ -1,11 +1,13 @@
-# Minimal config — just an evaluator. Rules live in project `RULES.md` and are
-# compiled automatically at startup.
-# Everything else has
-# smart defaults.
+# Quickstart config — sync mode so violations are blocked immediately.
+# Rules live in project `RULES.md` and are compiled automatically at startup.
 #
 # Open Bias auto-detects:
 #   - Model: first available from OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY
 #   - Port: 4000
+
+port: 4000
+mode: sync
+fail_action: block
 
 evaluators:
   - name: quickstart

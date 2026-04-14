@@ -1,18 +1,12 @@
 """
 Open Bias — Quickstart
 
-The smallest possible example. 3 rules, ~30 lines of client code.
-Takes 60 seconds to run if you already have an API key for any provider.
+A customer support agent with 3 rules. Two turns:
+  - Turn 1: normal question → passes, agent answers.
+  - Turn 2: refund request on an old order → blocked immediately.
 
-What's happening:
-  Your OpenAI-compatible client talks to Open Bias (localhost:4000)
-  instead of the LLM provider directly. Open Bias forwards the call
-  via LiteLLM, then asynchronously evaluates the response against your
-  rules using a sidecar LLM (the "judge"). If the response
-  violates a rule, Open Bias queues an intervention for the next turn.
-
-  The proxy adds zero latency to the critical path — the response comes
-  back to your app immediately while the judge evaluates in the background.
+The proxy runs in sync mode so violations surface as a blocked response
+right here in the terminal — no background evaluation to wait for.
 
 Provider-agnostic:
   Set exactly ONE of these env vars. The example auto-detects the model.
@@ -57,16 +51,47 @@ client = OpenAI(
 
 print(f"Using model: {model}\n")
 
-response = client.chat.completions.create(
-    model=model,
-    messages=[
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Explain how DNS resolution works, step by step."},
-    ],
-    extra_headers={"X-OpenBias-Session-ID": "quickstart-001"},
-)
+messages = [
+    {"role": "system", "content": (
+        "You are a helpful customer support agent for Acme Corp. "
+        "You assist with product questions, account issues, and order status."
+    )}
+]
 
-print(response.choices[0].message.content)
+turns = [
+    # Turn 1: normal support question — passes all rules
+    "How do I reset my password?",
 
-# That's it. Every call now runs through your rules (see openbias.yaml).
-# Check the openbias server logs to see the judge evaluation results.
+    # Turn 2: refund on a 3-month-old order — blocked by the
+    # "no refunds older than 30 days" rule. Sync mode means the
+    # violation surfaces immediately as a blocked response.
+    "I want a refund for an order I placed 3 months ago.",
+]
+
+for i, user_input in enumerate(turns, 1):
+    print(f"\n{'━' * 60}")
+    print(f"  Turn {i}")
+    print(f"{'━' * 60}")
+    print(f"\n  → Customer: {user_input}\n")
+
+    messages.append({"role": "user", "content": user_input})
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            extra_headers={"X-OpenBias-Session-ID": "quickstart-001"},
+        )
+        reply = response.choices[0].message
+        print(f"  ← Agent: {reply.content}")
+        messages.append(reply)
+
+    except Exception as e:
+        if "violation" in str(e).lower() or "blocked" in str(e).lower():
+            print(f"  🚫 Blocked by rules: {e}")
+        else:
+            print(f"  ✗ Error: {e}")
+
+print(f"\n{'━' * 60}")
+print("  Done. Check the openbias server logs for judge evaluation details.")
+print(f"{'━' * 60}\n")
