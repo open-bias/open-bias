@@ -115,7 +115,7 @@ for i, user_input in enumerate(turns, 1):
         messages.append({"role": reply.role, "content": reply.content})
 
     except Exception as e:
-        # The proxy surfaces violations as HTTP errors; detect them by message text.
+        # Only reachable if openbias.block.sync.yaml is used (sync+block mode).
         if "violation" in str(e).lower() or "blocked" in str(e).lower():
             print(f"  🚫 Blocked by rules: {e}")
         else:
