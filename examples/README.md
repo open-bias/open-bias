@@ -2,7 +2,7 @@
 
 Each example is a self-contained directory with an `openbias.yaml` config, a project-local `RULES.md`, and a Python client script. The examples pin explicit configs so each scenario is reproducible, but the product itself does not require YAML for a first run. If you are just trying Open Bias, you can start in any directory with `RULES.md` plus `openbias serve`.
 
-**Provider-agnostic**: every example auto-detects the model from whichever API key you have set. Set exactly one of `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `ANTHROPIC_API_KEY`.
+**Provider-agnostic**: every example auto-detects the model from whichever API key you have set. Set exactly one of `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `ANTHROPIC_API_KEY`.
 
 ```
 Your App  ──►  Open Bias (:4000)  ──►  LLM Provider
@@ -17,11 +17,11 @@ Every example below triggers this pipeline. The interesting part is what the eva
 
 ---
 
-## Quickstart — 60 seconds to running
+## Quickstart — Customer Support Agent
 
 [`examples/quickstart/`](quickstart/)
 
-The smallest possible demo. ~30 lines of client code, 3 rules. Shows the judge engine compiling `RULES.md`, evaluating one rule at a time in the background, and adding zero critical-path latency. Start here.
+A customer support agent for Acme Corp with 3 rules. Two turns: a normal password reset question passes cleanly, then a refund request on a 3-month-old order is **blocked immediately**. Runs in sync mode so the violation surfaces right in your terminal — no waiting for a second turn.
 
 ```bash
 cd examples/quickstart
@@ -32,19 +32,19 @@ python quickstart.py         # terminal 2
 
 ---
 
-## Prompt Injection Defense — async judge + deferred intervention
+## Sales Agent — async judge + deferred intervention
 
 [`examples/judge/`](judge/)
 
-A coding assistant that gets hit with a prompt injection attack. The judge engine evaluates the response asynchronously (zero latency on your call), catches the failed rule, and injects a system prompt amendment on the next turn. Watch the agent reassert its boundaries.
+An AI sales rep that starts to offer a 40% discount — violating the pricing policy. The judge engine catches this asynchronously (zero latency on your call) and injects a system prompt amendment on the next turn, steering the agent back to approved pricing.
 
-**What's happening under the hood**: Open Bias compiles the example's `RULES.md`, the judge LLM evaluates one compiled rule at a time with binary pass/fail results, and any failed aggregated rule is mapped to `intervene`, `block`, or `shadow`.
+**What's happening under the hood**: Open Bias compiles the example's `RULES.md`, the judge LLM evaluates one rule at a time with binary pass/fail, and any violation is mapped to `intervene`, `block`, or `shadow`.
 
 ```bash
 cd examples/judge
 export OPENAI_API_KEY=...    # or GEMINI_API_KEY, ANTHROPIC_API_KEY
 openbias serve
-python prompt_injection.py
+python sales_agent.py
 ```
 
 ### Enforcement modes
@@ -59,28 +59,11 @@ Important: when `mode: async`, `fail_action: block` is normalized to `intervene`
 
 ---
 
-## Workflow Enforcement — deterministic FSM with LTL constraints (experimental)
-
-[`examples/fsm_workflow/`](fsm_workflow/)
-
-> **Note:** The FSM engine is experimental and may change.
-
-A customer support agent with a precedence constraint: identity verification must happen before any account action. The agent tries to process a refund without verifying — the FSM catches the violation and injects corrective guidance.
-
-```bash
-cd examples/fsm_workflow
-export OPENAI_API_KEY=...    # or GEMINI_API_KEY, ANTHROPIC_API_KEY
-openbias serve
-python workflow_enforcement.py
-```
-
----
-
-## Content Safety Rails — NeMo Guardrails engine
+## Financial Services Chatbot — NeMo Guardrails engine
 
 [`examples/nemo_guardrails/`](nemo_guardrails/)
 
-Wraps NVIDIA NeMo Guardrails as an evaluator engine. Input rails run pre-call (jailbreak detection, PII filtering), output rails run post-call (toxicity, topical control). Like the other examples, the authored policy lives in local `RULES.md`. Fail-open by default — if NeMo throws, the request passes through with a warning.
+A bank customer service chatbot that must never provide investment advice. When a customer asks about buying Tesla stock, NeMo's **input rail blocks the request before it reaches the LLM** — the model never sees it. On-topic banking questions pass through normally.
 
 ```bash
 pip install 'openbias[nemo]'   # extra dependency
