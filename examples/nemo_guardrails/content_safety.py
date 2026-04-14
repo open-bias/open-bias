@@ -1,34 +1,24 @@
 """
-Open Bias — Content Safety Rails (NeMo Engine)
+Open Bias — Financial Services Chatbot (NeMo Engine)
 
-Demonstrates NVIDIA NeMo Guardrails as an evaluator engine. NeMo provides
-content safety rails (jailbreak detection, PII filtering, toxicity) and
-programmable dialog flows via Colang.
+Demonstrates NVIDIA NeMo Guardrails as an evaluator engine on a financial
+services scenario. A bank chatbot must never provide investment advice —
+a real compliance requirement in regulated markets.
 
 Architecture (what happens on each call):
   1. pre_call_hook: messages are passed through NeMo's INPUT rails.
-     If NeMo generates a refusal response (matched against known refusal
-     markers: "i cannot", "i'm not able to", etc.), the request is blocked
-     before it ever reaches the LLM.
+     If NeMo generates a refusal, the request is blocked before the LLM
+     ever sees it. Turn 2 below is stopped here.
   2. LLM call: if input rails pass, forwarded to provider. Unmodified.
-  3. post_call_hook: the full conversation (including the agent's response)
-     runs through NeMo's OUTPUT rails. If NeMo blocks it, the response
-     is denied.
+  3. post_call_hook: the full conversation runs through NeMo's OUTPUT rails.
+     If NeMo blocks it, the response is denied.
 
 Fail-open by default:
-  If NeMo evaluation throws an exception, the request/response passes
-  through with a warning logged. Set `nemo.fail_closed: true` in config
-  to block on errors instead. Rationale: a monitoring layer that takes
-  down production is worse than one that misses a violation.
+  If NeMo evaluation throws, the request passes through with a warning.
+  Set `nemo.fail_closed: true` in config to block on errors instead.
 
 Prerequisites:
   pip install 'openbias[nemo]'
-
-Note on providers:
-  Open Bias compiles the example's `RULES.md` into NeMo runtime artifacts
-  internally. The MODEL below is for the agent's LLM — it goes through
-  Open Bias's proxy. The sidecar rails evaluation model is configured by
-  the compiled runtime, not as a separate user-authored input surface.
 
 Run:
   cd examples/nemo_guardrails
@@ -57,10 +47,9 @@ def detect_model():
 
 MODEL, API_KEY = detect_model()
 if not MODEL:
-    print("Set one of: OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY")
+    print("Set one of: OPENAI_API_KEY, GEMINI_API_KEY, GOOGLE_API_KEY, ANTHROPIC_API_KEY")
     sys.exit(1)
 
-# -- Config ------------------------------------------------------------------
 PROXY_URL = os.getenv("OBIAS_URL", "http://localhost:4000/v1")
 SESSION_ID = "nemo-demo-001"
 
@@ -74,22 +63,22 @@ print(f"Using model: {MODEL}\n")
 
 messages = [
     {"role": "system", "content": (
-        "You are a helpful customer support agent for TechCo. "
-        "You help with refunds, subscriptions, and general questions."
+        "You are a helpful customer service assistant for First National Bank. "
+        "You help customers with account questions, transfers, and general banking support."
     )}
 ]
 
-# -- Conversation turns designed to trigger NeMo rails -------------------------
 turns = [
-    # Turn 1: benign — passes both input and output rails
-    "Hi, I need help with my subscription.",
+    # Turn 1: on-topic banking question — passes input and output rails
+    "Hi, can you help me check the status of my recent transfer?",
 
-    # Turn 2: off-topic — should be caught by NeMo's topical rails
-    # (if configured in the Colang flows under config/)
-    "What stocks should I invest in right now?",
+    # Turn 2: investment advice — blocked PRE-CALL by NeMo's input rail.
+    # The LLM never sees this request. This is the key differentiator vs. the
+    # judge engine: NeMo can block before the LLM call, not just after.
+    "Should I buy Tesla stock right now? I have $10k to invest.",
 
-    # Turn 3: back on-topic — should pass
-    "OK nevermind. Can I get a refund for last month?",
+    # Turn 3: back on-topic — passes both input and output rails
+    "Got it. Can I move $500 from my checking to my savings account?",
 ]
 
 for i, user_input in enumerate(turns, 1):
@@ -107,7 +96,7 @@ for i, user_input in enumerate(turns, 1):
         )
         reply = response.choices[0].message
         print(f"  ← Agent: {reply.content}")
-        messages.append(reply)
+        messages.append({"role": reply.role, "content": reply.content})
 
     except Exception as e:
         if "blocked" in str(e).lower() or "violation" in str(e).lower():
