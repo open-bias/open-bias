@@ -20,6 +20,13 @@ Fail-open by default:
 Prerequisites:
   pip install 'openbias[nemo]'
 
+Provider-agnostic:
+  Set exactly ONE of these env vars:
+    export OPENAI_API_KEY=...      → uses gpt-4o-mini
+    export GEMINI_API_KEY=...      → uses gemini/gemini-2.5-flash
+    export GOOGLE_API_KEY=...      → uses gemini/gemini-2.5-flash (alias)
+    export ANTHROPIC_API_KEY=...   → uses anthropic/claude-sonnet-4-5
+
 Run:
   cd examples/nemo_guardrails
   export <PROVIDER>_API_KEY=...
