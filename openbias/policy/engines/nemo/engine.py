@@ -33,6 +33,13 @@ from openbias.policy.registry import register_engine
 logger = logging.getLogger(__name__)
 
 
+def _rail_field(rail: Any, field: str, default: Any) -> Any:
+    """Read a field from a NeMo activated_rail entry (dict in <0.21, object in >=0.21)."""
+    if isinstance(rail, dict):
+        return rail.get(field, default)
+    return getattr(rail, field, default)
+
+
 @register_engine("nemo")
 class NemoGuardrailsPolicyEngine(PolicyEngine):
     """
@@ -235,10 +242,10 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             if activations:
                 violations = [
                     ViolationRecord(
-                        reason=a.get("name", "NeMo input rail triggered"),
+                        reason=_rail_field(a, "name", "NeMo input rail triggered"),
                         severity="error",
                         engine=self.name,
-                        extra={"provider_decision": "flagged", "rail_type": a.get("type", "input")},
+                        extra={"provider_decision": "flagged", "rail_type": _rail_field(a, "type", "input")},
                     )
                     for a in activations
                 ]
@@ -318,10 +325,10 @@ class NemoGuardrailsPolicyEngine(PolicyEngine):
             if activations:
                 violations = [
                     ViolationRecord(
-                        reason=a.get("name", "NeMo output rail triggered"),
+                        reason=_rail_field(a, "name", "NeMo output rail triggered"),
                         severity="error",
                         engine=self.name,
-                        extra={"provider_decision": "flagged", "rail_type": a.get("type", "output")},
+                        extra={"provider_decision": "flagged", "rail_type": _rail_field(a, "type", "output")},
                     )
                     for a in activations
                 ]

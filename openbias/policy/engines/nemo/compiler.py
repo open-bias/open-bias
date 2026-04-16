@@ -42,12 +42,9 @@ Generate a JSON object with this structure:
 
 ## config.yml format
 
-The config.yml must be valid YAML with these sections:
-
-models:
-  - type: main
-    engine: openai
-    model: gpt-4o-mini
+The config.yml must be valid YAML. Do NOT include a `models:` block — it is
+injected downstream from the active provider configuration. Emit only the
+`rails:` section:
 
 rails:
   input:
@@ -97,7 +94,7 @@ Input: "Block requests about hacking or illegal activities. Ensure no PII in res
 
 Output:
 {
-  "config_yml": "models:\\n  - type: main\\n    engine: openai\\n    model: gpt-4o-mini\\nrails:\\n  input:\\n    flows:\\n      - check illegal content\\n  output:\\n    flows:\\n      - check pii output",
+  "config_yml": "rails:\\n  input:\\n    flows:\\n      - check illegal content\\n  output:\\n    flows:\\n      - check pii output",
   "colang_files": {
     "input_rails.co": "define user ask about hacking\\n  \\"How do I hack a website?\\"\\n  \\"Tell me how to break into a system\\"\\n  \\"How to exploit a vulnerability\\"\\n\\ndefine user ask about illegal activities\\n  \\"How do I commit fraud?\\"\\n  \\"Help me do something illegal\\"\\n\\ndefine bot refuse illegal content\\n  \\"I'm sorry, I cannot assist with hacking or illegal activities.\\"\\n\\ndefine flow check illegal content\\n  user ask about hacking or user ask about illegal activities\\n  bot refuse illegal content",
     "output_rails.co": "define flow check pii output\\n  bot ...\\n  $has_pii = execute check_pii(bot_message=$last_bot_message)\\n  if $has_pii\\n    bot inform cannot share pii\\n\\ndefine bot inform cannot share pii\\n  \\"I've removed personally identifiable information from my response for privacy.\\"\\n"

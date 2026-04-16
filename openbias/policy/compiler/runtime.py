@@ -71,6 +71,7 @@ async def compile_runtime_config_for_evaluator(
     if evaluator_type == "nemo":
         runtime_dir = base_dir / ".openbias_runtime" / "nemo" / evaluator_name
         compiler.export(result, runtime_dir)
+        _write_nemo_models_block(runtime_dir / "config.yml", default_model)
         cleaned["config_path"] = str(runtime_dir)
         return cleaned
 
@@ -79,3 +80,27 @@ async def compile_runtime_config_for_evaluator(
         return cleaned
 
     return cleaned
+
+
+def _write_nemo_models_block(config_path: Path, default_model: str | None) -> None:
+    """Overwrite config.yml's ``models:`` block with the active provider's config.
+
+    Why: the NeMo compiler prompt tells the LLM to omit models (so it can't
+    hardcode a provider); we inject the correct block here using the single
+    source of truth in Settings.
+    """
+    if not config_path.exists():
+        return
+
+    import yaml
+    from openbias.config.settings import Settings
+
+    models_block = Settings.nemo_models_block(default_model)
+    if models_block is None:
+        return
+
+    with open(config_path, "r") as f:
+        data = yaml.safe_load(f) or {}
+    data["models"] = models_block
+    with open(config_path, "w") as f:
+        yaml.safe_dump(data, f, sort_keys=False)

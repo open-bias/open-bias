@@ -609,6 +609,47 @@ class Settings(BaseSettings):
         elif evaluator_type == "llm" and not config.get("llm_model"):
             config["llm_model"] = default_model
 
+    @staticmethod
+    def nemo_models_block(default_model: str | None) -> list[dict[str, Any]] | None:
+        """Build a NeMo Guardrails ``models:`` block for the active provider.
+
+        Why: NeMo config.yml requires a provider-specific models block; the
+        single source of truth for provider→engine mapping lives here, not in
+        the compiler prompt (which would hardcode one provider) or in engine
+        init (which reads a prebuilt file).
+        """
+        if not default_model:
+            return None
+
+        if default_model.startswith("gemini/"):
+            key_var = "GOOGLE_API_KEY" if os.environ.get("GOOGLE_API_KEY") else (
+                "GEMINI_API_KEY" if os.environ.get("GEMINI_API_KEY") else None
+            )
+            if not key_var:
+                return None
+            return [{
+                "type": "main",
+                "engine": "openai",
+                "model": default_model.split("/", 1)[1],
+                "api_key_env_var": key_var,
+                "parameters": {
+                    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+                },
+            }]
+        if default_model.startswith("anthropic/"):
+            return [{
+                "type": "main",
+                "engine": "anthropic",
+                "model": default_model.split("/", 1)[1],
+            }]
+        if default_model.startswith("gpt") or default_model.startswith("openai/"):
+            return [{
+                "type": "main",
+                "engine": "openai",
+                "model": default_model.split("/", 1)[-1],
+            }]
+        return None
+
     def get_policy_config(self) -> dict[str, Any]:
         """
         Get policy engine configuration.
