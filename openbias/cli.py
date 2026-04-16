@@ -458,11 +458,9 @@ def _validate_openbias_config(config_path: Path | None) -> None:
         compiled_judge_configs: list[dict] = []
         for ev in judge_evaluators:
             raw_engine_config = dict(ev.config)
-            # Inject default model if not explicitly set
-            if not raw_engine_config.get("models") and settings.proxy.default_model:
-                raw_engine_config["models"] = [
-                    {"name": "primary", "model": settings.proxy.default_model}
-                ]
+            settings.inject_default_model(
+                ev.type, raw_engine_config, settings.proxy.default_model
+            )
             try:
                 engine_config = asyncio.run(
                     compile_runtime_config_for_evaluator(
