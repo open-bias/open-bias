@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Bias — Open Source Alignment for AI Agents" width="900">
+  <img src="docs/assets/banner.png" alt="Open Bias — Open Source Agent Alignment" width="900">
 </p>
 
 <p align="center">
@@ -15,7 +15,7 @@
 
 # Make your agents follow rules.
 
-**Open Source Alignment for AI Agents.** Zero config. Zero latency. Works with any LLM provider.
+**Open Source Agent Alignment.** Zero config. Zero latency. Works with any LLM provider.
 
 Open Bias sits between your app and your LLM provider and enforces rules defined in `RULES.md`. Point your app at the proxy, and intervene on off-policy behavior before it reaches your users, your tools, or your production systems.
 

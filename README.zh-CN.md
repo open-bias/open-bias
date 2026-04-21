@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Bias — Open Source Alignment for AI Agents" width="900">
+  <img src="docs/assets/banner.png" alt="Open Bias — Open Source Agent Alignment" width="900">
 </p>
 
 <p align="center">
