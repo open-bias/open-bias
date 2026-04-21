@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Bias — Runtime policy enforcement for AI agents" width="900">
+  <img src="docs/assets/banner.png" alt="Open Bias — Open Source Alignment for AI Agents" width="900">
 </p>
 
 <p align="center">
@@ -15,7 +15,7 @@
 
 # 에이전트가 진짜로 규칙을 지키게 만드세요.
 
-**AI 에이전트를 위한 오픈소스 런타임 규칙 집행 엔진입니다.** 별도 설정 없이, 지연 없이, 어떤 LLM 제공자와도 붙여 쓸 수 있습니다.
+**AI 에이전트를 위한 오픈소스 얼라인먼트 프레임워크입니다.** 별도 설정 없이, 지연 없이, 어떤 LLM 제공자와도 붙여 쓸 수 있습니다.
 
 Open Bias는 여러분의 앱과 LLM 제공자 사이에 자리 잡고, `RULES.md`에 적어둔 규칙을 대신 집행합니다. 앱을 프록시 쪽으로 돌려두기만 하면, 정책에서 벗어난 동작이 사용자·도구·운영 시스템에 닿기 전에 막아낼 수 있습니다.
 

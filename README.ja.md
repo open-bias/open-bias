@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Bias — Runtime policy enforcement for AI agents" width="900">
+  <img src="docs/assets/banner.png" alt="Open Bias — Open Source Alignment for AI Agents" width="900">
 </p>
 
 <p align="center">
@@ -15,7 +15,7 @@
 
 # エージェントに、ちゃんとルールを守らせる。
 
-**AI エージェント向けのオープンソース・ランタイムルール実行基盤。** 設定ゼロ、レイテンシゼロ、どの LLM プロバイダーでもそのまま使えます。
+**AI エージェント向けのオープンソース・アラインメント基盤。** 設定ゼロ、レイテンシゼロ、どの LLM プロバイダーでもそのまま使えます。
 
 Open Bias はアプリと LLM プロバイダーの間に入り、`RULES.md` に書いたルールを実行します。アプリの向き先をプロキシに変えるだけで、方針から外れた振る舞いをユーザー・ツール・本番システムに届く前に止められます。
 

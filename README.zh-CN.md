@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Bias — Runtime policy enforcement for AI agents" width="900">
+  <img src="docs/assets/banner.png" alt="Open Bias — Open Source Alignment for AI Agents" width="900">
 </p>
 
 <p align="center">
@@ -15,7 +15,7 @@
 
 # 让你的 Agent 真正守规矩。
 
-**面向 AI Agent 的开源运行时规则执行引擎。** 零配置,零延迟,兼容任意 LLM 提供商。
+**面向 AI Agent 的开源对齐方案。** 零配置,零延迟,兼容任意 LLM 提供商。
 
 Open Bias 位于你的应用与 LLM 提供商之间,负责执行你在 `RULES.md` 中定义的规则。只需把应用指向代理,就能在越界行为触达用户、工具或生产系统之前及时拦截。
 
