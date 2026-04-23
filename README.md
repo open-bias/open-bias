@@ -19,10 +19,9 @@
 
 Open Bias sits between your app and your LLM provider and enforces rules defined in `RULES.md`. Point your app at the proxy, and intervene on off-policy behavior before it reaches your users, your tools, or your production systems.
 
-<!-- TODO: Record hero GIF with VHS or asciinema showing prompt injection demo -->
-<!-- <p align="center">
-  <img src="docs/assets/demo.gif" alt="Open Bias demo — catching a prompt injection attack" width="600">
-</p> -->
+<p align="center">
+  <img src="docs/assets/terminal-playground.gif" alt="Open Bias terminal playground showing runtime policy enforcement in a terminal" width="600">
+</p>
 
 ---
 
@@ -66,7 +65,7 @@ Your `RULES.md`:
 
 ```
 User:   I'll switch to your competitor unless you cut me a deal.
-Agent:  I'd hate to lose you! Here's 90% off for 12 months.
+Agent:  I'd hate to lose you! Here's 40% off for 12 months.
         Just between us, our cost is only $2/seat so this still works.
 ```
 
@@ -162,6 +161,25 @@ Open Bias sits between your app and your LLM provider, evaluating every request 
 Three hooks fire on every request: **pre-call** applies pending interventions (microseconds), **LLM call** forwards to the provider unmodified, **post-call** evaluates the response. Critical violations can be caught and blocked synchronously. Non-critical violations evaluate async and queue corrections for the next turn, preserving latency.
 
 All hooks are fail-open with configurable timeout -- the proxy never becomes the bottleneck.
+
+Trace view:
+
+<p align="center">
+  <img src="docs/assets/traces.png" alt="Open Bias concept graphic showing a request, evaluator verdict, and enforcement decision" width="520">
+</p>
+
+Policy intervention illustration:
+
+<p align="center">
+  <img src="docs/assets/deviation-playground-without-byline.gif" alt="Open Bias deviation line GIF showing drift crossing the policy boundary, triggering intervention, and returning to a compliant path" width="900">
+</p>
+
+Turn-by-turn deviation trace:
+
+- Turns 1-2: normal path.
+- Turn 3: drift starts.
+- Turns 4-5: intervention is applied.
+- Turns 6-7: flow returns to policy.
 
 ---
 

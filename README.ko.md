@@ -19,10 +19,9 @@
 
 Open Bias는 여러분의 앱과 LLM 제공자 사이에 자리 잡고, `RULES.md`에 적어둔 규칙을 대신 집행합니다. 앱을 프록시 쪽으로 돌려두기만 하면, 정책에서 벗어난 동작이 사용자·도구·운영 시스템에 닿기 전에 막아낼 수 있습니다.
 
-<!-- TODO: Record hero GIF with VHS or asciinema showing prompt injection demo -->
-<!-- <p align="center">
-  <img src="docs/assets/demo.gif" alt="Open Bias demo — catching a prompt injection attack" width="600">
-</p> -->
+<p align="center">
+  <img src="docs/assets/terminal-playground.gif" alt="Open Bias 터미널 플레이그라운드에서 런타임 정책 집행을 보여주는 장면" width="600">
+</p>
 
 ---
 
@@ -66,7 +65,7 @@ Open Bias에는 시작용 `RULES.md`가 함께 들어 있고, 기본 평가기�
 
 ```
 사용자: 할인 안 해주면 경쟁사 제품으로 갈아탈 거예요.
-에이전트: 저희를 떠나시면 안 되죠! 12개월 동안 90% 할인 드릴게요.
+에이전트: 저희를 떠나시면 안 되죠! 12개월 동안 40% 할인 드릴게요.
          우리끼리 얘긴데, 저희 원가가 좌석당 2달러밖에 안 돼서 이래도 남아요.
 ```
 
@@ -162,6 +161,25 @@ Open Bias는 여러분의 앱과 LLM 제공자 사이에 자리 잡고, 모든 �
 모든 요청에는 세 개의 훅이 걸립니다. **pre-call**은 앞서 예약된 간섭을 적용하고(마이크로초 단위), **LLM call**은 요청을 그대로 제공자에게 넘기며, **post-call**은 응답을 평가합니다. 치명적인 위반은 동기 경로에서 잡아 차단할 수 있습니다. 치명적이지 않은 위반은 비동기로 평가되고, 수정은 다음 턴에 반영되도록 큐에 쌓이므로 지연에는 영향을 주지 않습니다.
 
 모든 훅은 기본적으로 fail-open이며 타임아웃도 설정할 수 있습니다 — 프록시가 병목이 되는 일은 없습니다.
+
+트레이스 뷰:
+
+<p align="center">
+  <img src="docs/assets/traces.png" alt="요청, 평가기 판정, 집행 결정을 보여주는 Open Bias 개념 그래픽" width="520">
+</p>
+
+정책 개입 일러스트:
+
+<p align="center">
+  <img src="docs/assets/deviation-playground-without-byline.gif" alt="드리프트가 정책 경계를 넘으면 개입하고, 다시 준수 경로로 돌아오는 과정을 보여주는 Open Bias 편차 GIF" width="900">
+</p>
+
+턴별 편차 추적:
+
+- 턴 1-2: 정상 경로.
+- 턴 3: 드리프트 시작.
+- 턴 4-5: 개입 적용.
+- 턴 6-7: 정책 준수 상태로 복귀.
 
 ---
 

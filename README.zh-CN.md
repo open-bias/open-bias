@@ -19,10 +19,9 @@
 
 Open Bias 位于你的应用与 LLM 提供商之间,负责执行你在 `RULES.md` 中定义的规则。只需把应用指向代理,就能在越界行为触达用户、工具或生产系统之前及时拦截。
 
-<!-- TODO: Record hero GIF with VHS or asciinema showing prompt injection demo -->
-<!-- <p align="center">
-  <img src="docs/assets/demo.gif" alt="Open Bias demo — catching a prompt injection attack" width="600">
-</p> -->
+<p align="center">
+  <img src="docs/assets/terminal-playground.gif" alt="Open Bias 终端演示，展示运行时策略执行效果" width="600">
+</p>
 
 ---
 
@@ -66,7 +65,7 @@ Open Bias 自带一份起步模板 `RULES.md`,并会自动合成一个默认评�
 
 ```
 用户:  再不给我打折我就去用你们竞争对手的产品了。
-Agent:我可舍不得失去您!给您打一折,连续 12 个月。
+Agent:我可舍不得失去您!给您打 6 折,连续 12 个月。
        悄悄告诉您,我们一个席位的成本才 2 美元,这笔账还是划得来的。
 ```
 
@@ -162,6 +161,25 @@ Open Bias 位于你的应用和 LLM 提供商之间,对每一次请求和响应�
 每次请求会触发三个 hook:**pre-call** 负责应用此前挂起的干预(微秒级);**LLM call** 原样转发到提供商;**post-call** 负责评估响应。关键违规会在同步路径上被捕获并拦截;非关键违规则异步评估,并把修正排入下一轮执行,不影响延迟。
 
 所有 hook 默认都是 fail-open,且超时时间可配置 —— 代理永远不会拖慢主链路。
+
+Trace 视图:
+
+<p align="center">
+  <img src="docs/assets/traces.png" alt="Open Bias 概念图，展示请求、评估器判定和执行决策" width="520">
+</p>
+
+策略干预示意:
+
+<p align="center">
+  <img src="docs/assets/deviation-playground-without-byline.gif" alt="Open Bias 偏移 GIF，展示轨迹越过策略边界后触发干预并回到合规路径" width="900">
+</p>
+
+逐轮偏移轨迹:
+
+- 第 1-2 轮: 正常路径。
+- 第 3 轮: 开始偏移。
+- 第 4-5 轮: 应用干预。
+- 第 6-7 轮: 回到合规路径。
 
 ---
 

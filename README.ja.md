@@ -19,10 +19,9 @@
 
 Open Bias はアプリと LLM プロバイダーの間に入り、`RULES.md` に書いたルールを実行します。アプリの向き先をプロキシに変えるだけで、方針から外れた振る舞いをユーザー・ツール・本番システムに届く前に止められます。
 
-<!-- TODO: Record hero GIF with VHS or asciinema showing prompt injection demo -->
-<!-- <p align="center">
-  <img src="docs/assets/demo.gif" alt="Open Bias demo — catching a prompt injection attack" width="600">
-</p> -->
+<p align="center">
+  <img src="docs/assets/terminal-playground.gif" alt="Open Bias のターミナルプレイグラウンドで、実行時ポリシー適用を示している様子" width="600">
+</p>
 
 ---
 
@@ -66,7 +65,7 @@ Open Bias にはスターター用の `RULES.md` が同梱されていて、デ�
 
 ```
 User:   値引きしてくれないなら競合に乗り換えるよ。
-Agent:  それは困ります! 12 か月間 90% オフでいかがでしょう。
+Agent:  それは困ります! 12 か月間 40% オフでいかがでしょう。
         ここだけの話、原価はシート単価 2 ドルなので十分ペイします。
 ```
 
@@ -162,6 +161,25 @@ Open Bias はアプリと LLM プロバイダーの間に入り、すべての�
 リクエストごとに 3 つのフックが動きます。**pre-call** は保留中の介入を適用し(マイクロ秒オーダー)、**LLM call** はリクエストを手を加えずプロバイダーに転送し、**post-call** はレスポンスを評価します。クリティカルな違反は同期的に捕まえてブロックできます。クリティカルでない違反は非同期に評価し、次のターン向けに補正をキューイングするので、レイテンシには響きません。
 
 すべてのフックは fail-open で、タイムアウトも設定可能です。プロキシがボトルネックになることはありません。
+
+トレースビュー:
+
+<p align="center">
+  <img src="docs/assets/traces.png" alt="リクエスト、評価器の判定、エンフォースメント判断を示す Open Bias の概念図" width="520">
+</p>
+
+ポリシー介入のイメージ:
+
+<p align="center">
+  <img src="docs/assets/deviation-playground-without-byline.gif" alt="ドリフトがポリシー境界を越えると介入し、準拠状態へ戻る様子を示す Open Bias の deviation GIF" width="900">
+</p>
+
+ターンごとのドリフト推移:
+
+- ターン 1-2: 通常経路。
+- ターン 3: ドリフト開始。
+- ターン 4-5: 介入を適用。
+- ターン 6-7: ポリシー準拠へ復帰。
 
 ---
 
