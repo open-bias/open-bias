@@ -66,6 +66,11 @@ Use [GitHub Issues](https://github.com/open-bias/open-bias/issues). Include:
 
 For security vulnerabilities, see [SECURITY.md](SECURITY.md).
 
+## Community Standards
+
+By participating in OpenBias, you agree to follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [Apache 2.0 License](LICENSE).
