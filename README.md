@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Bias — Open Source Agent Alignment" width="900">
+  <img src="docs/assets/banner.png" alt="Open Bias — Open Source Reliability Harness" width="900">
 </p>
 
 <p align="center">
@@ -15,9 +15,9 @@
 
 # Make your agents follow rules.
 
-**Open Source Agent Alignment.** Zero config. Zero latency. Works with any LLM provider.
+**Open Source Reliability Harness.** Zero config. Zero latency. Works with any LLM provider.
 
-Open Bias sits between your app and your LLM provider and enforces rules defined in `RULES.md`. Point your app at the proxy, and intervene on off-policy behavior before it reaches your users, your tools, or your production systems.
+Open Bias is a reliability harness that sits between your app and your LLM provider and enforces rules defined in `RULES.md` at runtime. Point your app at the proxy, and intervene on off-policy behavior before it reaches your users, your tools, or your production systems.
 
 <p align="center">
   <img src="docs/assets/terminal-playground.gif" alt="Open Bias terminal playground showing runtime policy enforcement in a terminal" width="600">
