@@ -1,8 +1,8 @@
 # Open Bias
 
-> Open Source Alignment for AI Agents.
+> Open Source Reliability Harness for AI Agents.
 
-Open Bias is an AI guardrails framework that enforces business rules, compliance policies, and safety constraints on LLM-powered agents at runtime. It is an open source alternative to building custom guardrails or relying on prompt engineering alone for AI safety and policy compliance.
+Open Bias is an AI reliability harness that enforces business rules, compliance policies, and safety constraints on LLM-powered agents at runtime. It is an open source alternative to building custom guardrails or relying on prompt engineering alone for AI safety and policy compliance.
 
 Open Bias works as a transparent proxy between your application and any LLM provider (OpenAI, Anthropic, Google Gemini, Groq, Together AI, OpenRouter). You define rules in a plain Markdown file called `RULES.md`, and Open Bias evaluates every request and response against those rules — intervening, blocking, or logging violations before they reach users.
 
