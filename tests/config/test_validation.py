@@ -53,6 +53,80 @@ class TestConfigValidation:
         # Check if it was pushed to environ
         assert os.environ.get("OPENAI_API_KEY") == "sk-explicit-test"
 
+    def test_process_env_takes_precedence_over_dotenv(self, tmp_path, monkeypatch):
+        """Real env vars should win over values from the configured .env file."""
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "OPENAI_API_KEY=sk-from-dotenv\n"
+            "OBIAS_OTEL__LANGFUSE_PUBLIC_KEY=pk-from-dotenv\n"
+            "OBIAS_OTEL__LANGFUSE_SECRET_KEY=sk-from-dotenv\n"
+            "OBIAS_OTEL__LANGFUSE_HOST=https://dotenv.langfuse.test\n"
+        )
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-from-env")
+        monkeypatch.setenv("OBIAS_OTEL__LANGFUSE_PUBLIC_KEY", "pk-from-env")
+
+        settings = Settings(_env_file=env_file)
+
+        assert settings.openai_api_key == "sk-from-env"
+        assert settings.otel.langfuse_public_key == "pk-from-env"
+        assert settings.otel.langfuse_secret_key == "sk-from-dotenv"
+        assert settings.otel.langfuse_host == "https://dotenv.langfuse.test"
+
+    def test_dotenv_api_keys_sync_to_environ(self, tmp_path, monkeypatch):
+        """API keys loaded from .env are exported for downstream provider libraries."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("OPENAI_API_KEY=sk-from-dotenv\n")
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+        settings = Settings(_env_file=env_file)
+
+        assert settings.openai_api_key == "sk-from-dotenv"
+        assert os.environ.get("OPENAI_API_KEY") == "sk-from-dotenv"
+
+    def test_tracing_env_vars_are_supported(self, tmp_path, monkeypatch):
+        """Documented OBIAS_OTEL__ vars should populate tracing settings."""
+        trace_path = tmp_path / "traces.jsonl"
+        monkeypatch.setenv("OBIAS_OTEL__EXPORTER_TYPE", "jsonl")
+        monkeypatch.setenv("OBIAS_OTEL__ENDPOINT", "http://otel.test:4317")
+        monkeypatch.setenv("OBIAS_OTEL__INSECURE", "false")
+        monkeypatch.setenv("OBIAS_OTEL__PATH", str(trace_path))
+
+        settings = Settings(_env_file=None)
+
+        assert settings.otel.exporter_type == "jsonl"
+        assert settings.otel.endpoint == "http://otel.test:4317"
+        assert settings.otel.insecure is False
+        assert settings.otel.path == str(trace_path)
+
+    def test_tracing_none_spelling_disables_exporter(self, monkeypatch):
+        """The documented 'none' spelling should normalize to no exporter."""
+        monkeypatch.setenv("OBIAS_OTEL__EXPORTER_TYPE", "none")
+
+        settings = Settings(_env_file=None)
+
+        assert settings.otel.exporter_type is None
+
+    def test_proxy_master_key_env_vars_are_supported(self, tmp_path, monkeypatch):
+        """Proxy auth secret should have a standard env path with legacy alias support."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("LITELLM_MASTER_KEY=sk-from-dotenv\n")
+        monkeypatch.setenv("LITELLM_MASTER_KEY", "sk-from-env")
+
+        settings = Settings(_env_file=env_file)
+
+        assert settings.proxy.master_key == "sk-from-env"
+
+    def test_proxy_master_key_legacy_alias_is_supported(self, tmp_path, monkeypatch):
+        """Existing local .env files using LITELLM_KEY should still work."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("LITELLM_KEY=sk-from-legacy-dotenv\n")
+        monkeypatch.delenv("LITELLM_MASTER_KEY", raising=False)
+        monkeypatch.delenv("LITELLM_KEY", raising=False)
+
+        settings = Settings(_env_file=env_file)
+
+        assert settings.proxy.master_key == "sk-from-legacy-dotenv"
+
     def test_default_config_is_valid_with_api_key(self, monkeypatch):
         """Test that default configuration with an API key passes validation."""
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")

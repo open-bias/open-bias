@@ -22,6 +22,7 @@ def reset_litellm_verbose():
 
 
 def _make_proxy(**kwargs) -> Proxy:
+    kwargs.setdefault("_env_file", None)
     settings = Settings(**kwargs)
     return Proxy(settings)
 

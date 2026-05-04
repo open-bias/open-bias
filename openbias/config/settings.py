@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from dotenv import dotenv_values
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -45,6 +45,29 @@ from pydantic_settings import (
 logger = logging.getLogger(__name__)
 
 
+API_KEY_ENV_VARS: dict[str, str] = {
+    "openai_api_key": "OPENAI_API_KEY",
+    "anthropic_api_key": "ANTHROPIC_API_KEY",
+    "google_api_key": "GOOGLE_API_KEY",
+    "gemini_api_key": "GEMINI_API_KEY",
+    "groq_api_key": "GROQ_API_KEY",
+    "togetherai_api_key": "TOGETHERAI_API_KEY",
+    "openrouter_api_key": "OPENROUTER_API_KEY",
+}
+
+OTEL_ENV_VARS: dict[str, str] = {
+    "exporter_type": "OBIAS_OTEL__EXPORTER_TYPE",
+    "endpoint": "OBIAS_OTEL__ENDPOINT",
+    "insecure": "OBIAS_OTEL__INSECURE",
+    "path": "OBIAS_OTEL__PATH",
+    "langfuse_public_key": "OBIAS_OTEL__LANGFUSE_PUBLIC_KEY",
+    "langfuse_secret_key": "OBIAS_OTEL__LANGFUSE_SECRET_KEY",
+    "langfuse_host": "OBIAS_OTEL__LANGFUSE_HOST",
+}
+
+PROXY_SECRET_ENV_VARS: dict[str, tuple[str, ...]] = {
+    "master_key": ("LITELLM_MASTER_KEY", "LITELLM_KEY"),
+}
 
 
 class OTelConfig(BaseModel):
@@ -70,6 +93,14 @@ class OTelConfig(BaseModel):
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str = "https://cloud.langfuse.com"
+
+    @field_validator("exporter_type", mode="before")
+    @classmethod
+    def _normalize_disabled_exporter(cls, value: Any) -> Any:
+        """Allow documented ``tracing.type: none`` / env ``none`` spelling."""
+        if isinstance(value, str) and value.strip().lower() in {"", "none"}:
+            return None
+        return value
 
     @property
     def enabled(self) -> bool:
@@ -396,13 +427,13 @@ class FilteredSettingsSource(PydanticBaseSettingsSource):
         self,
         settings_cls: type[BaseSettings],
         *,
-        dotenv_file: str | None = None,
+        dotenv_file: Any = None,
     ):
         super().__init__(settings_cls)
         self._dotenv_file = dotenv_file
 
     @staticmethod
-    def _load_dotenv_values(dotenv_file: str | None) -> dict[str, str]:
+    def _load_dotenv_values(dotenv_file: Any) -> dict[str, str]:
         if not dotenv_file:
             return {}
 
@@ -412,6 +443,15 @@ class FilteredSettingsSource(PydanticBaseSettingsSource):
             for key, value in raw.items()
             if isinstance(key, str) and isinstance(value, str)
         }
+
+    @staticmethod
+    def _coerce_env_value(value: str) -> Any:
+        lowered = value.strip().lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        return value
 
     def _get_supported_env(self) -> dict[str, Any]:
         dotenv_data = self._load_dotenv_values(self._dotenv_file)
@@ -423,18 +463,25 @@ class FilteredSettingsSource(PydanticBaseSettingsSource):
             return dotenv_data.get(name)
 
         result: dict[str, Any] = {}
-        supported = {
-            "openai_api_key": "OPENAI_API_KEY",
-            "anthropic_api_key": "ANTHROPIC_API_KEY",
-            "google_api_key": "GOOGLE_API_KEY",
-            "gemini_api_key": "GEMINI_API_KEY",
-            "groq_api_key": "GROQ_API_KEY",
-            "togetherai_api_key": "TOGETHERAI_API_KEY",
-            "openrouter_api_key": "OPENROUTER_API_KEY",
-        }
-        for field_name, env_name in supported.items():
+        for field_name, env_name in API_KEY_ENV_VARS.items():
             if (value := read(env_name)) is not None:
                 result[field_name] = value
+
+        otel: dict[str, Any] = {}
+        for field_name, env_name in OTEL_ENV_VARS.items():
+            if (value := read(env_name)) is not None:
+                otel[field_name] = self._coerce_env_value(value)
+        if otel:
+            result["otel"] = otel
+
+        proxy: dict[str, Any] = {}
+        for field_name, env_names in PROXY_SECRET_ENV_VARS.items():
+            for env_name in env_names:
+                if (value := read(env_name)) is not None:
+                    proxy[field_name] = value
+                    break
+        if proxy:
+            result["proxy"] = proxy
 
         return result
 
@@ -449,6 +496,9 @@ class FilteredSettingsSource(PydanticBaseSettingsSource):
 
 _config_path_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "_config_path_var", default=None
+)
+_env_file_var: contextvars.ContextVar[Any] = contextvars.ContextVar(
+    "_env_file_var", default=".env"
 )
 
 
@@ -521,21 +571,19 @@ class Settings(BaseSettings):
         return self
 
     def __init__(self, _config_path: str | None = None, **kwargs: Any):
-        _token = _config_path_var.set(_config_path)
+        _env_file = kwargs.get("_env_file", ".env")
+        _config_token = _config_path_var.set(_config_path)
+        _env_token = _env_file_var.set(_env_file)
         try:
             super().__init__(**kwargs)
         finally:
-            _config_path_var.reset(_token)
+            _env_file_var.reset(_env_token)
+            _config_path_var.reset(_config_token)
 
         # Sync API keys to os.environ for downstream libraries (LiteLLM, LangChain)
         # This allows us to use .env files without explicit load_dotenv() in CLI
-        self._sync_env_var("OPENAI_API_KEY", self.openai_api_key)
-        self._sync_env_var("ANTHROPIC_API_KEY", self.anthropic_api_key)
-        self._sync_env_var("GOOGLE_API_KEY", self.google_api_key)
-        self._sync_env_var("GEMINI_API_KEY", self.gemini_api_key)
-        self._sync_env_var("GROQ_API_KEY", self.groq_api_key)
-        self._sync_env_var("TOGETHERAI_API_KEY", self.togetherai_api_key)
-        self._sync_env_var("OPENROUTER_API_KEY", self.openrouter_api_key)
+        for field_name, env_name in API_KEY_ENV_VARS.items():
+            self._sync_env_var(env_name, getattr(self, field_name))
 
         # Auto-detect default model from available API keys when not explicitly set
         if not self.proxy.default_model:
@@ -589,7 +637,7 @@ class Settings(BaseSettings):
             init_settings,
             yaml_source,
             FilteredSettingsSource(settings_cls),
-            FilteredSettingsSource(settings_cls, dotenv_file=".env"),
+            FilteredSettingsSource(settings_cls, dotenv_file=_env_file_var.get()),
             file_secret_settings,
         )
 

@@ -26,10 +26,12 @@ Open Bias resolves runtime behavior from these sources:
 
 1. CLI flags for the active command (for example `openbias serve --port 8080`)
 2. `openbias.yaml` (or `openbias.yml`) when present
-3. API key environment variables and `.env` files for provider credentials
-4. Built-in defaults / synthesized evaluator settings
+3. Supported process environment variables for secrets/config discovery
+4. Supported `.env` variables for local secrets
+5. Built-in defaults / synthesized evaluator settings
 
 API keys are always read from environment variables or `.env` files. Never put keys in YAML.
+When the same supported variable exists in both the process environment and `.env`, the process environment wins.
 
 ## Config File Discovery
 
@@ -252,6 +254,8 @@ Variant generation happens inside `openbias improve`, but human review still dec
 
 Environment variables are only supported for config discovery and secrets. Generic runtime settings such as `debug`, `log_level`, `port`, and `litellm_verbose` should be configured in `openbias.yaml` or passed explicitly via CLI flags / `Settings(...)`.
 
+Supported variables can come from the process environment or from `.env`. If both are set, the process environment takes precedence over `.env`.
+
 ### Config File Discovery
 
 You can override the configuration file path via the environment:
@@ -276,19 +280,22 @@ API keys bypass the `OBIAS_` prefix. Set them directly:
 
 If multiple keys are present, the auto-detected model uses the first one found in the order above.
 
-### Langfuse Keys
+### Tracing Secrets
 
-Langfuse credentials can also be set via environment variables (or `.env`):
+Tracing credentials and local trace sink settings can also be set via environment variables (or `.env`):
 
 | Variable | YAML Equivalent |
 |----------|-----------------|
+| `OBIAS_OTEL__EXPORTER_TYPE` | `tracing.type` |
+| `OBIAS_OTEL__ENDPOINT` | `tracing.endpoint` |
+| `OBIAS_OTEL__PATH` | `tracing.path` |
 | `OBIAS_OTEL__LANGFUSE_PUBLIC_KEY` | `tracing.langfuse_public_key` |
 | `OBIAS_OTEL__LANGFUSE_SECRET_KEY` | `tracing.langfuse_secret_key` |
 | `OBIAS_OTEL__LANGFUSE_HOST` | `tracing.langfuse_host` |
 
 ## .env File
 
-OpenBias reads `.env` files automatically. API keys found in `.env` are synced to `os.environ` so downstream libraries (LiteLLM, etc.) can use them without explicit `load_dotenv()` calls.
+OpenBias reads supported `.env` variables automatically. API keys found in `.env` are synced to `os.environ` so downstream libraries (LiteLLM, etc.) can use them without explicit `load_dotenv()` calls. Process environment values always take precedence over `.env` values.
 
 See `.env.example` in the repository root for a template.
 
