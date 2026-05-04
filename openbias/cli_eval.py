@@ -118,24 +118,27 @@ def run_eval(
     total_case_failures = 0
     total_execution_failures = 0
     for result in results:
-        outcomes = result["outcomes"]
-        failures = result["failures"]
-        summary = result["summary"]
+        suite_result = result
+        outcomes = suite_result["outcomes"]
+        failures = suite_result["failures"]
+        summary = suite_result["summary"]
+        if not isinstance(outcomes, list) or not isinstance(failures, list) or not isinstance(summary, dict):
+            raise ValueError("Eval runner returned unexpected output shape.")
         case_failures = sum(1 for outcome in outcomes if not outcome["passed"])
         total_case_failures += case_failures
         total_execution_failures += len(failures)
         status = "pass" if case_failures == 0 and not failures else "fail"
         config_panel(
-            f"Eval: {result['suite_name']}",
+            f"Eval: {suite_result['suite_name']}",
             {
                 "Status": status,
                 "Cases": str(len(outcomes)),
                 "Case Failures": str(case_failures),
                 "Execution Failures": str(len(failures)),
-                "Pass Rate": f"{summary['exact_case_pass_rate']:.2%}",
-                "Detection Recall": f"{summary['detection_recall']:.2%}",
-                "False Positive Rate": f"{summary['false_positive_rate']:.2%}",
-                "Fix Rate": f"{summary['fix_rate']:.2%}",
+                "Pass Rate": f"{float(summary['exact_case_pass_rate']):.2%}",
+                "Detection Recall": f"{float(summary['detection_recall']):.2%}",
+                "False Positive Rate": f"{float(summary['false_positive_rate']):.2%}",
+                "Fix Rate": f"{float(summary['fix_rate']):.2%}",
             },
         )
         if verbose:

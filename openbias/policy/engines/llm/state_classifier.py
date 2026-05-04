@@ -8,6 +8,7 @@ detection.
 
 import logging
 from collections import deque
+from typing import Any
 
 from openbias.policy.engines.fsm.workflow.schema import WorkflowDefinition
 from openbias.policy.engines.llm.llm_client import LLMClient, LLMClientError
@@ -173,7 +174,7 @@ class LLMStateClassifier:
             return "(none)"
         return ", ".join(tool_calls)
 
-    def _format_conversation(self, turn_window: list[dict]) -> str:
+    def _format_conversation(self, turn_window: list[dict[str, Any]]) -> str:
         """Format recent conversation for the prompt."""
         if not turn_window:
             return "(no previous turns)"
@@ -185,7 +186,7 @@ class LLMStateClassifier:
             lines.append(f"{role}: {message}")
         return "\n".join(lines)
 
-    def _parse_candidates(self, response: any) -> list[LLMStateCandidate]:
+    def _parse_candidates(self, response: Any) -> list[LLMStateCandidate]:
         """Parse LLM response into state candidates."""
         candidates = []
         

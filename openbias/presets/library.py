@@ -56,9 +56,10 @@ def discover_rules_presets() -> list[RulesPreset]:
     root = files("openbias.presets").joinpath("rules")
     presets: list[RulesPreset] = []
 
-    for category in sorted(entry for entry in root.iterdir() if entry.is_dir()):
+    for category in sorted((entry for entry in root.iterdir() if entry.is_dir()), key=lambda entry: entry.name):
         for preset_file in sorted(
-            entry for entry in category.iterdir() if entry.is_file() and entry.name.endswith(".md")
+            (entry for entry in category.iterdir() if entry.is_file() and entry.name.endswith(".md")),
+            key=lambda entry: entry.name,
         ):
             relative_path = f"{category.name}/{preset_file.name}"
             slug = str(PurePosixPath(relative_path).with_suffix(""))
@@ -124,4 +125,3 @@ def _is_list_line(line: str) -> bool:
 
 def _humanize_filename(stem: str) -> str:
     return " ".join(part.capitalize() for part in stem.replace("_", "-").split("-"))
-

@@ -46,22 +46,30 @@ from openbias.policy.compiler.base import (
     DEFAULT_COMPILER_SYSTEM_PROMPT,
 )
 
+# Optional engine compiler exports (available when optional deps are installed).
+FSMCompiler = None
+NemoCompiler = None
+JudgeRuntimeCompiler = None
+
 # Import engine compilers to trigger auto-registration
 # Note: We use try/except to handle gracefully if engines aren't available
 try:
-    from openbias.policy.engines.fsm.compiler import FSMCompiler
+    from openbias.policy.engines.fsm.compiler import FSMCompiler as _FSMCompiler
+    FSMCompiler = _FSMCompiler
 except ImportError:
-    FSMCompiler = None  # type: ignore
+    pass
 
 try:
-    from openbias.policy.engines.nemo.compiler import NemoCompiler
+    from openbias.policy.engines.nemo.compiler import NemoCompiler as _NemoCompiler
+    NemoCompiler = _NemoCompiler
 except ImportError:
-    NemoCompiler = None  # type: ignore
+    pass
 
 try:
-    from openbias.policy.engines.judge.compiler import JudgeRuntimeCompiler
+    from openbias.policy.engines.judge.compiler import JudgeRuntimeCompiler as _JudgeRuntimeCompiler
+    JudgeRuntimeCompiler = _JudgeRuntimeCompiler
 except ImportError:
-    JudgeRuntimeCompiler = None  # type: ignore
+    pass
 
 __all__ = [
     # Protocol

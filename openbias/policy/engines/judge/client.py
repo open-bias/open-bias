@@ -74,7 +74,10 @@ class JudgeClient:
         """Get the underlying model identifier for a named judge."""
         if name not in self._clients:
             raise ValueError(f"Unknown judge model: {name}")
-        return self._clients[name].model
+        model = self._clients[name].model
+        if model is None:
+            raise ValueError(f"Judge model {name!r} has no configured model id.")
+        return model
 
     async def call_judge(
         self,
@@ -141,7 +144,7 @@ class JudgeClient:
 
         responses: dict[str, dict[str, Any]] = {}
         for name, result in zip(tasks.keys(), results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.error(f"Judge model '{name}' failed: {result}")
             else:
                 responses[name] = result

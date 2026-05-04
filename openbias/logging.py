@@ -41,8 +41,8 @@ class RequestContextFilter(logging.Filter):
     """Inject ``session_id`` and ``request_id`` from *contextvars* into every log record."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.session_id = session_id_var.get("")  # type: ignore[attr-defined]
-        record.request_id = request_id_var.get("")  # type: ignore[attr-defined]
+        setattr(record, "session_id", session_id_var.get(""))
+        setattr(record, "request_id", request_id_var.get(""))
         return True
 
 

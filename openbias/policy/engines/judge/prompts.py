@@ -275,9 +275,9 @@ def format_session_context_block(session: JudgeSessionContext | None) -> str:
             lines.append(line)
 
     if session.failed_rules_history:
-        recent = []
-        for failed_rules in session.failed_rules_history[-10:]:
-            recent.append(", ".join(failed_rules) if failed_rules else "pass")
+        recent: list[str] = []
+        for failed_rule_set in session.failed_rules_history[-10:]:
+            recent.append(", ".join(failed_rule_set) if failed_rule_set else "pass")
         lines.append("Recent rule outcomes: " + " -> ".join(recent))
 
     return "\n".join(lines)

@@ -7,6 +7,7 @@ With --quick: Non-interactive setup with sensible defaults.
 
 import textwrap
 from pathlib import Path
+from typing import Any
 
 from openbias import __version__
 from openbias.cli_ui import (
@@ -38,7 +39,7 @@ _DEFAULT_RULES_CONTENT = textwrap.dedent(
     """
 )
 
-def get_yaml_dumper():  # type: ignore[no-untyped-def]
+def get_yaml_dumper() -> type[Any]:
     """Get a safe YAML dumper that handles Path objects if needed."""
     import yaml
 

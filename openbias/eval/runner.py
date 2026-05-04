@@ -11,6 +11,7 @@ from openbias.core.interceptor import Interceptor
 from openbias.eval.schema import (
     EvalCase,
     EvalCaseOutcome,
+    EvalOutcomeName,
     EvalLabels,
     EvalRunResult,
     EvalSuite,
@@ -144,6 +145,7 @@ class EvalRunner:
             fixed = repair.fixed
             notes.extend(repair.notes)
 
+        outcome: EvalOutcomeName
         if not case.labels.violation:
             outcome = "false_positive" if false_positive else "correct_non_violation"
         elif not detected:
@@ -304,7 +306,7 @@ class EvalRunner:
         return (labels.detection_scope, labels.detect_at_turn) in observed_pairs
 
     @staticmethod
-    def _expected_outcome(labels: EvalLabels) -> str:
+    def _expected_outcome(labels: EvalLabels) -> EvalOutcomeName:
         if not labels.violation:
             return "correct_non_violation"
         if labels.repair_expected is None:

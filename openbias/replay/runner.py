@@ -107,7 +107,7 @@ class ReplayRunner:
     def _summarize(self, outcomes: list[ReplayCaseOutcome]) -> ReplaySummary:
         supported = [outcome for outcome in outcomes if outcome.supported]
         supported_total = len(supported)
-        rule_counter = Counter()
+        rule_counter: Counter[str] = Counter()
         matched_cases = 0
         mismatched_cases = 0
         expected_detection_cases = 0

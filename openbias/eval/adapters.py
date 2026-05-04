@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from openbias.eval.schema import (
+    DetectionScope,
     EvalCase,
     EvalLabels,
     EvalPolicyTarget,
@@ -155,12 +156,18 @@ def _build_labels(payload: dict[str, Any], *, context: str) -> EvalLabels:
     if unexpected:
         raise EvalValidationError(f"{context} has unsupported fields: {', '.join(unexpected)}")
 
+    detection_scope_raw = _expect_string(
+        payload.get("detection_scope"),
+        context=f"{context}.detection_scope",
+    )
+    if detection_scope_raw not in {"request", "response", "either"}:
+        raise EvalValidationError(
+            f"{context}.detection_scope must be one of request, response, or either."
+        )
+
     return EvalLabels(
         violation=_expect_bool(payload.get("violation"), context=f"{context}.violation"),
-        detection_scope=_expect_string(
-            payload.get("detection_scope"),
-            context=f"{context}.detection_scope",
-        ),
+        detection_scope=cast(DetectionScope, detection_scope_raw),
         detect_at_turn=_optional_int(payload.get("detect_at_turn"), context=f"{context}.detect_at_turn"),
         repair_expected=_optional_bool(
             payload.get("repair_expected"),
@@ -238,7 +245,7 @@ def _extract_events(
         raise EvalValidationError(
             f"{suite_path}:{line_number} event_path {event_path!r} must resolve to a non-empty list."
         )
-    normalized_events: list[dict[str, Any]] = []
+    normalized_events: list[dict[str, Any] | None] = []
     for event_index, event in enumerate(events):
         if not isinstance(event, dict):
             raise EvalValidationError(

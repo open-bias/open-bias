@@ -534,6 +534,8 @@ class JudgePolicyEngine(PolicyEngine):
         fail_action: VerdictAction = VerdictAction.INTERVENE,
     ) -> AggregatedRuleResult:
         model_names = self._client.model_names if self._client else []
+        if self._evaluator is None:
+            raise RuntimeError("Judge evaluator is not initialized.")
         evaluations = await asyncio.gather(
             *[
                 self._evaluator.evaluate_rule(
@@ -556,7 +558,7 @@ class JudgePolicyEngine(PolicyEngine):
         judge_results: list[JudgeRuleResult] = []
         judge_errors: list[str] = []
         for model_name, evaluation in zip(model_names, evaluations):
-            if isinstance(evaluation, Exception):
+            if isinstance(evaluation, BaseException):
                 logger.error("Judge model '%s' failed for rule '%s': %s", model_name, rule, evaluation)
                 judge_errors.append(f"{model_name}: {evaluation}")
                 continue
@@ -686,4 +688,3 @@ class JudgePolicyEngine(PolicyEngine):
         return "\n\n".join(paragraphs) if paragraphs else (
             rule_result.summary or f"Rule violation detected: {rule_result.rule}"
         )
-

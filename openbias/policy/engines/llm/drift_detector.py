@@ -207,7 +207,7 @@ class DriftDetector:
             Drift score (0.0-1.0), or 0.0 if embeddings unavailable
         """
         centroid = self._get_centroid()
-        if centroid is None or not recent_messages:
+        if centroid is None or not recent_messages or self._model is None:
             return 0.0
         
         try:

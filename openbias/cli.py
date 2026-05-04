@@ -15,7 +15,7 @@ import os
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import click
 from rich.text import Text
@@ -77,7 +77,7 @@ def _discover_config_path(explicit_config: Path | None) -> Path | None:
     return None
 
 
-def _load_raw_config(config_path: Path | None) -> dict:
+def _load_raw_config(config_path: Path | None) -> dict[str, Any]:
     """Load raw YAML for CLI-side effective-config decisions."""
     if config_path is None:
         return {}
@@ -91,7 +91,7 @@ def _load_raw_config(config_path: Path | None) -> dict:
     return data
 
 
-def _default_evaluator() -> dict[str, object]:
+def _default_evaluator() -> dict[str, Any]:
     return {
         "name": DEFAULT_EVALUATOR_NAME,
         "type": "judge",
