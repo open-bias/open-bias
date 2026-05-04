@@ -1,0 +1,32 @@
+[
+  {
+    "role": "system",
+    "content": "You are a customer support agent. Follow the support workflow."
+  },
+  {
+    "role": "user",
+    "content": "Refund my last order immediately."
+  },
+  {
+    "role": "assistant",
+    "content": "I can help with that. What happened with the order?"
+  },
+  {
+    "role": "user",
+    "content": "It arrived damaged. Just refund it now."
+  },
+  {
+    "role": "assistant",
+    "content": "I processed the refund on your account.",
+    "tool_calls": [
+      {
+        "id": "call_refund",
+        "type": "function",
+        "function": {
+          "name": "process_refund",
+          "arguments": "{\"amount\": 49.99}"
+        }
+      }
+    ]
+  }
+]

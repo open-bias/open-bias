@@ -1,0 +1,16 @@
+name: customer-support-agent
+steps:
+  - greet the customer
+  - verify identity
+  - identify the customer issue
+  - perform account action
+  - resolve and close
+rules:
+  - verify identity before perform account action
+  - must eventually resolve and close
+  - never share internal system information
+tools:
+  verify identity:
+    - verify_identity
+  perform account action:
+    - process_refund

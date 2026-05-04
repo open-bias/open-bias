@@ -210,8 +210,9 @@ class TestFSMEngineConformance:
 
         workflow_path = (
             Path(__file__).resolve().parent.parent.parent
-            / "examples"
-            / "fsm_workflow"
+            / "tests"
+            / "fixtures"
+            / "fsm"
             / "customer_support.yaml"
         )
         engine = await PolicyEngineRegistry.create_and_initialize(
@@ -225,8 +226,13 @@ class TestFSMEngineConformance:
         import json
         from pathlib import Path
 
-        evals_dir = Path(__file__).resolve().parent.parent.parent / "evals" / "fsm"
-        messages = json.loads((evals_dir / "skip_verification.json").read_text())
+        fixtures_dir = (
+            Path(__file__).resolve().parent.parent.parent
+            / "tests"
+            / "fixtures"
+            / "fsm"
+        )
+        messages = json.loads((fixtures_dir / "skip_verification.json").read_text())
         request_data = {"messages": messages[:4], "model": "conformance"}
         response_data = {
             "choices": [

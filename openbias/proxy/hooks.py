@@ -26,7 +26,6 @@ https://docs.litellm.ai/docs/observability/custom_callback
 import asyncio
 import copy
 import contextvars
-import hashlib
 import json
 import logging
 import time
@@ -52,7 +51,6 @@ from openbias.core.interceptor import Interceptor, SYNC_POST_REPLAY_KIND
 from openbias.core.intervention.pipelines.cleanup import ResponseCleanupStage
 from openbias.logging import session_id_var, request_id_var
 from openbias.policy.protocols import PolicyEngine
-from openbias.policy.rules import resolve_project_rules_path
 from openbias.proxy.middleware import SessionExtractor
 
 logger = logging.getLogger(__name__)
@@ -510,13 +508,6 @@ class Callback(CustomLogger):
             return 0
 
     @staticmethod
-    def _policy_hash() -> str | None:
-        rules_path = resolve_project_rules_path(Path.cwd())
-        if not rules_path.is_file():
-            return None
-        return hashlib.sha256(rules_path.read_bytes()).hexdigest()
-
-    @staticmethod
     def _trace_evaluator_summaries(
         results: list[dict[str, Any]] | None,
         *,
@@ -581,7 +572,7 @@ class Callback(CustomLogger):
             "model": data.get("model"),
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "environment": "proxy",
-            "policy_hash": self._policy_hash(),
+            "policy_hash": metadata.get("policy_hash"),
             "request_id": request_id,
             "evaluator_names": tuple(
                 item.get("evaluator", "unnamed")
