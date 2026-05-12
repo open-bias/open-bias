@@ -11,7 +11,7 @@ The suite files stay policy-focused. Runtime enforcement details such as evaluat
 - Import flow: an external JSONL dataset plus an explicit mapping config that converts raw rows into the canonical shape.
 - Policy target: suite-level metadata that points at the rules source the suite is intended to evaluate.
 
-In practice, this means repo-owned suites should be simple native files under [`evals/suites/`](/Users/sasha/Desktop/open-bias/evals/suites), while external datasets should stay in JSONL and come through `load_jsonl_suite(...)`.
+In practice, this means repo-owned suites should be simple native files under [`evals/suites/`](../evals/suites), while external datasets should stay in JSONL and come through `load_jsonl_suite(...)`.
 
 ## Canonical Suite Schema
 
@@ -41,17 +41,17 @@ V1 uses one primary violation event per case. If a conversation contains multipl
 
 ## Repo-Owned Suites
 
-Repo-owned suites now live in [`evals/suites/`](/Users/sasha/Desktop/open-bias/evals/suites):
+Repo-owned suites now live in [`evals/suites/`](../evals/suites):
 
-- [`safe.yaml`](/Users/sasha/Desktop/open-bias/evals/suites/safe.yaml)
-- [`request.yaml`](/Users/sasha/Desktop/open-bias/evals/suites/request.yaml)
-- [`response.yaml`](/Users/sasha/Desktop/open-bias/evals/suites/response.yaml)
-- [`repair.yaml`](/Users/sasha/Desktop/open-bias/evals/suites/repair.yaml)
-- [`false_positive_guards.yaml`](/Users/sasha/Desktop/open-bias/evals/suites/false_positive_guards.yaml)
+- [`safe.yaml`](../evals/suites/safe.yaml)
+- [`request.yaml`](../evals/suites/request.yaml)
+- [`response.yaml`](../evals/suites/response.yaml)
+- [`repair.yaml`](../evals/suites/repair.yaml)
+- [`false_positive_guards.yaml`](../evals/suites/false_positive_guards.yaml)
 
 These files are intentionally short and behavior-first. Each file covers one family of expectations so contributors can understand the target behavior quickly.
 
-All repo-owned suites currently point at [`evals/policies/default/RULES.md`](/Users/sasha/Desktop/open-bias/evals/policies/default/RULES.md), which is the shared eval policy source for engine comparisons.
+All repo-owned suites currently point at [`evals/policies/default/RULES.md`](../evals/policies/default/RULES.md), which is the shared eval policy source for engine comparisons.
 
 ## Why YAML For Repo Suites
 
