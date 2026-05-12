@@ -204,7 +204,7 @@ Full engine documentation: [docs/engines.md](docs/engines.md)
 
 ## Roadmap
 
-v0.3.0 -- beta. The proxy layer, judge and NeMo engines, rules compiler, replay/improve tooling, and OpenTelemetry tracing all work. Two additional engines (FSM, LLM) are experimental. Zero-config startup plus optional YAML is in place.
+v0.4.0 -- beta. The proxy layer, multi-evaluator pipeline, judge and NeMo engines, rules compiler, replay/improve tooling, JSONL traces, and OpenTelemetry tracing all work. Two additional engines (FSM, LLM) are experimental. Zero-config startup plus optional YAML is in place.
 
 ---
 

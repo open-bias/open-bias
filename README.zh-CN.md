@@ -204,7 +204,7 @@ Trace 视图:
 
 ## 路线图
 
-v0.3.0 —— beta 版本。代理层、judge 与 NeMo 引擎、规则编译器、回放/改进工具链,以及 OpenTelemetry 追踪均已可用。另外两个引擎(FSM、LLM)目前为实验性。零配置启动和可选的 YAML 配置都已到位。
+v0.4.0 —— beta 版本。代理层、多 evaluator 管线、judge 与 NeMo 引擎、规则编译器、回放/改进工具链、JSONL 追踪以及 OpenTelemetry 追踪均已可用。另外两个引擎(FSM、LLM)目前为实验性。零配置启动和可选的 YAML 配置都已到位。
 
 ---
 
