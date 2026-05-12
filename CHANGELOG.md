@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.4.1
+
+### Fixed
+- Standardized supported environment and `.env` settings, including tracing env vars and LiteLLM master-key aliases.
+- Fixed CLI validation so evaluator configs consistently receive the configured default model.
+- Improved NeMo Guardrails compatibility by injecting provider-specific model config at runtime and supporting newer activated-rail objects.
+- Restored the test suite and typecheck baseline after documentation, example, and fixture updates.
+
+### Changed
+- Refreshed quickstart, judge, and NeMo examples plus README/docs copy for the current beta surface.
+- Removed public FSM workflow examples while keeping FSM fixture coverage for experimental engine tests.
+
 ## 0.4.0
 
 ### Breaking
@@ -29,7 +41,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Sync post-call enforcement (block/intervene inline without async defer)
 - Zero-config `openbias init` with synthesized defaults, RULES.md gate, and preset rules library
 - `log_format` setting (`text`/`json`) for structured logging
-- JSONL trace sink for replayable policy traces (`tracing.sink: jsonl`)
+- JSONL trace sink for replayable policy traces (`tracing.type: jsonl`)
 - `async+block` config automatically normalized to `intervene`
 
 ### Changed
