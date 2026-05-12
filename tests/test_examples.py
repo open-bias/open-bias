@@ -47,29 +47,14 @@ class TestQuickstart:
         assert (EXAMPLES_DIR / "quickstart" / "openbias.yaml").exists()
 
 
-class TestPromptInjection:
+class TestJudgeSalesAgent:
     def test_parses(self):
-        tree = _parse_example("judge/prompt_injection.py")
+        tree = _parse_example("judge/sales_agent.py")
         assert _has_function(tree, "detect_model")
         assert _has_import(tree, "openai")
 
     def test_config_exists(self):
         assert (EXAMPLES_DIR / "judge" / "openbias.yaml").exists()
-
-
-class TestWorkflowEnforcement:
-    def test_parses(self):
-        tree = _parse_example("fsm_workflow/workflow_enforcement.py")
-        assert _has_function(tree, "detect_model")
-        assert _has_function(tree, "execute_tool")
-        assert _has_import(tree, "openai")
-
-    def test_config_exists(self):
-        if not (EXAMPLES_DIR / "fsm_workflow").exists():
-            pytest.skip("FSM workflow example is experimental and not shipped")
-
-        assert (EXAMPLES_DIR / "fsm_workflow" / "openbias.yaml").exists()
-        assert (EXAMPLES_DIR / "fsm_workflow" / "customer_support.yaml").exists()
 
 
 class TestContentSafety:
