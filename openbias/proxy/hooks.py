@@ -24,7 +24,6 @@ https://docs.litellm.ai/docs/observability/custom_callback
 """
 
 import asyncio
-import copy
 import contextvars
 import json
 import logging
@@ -69,6 +68,21 @@ _fail_open_counter: dict[str, int] = {}
 
 SYNC_POST_REPLAY_COUNT_KEY = "_openbias_sync_post_replay_count"
 SYNC_POST_REPLAY_PARENT_REQUEST_ID_KEY = "_openbias_sync_post_replay_parent_request_id"
+
+
+def _copy_replay_value(value: Any) -> Any:
+    """Clone plain request containers without pickling runtime objects."""
+    if isinstance(value, dict):
+        return {key: _copy_replay_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_copy_replay_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_copy_replay_value(item) for item in value)
+    if isinstance(value, set):
+        return {_copy_replay_value(item) for item in value}
+    return value
+
+
 def get_fail_open_counts() -> dict[str, int]:
     """Return a snapshot of fail-open activation counts per hook."""
     return dict(_fail_open_counter)
@@ -609,7 +623,7 @@ class Callback(CustomLogger):
         session_id: str,
         request_id: str,
     ) -> dict[str, Any]:
-        replay_request = copy.deepcopy(
+        replay_request = _copy_replay_value(
             pending_intervention.get("request_data")
             if isinstance(pending_intervention.get("request_data"), dict)
             else data

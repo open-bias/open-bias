@@ -536,6 +536,63 @@ async def test_post_call_intervention_returns_replayed_response(
     callback._router.acompletion.assert_awaited_once()
 
 
+async def test_post_call_intervention_replay_allows_non_deepcopyable_metadata(
+    callback, mock_api_key
+):
+    """Replay request copying must tolerate LiteLLM/runtime objects in metadata."""
+    from openbias.core.interceptor.types import InterceptionResult
+
+    class NonDeepcopyable:
+        def __deepcopy__(self, memo):
+            raise TypeError("cannot pickle '_asyncio.TaskStepMethWrapper' object")
+
+    response = MagicMock()
+    response.choices = []
+    replay_response = MagicMock(name="replay_response")
+    opaque_metadata_value = NonDeepcopyable()
+    callback._router = MagicMock()
+    callback._router.acompletion = AsyncMock(return_value=replay_response)
+
+    mock_interceptor = MagicMock()
+    mock_interceptor.run_post_call = AsyncMock(
+        return_value=InterceptionResult(
+            allowed=True,
+            pending_intervention={
+                "kind": "sync_post_call_reprompt",
+                "request_data": {
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "replayed"}],
+                    "metadata": {
+                        "session_id": "sess-replay",
+                        "opaque": opaque_metadata_value,
+                    },
+                },
+            },
+        )
+    )
+    callback._get_interceptor = AsyncMock(return_value=mock_interceptor)
+    callback._interceptor_initialized = True
+
+    result = await callback.async_post_call_success_hook(
+        {
+            "messages": [{"role": "user", "content": "hello"}],
+            "model": "gpt-4",
+            "metadata": {
+                "_openbias_request_id": "req-replay",
+                "session_id": "sess-replay",
+            },
+        },
+        mock_api_key,
+        response,
+    )
+
+    assert result is replay_response
+    replay_kwargs = callback._router.acompletion.await_args.kwargs
+    assert replay_kwargs["metadata"]["opaque"] is opaque_metadata_value
+    assert replay_kwargs["metadata"]["session_id"] == "sess-replay"
+    assert replay_kwargs["metadata"]["_openbias_sync_post_replay_count"] == 1
+
+
 async def test_post_call_intervention_cleanup_strips_repair_scaffolding(
     callback, mock_api_key
 ):
