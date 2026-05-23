@@ -1,3 +1,1 @@
 - Must NOT offer discounts above 15% without manager approval.
-- Must NOT make negative comparisons to competitors by name.
-- Must NOT make commitments about features not yet released.
