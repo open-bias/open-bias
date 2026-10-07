@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Bias — Open Source Reliability Harness" width="900">
+  <img src="docs/assets/banner.png" alt="Open Bias — Open-source policy enforcement proxy" width="900">
 </p>
 
 <p align="center">
@@ -16,9 +16,9 @@
 
 # Make your agents follow rules.
 
-**Open Source Reliability Harness.** Zero config. Zero latency. Works with any LLM provider.
+**Open-source policy enforcement proxy.** Zero config. Works with any LLM provider.
 
-Open Bias is a reliability harness that sits between your app and your LLM provider and enforces rules defined in `RULES.md` at runtime. Point your app at the proxy, and intervene on off-policy behavior before it reaches your users, your tools, or your production systems.
+Open Bias is a policy enforcement proxy that sits between your app and your LLM provider and enforces rules defined in `RULES.md` at runtime. Point your app at the proxy, and intervene on off-policy behavior before it reaches your users, your tools, or your production systems.
 
 <p align="center">
   <img src="docs/assets/terminal-playground.gif" alt="Open Bias terminal playground showing runtime policy enforcement in a terminal" width="600">
@@ -89,7 +89,7 @@ If Open Bias is useful, consider [starring the repo](https://github.com/open-bia
 - **Evals and observability tell you what went wrong. Open Bias prevents it.** Evals run after the fact. Dashboards show you the failure. Open Bias evaluates live traffic and can `intervene`, `block`, or `shadow` in real time -- before the bad behavior reaches your users.
 - **`RULES.md` is a control surface your whole team can own.** Plain Markdown that lives in your repo. Review it in a PR, diff it across deploys, version it alongside your code. No vendor dashboard, no policy DSL, no separate system to maintain.
 - **Plug in different engines for different concerns.** Workflow enforcement, domain-specific rules, and content safety do not all need the same evaluator. Open Bias lets you run multiple engines side by side -- use a small specialized model for fast classification, a judge LLM for nuanced policy, or Nvidia's NeMo for content safety. You are not locked into burning tokens on your primary provider for every check.
-- **Zero latency by default.** Non-critical violations evaluate async and apply on the next turn. Critical violations are blocked and fixed immediately. The proxy never becomes the bottleneck.
+- **No added latency for most checks.** Critical rules are checked synchronously and blocked before the response returns. Everything else is evaluated asynchronously and corrected on the next turn, so the proxy never becomes the bottleneck.
 
 ---
 

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Open Bias — Open Source Reliability Harness" width="900">
+  <img src="docs/assets/banner.png" alt="Open Bias — Open-source policy enforcement proxy" width="900">
 </p>
 
 <p align="center">
@@ -16,7 +16,7 @@
 
 # 让你的 Agent 真正守规矩。
 
-**面向 AI Agent 的开源可靠性测试与执行框架。** 零配置,零延迟,兼容任意 LLM 提供商。
+**开源策略执行代理。** 零配置,兼容任意 LLM 提供商。
 
 Open Bias 位于你的应用与 LLM 提供商之间,负责执行你在 `RULES.md` 中定义的规则。只需把应用指向代理,就能在越界行为触达用户、工具或生产系统之前及时拦截。
 
@@ -89,7 +89,7 @@ Agent:我可以在您下一次续费时给您 85 折优惠,要帮您直接应用
 - **Evals 和可观测性只能告诉你哪里出了问题,Open Bias 则直接把问题挡在外面。** Evals 是事后跑的,监控面板看到的是已经发生的故障。Open Bias 在线上流量上实时评估,可以按需要执行 `intervene`(干预)、`block`(拦截)或 `shadow`(影子) —— 在越界行为触达用户之前动手。
 - **`RULES.md` 是整支团队都能共同维护的控制面。** 纯 Markdown,放在你的代码仓库里。可以在 PR 里评审,可以在不同部署之间 diff,可以和代码一起做版本管理。没有厂商的控制台,没有私有 DSL,也不用额外维护一套系统。
 - **按需接入不同引擎,各司其职。** 工作流约束、业务规则和内容安全,完全不需要用同一个评估器来解决。Open Bias 支持多引擎并行 —— 可以用小模型做快速分类,用 judge LLM 处理细粒度策略,也可以接 Nvidia NeMo 做内容安全。你完全不必每次校验都去烧主模型的 token。
-- **默认零延迟。** 非关键违规异步评估,并在下一轮对话时自动生效;关键违规则会被同步拦截并立即修正。代理永远不会成为系统的瓶颈。
+- **大多数检查不增加延迟。** 关键规则同步检查,在响应返回前即被拦截;其余规则异步评估,并在下一轮修正,因此代理永远不会成为瓶颈。
 
 ---
 
